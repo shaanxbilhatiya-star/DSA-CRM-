@@ -658,6 +658,7 @@ app.post('/api/agent/upload-doc-zip/:numberId', docUpload.single('docZip'), (req
     num.docZipUploadedAt = new Date().toISOString();
     num.documentationComplete = true;
     num.documentationCompletedAt = new Date().toISOString();
+    num.adminStatus = num.adminStatus || 'In Process';
 
     saveState(appState);
     broadcastAdminStats();
@@ -729,8 +730,16 @@ app.get('/api/admin/interested', (req, res) => {
 });
 
 app.get('/api/admin/followups', (req, res) => {
+  const now = new Date();
+  const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
   const followups = appState.numbers.filter(n => n.disposition === 'followup').map(n => {
     const agent = appState.agents[n.followupLockedBy];
+    let overdue = false;
+    if (n.followupDate) {
+      const fDateStr = n.followupDate + 'T' + (n.followupTime || '23:59') + ':00';
+      const fDate = new Date(fDateStr);
+      overdue = istNow > fDate;
+    }
     return {
       id: n.id, phone: n.phone, name: n.name || '',
       followupLockedBy: agent ? agent.name : n.followupLockedBy,
@@ -738,7 +747,8 @@ app.get('/api/admin/followups', (req, res) => {
       followupDate: n.followupDate,
       followupTime: n.followupTime,
       followupName: n.followupName || '',
-      followupCount: n.followupCount || 0
+      followupCount: n.followupCount || 0,
+      overdue
     };
   });
   // Sort by nearest date and time
@@ -775,13 +785,24 @@ app.get('/api/agent/interested/:agentId', (req, res) => {
 
 app.get('/api/agent/followups/:agentId', (req, res) => {
   const agentId = req.params.agentId;
-  const followups = appState.numbers.filter(n => n.disposition === 'followup' && n.followupLockedBy === agentId).map(n => ({
-    id: n.id, phone: n.phone, name: n.name || '',
-    followupDate: n.followupDate,
-    followupTime: n.followupTime,
-    followupName: n.followupName || '',
-    followupCount: n.followupCount || 0
-  }));
+  const now = new Date();
+  const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+  const followups = appState.numbers.filter(n => n.disposition === 'followup' && n.followupLockedBy === agentId).map(n => {
+    let overdue = false;
+    if (n.followupDate) {
+      const fDateStr = n.followupDate + 'T' + (n.followupTime || '23:59') + ':00';
+      const fDate = new Date(fDateStr);
+      overdue = istNow > fDate;
+    }
+    return {
+      id: n.id, phone: n.phone, name: n.name || '',
+      followupDate: n.followupDate,
+      followupTime: n.followupTime,
+      followupName: n.followupName || '',
+      followupCount: n.followupCount || 0,
+      overdue
+    };
+  });
   // Sort by nearest date and time
   followups.sort((a, b) => {
     const dateA = (a.followupDate || '9999-12-31') + ' ' + (a.followupTime || '23:59');
@@ -1182,7 +1203,8 @@ app.post('/api/agent/register', (req, res) => {
     totalMeetingMs: agent.totalMeetingMs || 0,
     onTlMode: agent.onTlMode || false,
     tlModeStartedAt: agent.tlModeStartedAt || null,
-    totalTlModeMs: agent.totalTlModeMs || 0
+    totalTlModeMs: agent.totalTlModeMs || 0,
+    lateLogin: (agent.firstLoginToday && agent.firstLoginToday > '10:00') || false
   });
 });
 
@@ -1482,10 +1504,11 @@ app.post('/api/admin/eids/remove-tl', (req, res) => {
 
 // ─── TL Auth — check if EID has TL role ───────────────────────────────────────
 app.post('/api/tl/auth', (req, res) => {
-  const { employeeId, name } = req.body;
-  if (!employeeId || !name) return res.status(400).json({ error: 'employeeId and name required' });
+  let { employeeId, name } = req.body;
+  if (!employeeId) return res.status(400).json({ error: 'employeeId required' });
   const eidData = appState.allowedEids[employeeId];
   if (!eidData) return res.status(403).json({ error: 'Employee ID not recognised. Please contact your admin.' });
+  if (!name || !name.trim()) { name = getEidName(eidData); }
   const role = getEidRole(eidData);
   if (role !== 'tl' && role !== 'admin') {
     return res.status(403).json({ error: 'You do not have TL access. Contact your admin.' });
@@ -1518,7 +1541,9 @@ app.post('/api/tl/auth', (req, res) => {
   }
   saveState(appState);
   broadcastAdminStats();
-  res.json({ success: true, agentId, name, employeeId, role });
+  const agent = appState.agents[agentId];
+  const lateLogin = (agent.firstLoginToday && agent.firstLoginToday > '10:00') || false;
+  res.json({ success: true, agentId, name, employeeId, role, lateLogin });
 });
 
 // ─── Agent Photo Upload ─────────────────────────────────────────────────────────
