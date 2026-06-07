@@ -369,6 +369,11 @@
           <div class="dispo-stat-val" id="adminStatsInterested">0</div>
           <div class="dispo-stat-lbl">Interested</div>
         </div>
+        <div class="dispo-stat-card">
+          <div class="dispo-stat-indicator" style="background:#7c2d12"></div>
+          <div class="dispo-stat-val" id="adminStatsDiscard">0</div>
+          <div class="dispo-stat-lbl">Discard</div>
+        </div>
       </div>
     </div>
   </div>
@@ -395,6 +400,10 @@
     <div class="stat-card">
       <span class="stat-label">Redialing Tomorrow</span>
       <span class="stat-value amber" id="statComingBack">0</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Discarded</span>
+      <span class="stat-value" style="color:#7c2d12" id="statDiscard">0</span>
     </div>
   </div>
 
@@ -540,7 +549,14 @@
   <div class="panel panel-followups">
     <div class="panel-header">
       <h2>Followups</h2>
-      <span style="font-size:12px;color:var(--muted)" id="followupsCountBadge">0 followups</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <select id="followupAgentFilter" onchange="fetchFollowups()" style="font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text)">
+          <option value="">All Agents</option>
+        </select>
+        <a href="/api/admin/followup-sample" download style="font-size:11px;color:var(--accent);text-decoration:none;font-weight:700;border:1px solid rgba(124,58,237,.3);padding:4px 10px;border-radius:6px;">⬇ Sample Sheet</a>
+        <label style="font-size:11px;color:var(--green);font-weight:700;border:1px solid rgba(76,175,80,.3);padding:4px 10px;border-radius:6px;cursor:pointer;background:rgba(76,175,80,.06)">⬆ Upload Followups<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="uploadFollowupFile(this)"></label>
+        <span style="font-size:12px;color:var(--muted)" id="followupsCountBadge">0 followups</span>
+      </div>
     </div>
     <div class="panel-body" style="padding:0">
       <table class="leads-table">
@@ -551,10 +567,13 @@
             <th>Agent</th>
             <th>Date</th>
             <th>Time</th>
+            <th>Notes</th>
+            <th>#</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody id="followupsTable">
-          <tr><td colspan="5" class="empty">No followups yet</td></tr>
+          <tr><td colspan="8" class="empty">No followups yet</td></tr>
         </tbody>
       </table>
     </div>
@@ -768,6 +787,8 @@ function renderStats(data) {
   document.getElementById('statFollowups').textContent = data.followupCount || 0;
   document.getElementById('statComingBack').textContent = data.comingBackTomorrow || 0;
   document.getElementById('todayBadge').textContent = data.today;
+  const discardCountEl = document.getElementById('statDiscard');
+  if (discardCountEl) discardCountEl.textContent = data.discardCount || 0;
 
   // Remaining < 500 red alert
   const remainingCard = document.getElementById('statRemaining').closest('.stat-card');
@@ -905,8 +926,10 @@ function renderStats(data) {
 
 function formatMs(ms) {
   const total = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(total / 60);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
+  if (h > 0) return h + 'h ' + String(m).padStart(2,'0') + 'm';
   return m + ':' + String(s).padStart(2, '0');
 }
 
@@ -1246,7 +1269,10 @@ function renderCompletedLeads(leads) {
 // ── Followups ─────────────────────────────────────────────────────────────────
 async function fetchFollowups() {
   try {
-    const r = await fetch('/api/admin/followups');
+    const filterEl = document.getElementById('followupAgentFilter');
+    let url = '/api/admin/followups';
+    if (filterEl && filterEl.value) url += '?agentId=' + encodeURIComponent(filterEl.value);
+    const r = await fetch(url);
     const followups = await r.json();
     renderFollowups(followups);
   } catch (e) {
@@ -1259,17 +1285,94 @@ function renderFollowups(followups) {
   const badge = document.getElementById('followupsCountBadge');
   badge.textContent = followups.length + ' followup' + (followups.length !== 1 ? 's' : '');
   if (!followups || followups.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty">No followups yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">No followups yet</td></tr>';
     return;
   }
-  tbody.innerHTML = followups.map(f => `<tr>
+  tbody.innerHTML = followups.map(f => {
+    const timeAmPm = formatTimeAmPm(f.followupTime);
+    return `<tr>
     <td><span class="phone-number">${escapeHtml(formatPhone(f.phone))}</span></td>
-    <td>${escapeHtml(f.name) || '&#8212;'}</td>
-    <td style="font-weight:500">${escapeHtml(f.agentName || f.followupLockedBy) || '&#8212;'}</td>
-    <td style="font-family:var(--mono);font-size:13px">${escapeHtml(formatDate(f.followupDate))}</td>
-    <td style="font-family:var(--mono);font-size:13px">${escapeHtml(f.followupTime) || '&#8212;'}</td>
-  </tr>`).join('');
+    <td><input type="text" value="${escapeHtml(f.name||'')}" onchange="adminEditFollowup('${escapeHtml(f.id)}','name',this.value)" style="font-size:12px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);width:90px"></td>
+    <td style="font-weight:500">${escapeHtml(f.followupLockedBy) || '&#8212;'}</td>
+    <td><input type="date" value="${escapeHtml(f.followupDate||'')}" onchange="adminEditFollowup('${escapeHtml(f.id)}','followupDate',this.value)" style="font-size:12px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2)"></td>
+    <td><input type="time" value="${escapeHtml(f.followupTime||'')}" onchange="adminEditFollowup('${escapeHtml(f.id)}','followupTime',this.value)" style="font-size:12px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2)"></td>
+    <td style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(f.followupNotes||'')}">${escapeHtml(f.followupNotes || '—')}</td>
+    <td style="font-family:var(--mono);font-size:11px">${f.followupCount || 1}/2</td>
+    <td><button class="btn-del" onclick="adminRemoveFollowup('${escapeHtml(f.id)}')" style="padding:4px 10px">Remove</button></td>
+  </tr>`;
+  }).join('');
 }
+
+function formatTimeAmPm(timeStr) {
+  if (!timeStr) return '—';
+  try {
+    const [h, m] = timeStr.split(':').map(Number);
+    const period = h >= 12 ? 'PM' : 'AM';
+    const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return hour12 + ':' + String(m).padStart(2,'0') + ' ' + period;
+  } catch(e) { return timeStr; }
+}
+
+async function adminEditFollowup(numberId, field, value) {
+  try {
+    const body = { numberId };
+    body[field] = value;
+    await fetch('/api/admin/edit-followup', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    showToast('Followup updated', 'success');
+  } catch(e) { showToast('Failed to update', 'error'); }
+}
+
+async function adminRemoveFollowup(numberId) {
+  if (!confirm('Remove this followup? Lead will be marked as Not Interested.')) return;
+  try {
+    const r = await fetch('/api/admin/remove-followup', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ numberId })
+    });
+    const d = await r.json();
+    if (d.error) { showToast(d.error, 'error'); return; }
+    showToast('Followup removed', 'success');
+    fetchFollowups();
+  } catch(e) { showToast('Failed to remove', 'error'); }
+}
+
+async function uploadFollowupFile(input) {
+  if (!input.files || !input.files[0]) return;
+  const fd = new FormData();
+  fd.append('file', input.files[0]);
+  try {
+    const r = await fetch('/api/admin/upload-followups', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.success) {
+      showToast('Added ' + d.added + ' followups' + (d.skipped ? ' (' + d.skipped + ' duplicates skipped)' : ''), 'success');
+      fetchFollowups();
+    } else { showToast('Error: ' + d.error, 'error'); }
+  } catch(e) { showToast('Upload failed: ' + e.message, 'error'); }
+  input.value = '';
+}
+
+// Populate followup agent filter dropdown
+async function populateFollowupAgentFilter() {
+  try {
+    const r = await fetch('/api/admin/agents-list');
+    const agents = await r.json();
+    const sel = document.getElementById('followupAgentFilter');
+    if (!sel) return;
+    const currentVal = sel.value;
+    while (sel.options.length > 1) sel.remove(1);
+    agents.sort((a, b) => a.name.localeCompare(b.name)).forEach(ag => {
+      const opt = document.createElement('option');
+      opt.value = ag.id;
+      opt.textContent = ag.name;
+      sel.appendChild(opt);
+    });
+    if (currentVal) sel.value = currentVal;
+  } catch(e) {}
+}
+populateFollowupAgentFilter();
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
 function formatPhone(phone) {
@@ -1337,6 +1440,8 @@ async function fetchAdminDispoStats() {
     document.getElementById('adminStatsFollowup').textContent      = d.followup      || 0;
     document.getElementById('adminStatsSwitchOff').textContent     = d.switch_off    || 0;
     document.getElementById('adminStatsInterested').textContent    = d.interested    || 0;
+    const discardEl = document.getElementById('adminStatsDiscard');
+    if (discardEl) discardEl.textContent = d.discard || 0;
   } catch (e) { /* silent */ }
 }
 
@@ -1345,6 +1450,7 @@ async function populateAgentFilterDropdown() {
     const r = await fetch('/api/admin/agents-list');
     const agents = await r.json();
     const sel = document.getElementById('adminStatsAgentFilter');
+    const currentVal = sel.value; // preserve current selection
     while (sel.options.length > 1) sel.remove(1);
     agents.sort((a, b) => a.name.localeCompare(b.name)).forEach(ag => {
       const opt = document.createElement('option');
@@ -1352,6 +1458,7 @@ async function populateAgentFilterDropdown() {
       opt.textContent = '👤 ' + ag.name;
       sel.appendChild(opt);
     });
+    if (currentVal) sel.value = currentVal; // restore selection
   } catch (e) { /* silent */ }
 }
 

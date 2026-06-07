@@ -422,6 +422,7 @@
           <div class="dispo-stat-card"><div class="dispo-stat-indicator" style="background:#2563eb"></div><div class="dispo-stat-val" id="tlStatsFollowup">0</div><div class="dispo-stat-lbl">Followup</div></div>
           <div class="dispo-stat-card"><div class="dispo-stat-indicator" style="background:#f59e0b"></div><div class="dispo-stat-val" id="tlStatsSwitchOff">0</div><div class="dispo-stat-lbl">Switch OFF</div></div>
           <div class="dispo-stat-card"><div class="dispo-stat-indicator" style="background:#059669"></div><div class="dispo-stat-val" id="tlStatsInterested">0</div><div class="dispo-stat-lbl">Interested</div></div>
+          <div class="dispo-stat-card"><div class="dispo-stat-indicator" style="background:#7c2d12"></div><div class="dispo-stat-val" id="tlStatsDiscard">0</div><div class="dispo-stat-lbl">Discard</div></div>
         </div>
       </div>
     </div>
@@ -573,6 +574,7 @@
           <button class="dispo-btn dispo-followup" onclick="agentSubmitDisposition('followup')">&#128197; Followup</button>
           <button class="dispo-btn dispo-switch-off" onclick="agentSubmitDisposition('switch_off')">&#128244; Switch OFF</button>
           <button class="dispo-btn dispo-interested" onclick="agentSubmitDisposition('interested')">&#11088; Interested</button>
+          <button class="dispo-btn dispo-discard" onclick="agentSubmitDisposition('discard')" style="background:rgba(124,45,18,.1);color:#7c2d12;border:1.5px solid rgba(124,45,18,.3);grid-column:1/-1">🗑️ Discard/Not-Eligible</button>
         </div>
       </div>
       <div class="btn-row-a">
@@ -742,7 +744,9 @@ function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 function formatMs(ms) {
-  const t = Math.max(0, Math.floor(ms/1000)), m = Math.floor(t/60), s = t%60;
+  const t = Math.max(0, Math.floor(ms/1000));
+  const h = Math.floor(t/3600), m = Math.floor((t%3600)/60), s = t%60;
+  if (h > 0) return h + 'h ' + String(m).padStart(2,'0') + 'm';
   return m + ':' + String(s).padStart(2,'0');
 }
 function formatPhone(p) {
@@ -1228,16 +1232,20 @@ async function fetchTLDispoStats() {
     document.getElementById('tlStatsFollowup').textContent=d.followup||0;
     document.getElementById('tlStatsSwitchOff').textContent=d.switch_off||0;
     document.getElementById('tlStatsInterested').textContent=d.interested||0;
+    const discardEl=document.getElementById('tlStatsDiscard');
+    if(discardEl) discardEl.textContent=d.discard||0;
   } catch(e){}
 }
 async function populateTLAgentFilter() {
   try {
     const r=await fetch('/api/admin/agents-list'); const agents=await r.json();
     const sel=document.getElementById('tlStatsAgentFilter');
+    const currentVal = sel.value; // preserve current selection
     while(sel.options.length>1) sel.remove(1);
     agents.sort((a,b)=>a.name.localeCompare(b.name)).forEach(ag=>{
       const o=document.createElement('option'); o.value=ag.id; o.textContent='👤 '+ag.name; sel.appendChild(o);
     });
+    if (currentVal) sel.value = currentVal; // restore selection
   } catch(e){}
 }
 

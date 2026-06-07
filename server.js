@@ -108,7 +108,7 @@ function checkDailyReset(state) {
       state.agents[id].totalTlModeMs = 0;
     }
     state.numbers.forEach(n => {
-      if ((n.disposition === 'not_received' || n.disposition === 'switch_off') && n.retryAfter && today >= n.retryAfter) {
+      if ((n.disposition === 'not_received' || n.disposition === 'switch_off' || n.disposition === 'dead') && n.retryAfter && today >= n.retryAfter && !n.permanentlyRemoved) {
         n.disposition = null;
         n.retryAfter = null;
         n.dialedBy = null;
@@ -156,8 +156,11 @@ function getNextNumber(agentId) {
   const today = getTodayStr();
   const undialed = appState.numbers.find(n => {
     if (n.dialedBy || n.assignedTo) return false;
+    if (n.permanentlyRemoved) return false;
     if (n.disposition === 'dead') return false;
-    if (n.disposition === 'not_interested' && n.blockedUntil && new Date(n.blockedUntil) > now) return false;
+    if (n.disposition === 'dead_permanent') return false;
+    if (n.disposition === 'discard') return false;
+    if (n.disposition === 'not_interested') return false;
     if (n.disposition === 'followup' && n.followupLockedBy && n.followupLockedBy !== agentId) return false;
     if (n.disposition === 'interested') return false;
     if ((n.disposition === 'not_received' || n.disposition === 'switch_off') && n.retryAfter && today < n.retryAfter) return false;
@@ -201,7 +204,7 @@ function releaseNumber(agentId, numberId) {
 }
 
 // ─── Disposition System ───────────────────────────────────────────────────────
-const VALID_DISPOSITIONS = ['dead', 'not_received', 'not_interested', 'followup', 'switch_off', 'interested'];
+const VALID_DISPOSITIONS = ['dead', 'not_received', 'not_interested', 'followup', 'switch_off', 'interested', 'discard'];
 const VALID_LOAN_TYPES = ['BL_Business', 'LAP_Business', 'LAP_Salaried', 'PL_Business', 'PL_Salaried'];
 
 function applyDisposition(agentId, numberId, disposition, extra) {
@@ -213,40 +216,87 @@ function applyDisposition(agentId, numberId, disposition, extra) {
 
   switch (disposition) {
     case 'dead':
-      num.disposition = 'dead';
-      num.dialedBy = agentId;
-      num.dialedAt = now;
-      num.assignedTo = null;
+      // CNC: If already retried once (retryCount >= 1), permanently remove
+      if ((num.cncRetryCount || 0) >= 1) {
+        num.disposition = 'dead_permanent';
+        num.dialedBy = agentId;
+        num.dialedAt = now;
+        num.assignedTo = null;
+        num.permanentlyRemoved = true;
+      } else {
+        num.disposition = 'dead';
+        num.dialedBy = agentId;
+        num.dialedAt = now;
+        num.assignedTo = null;
+        num.retryAfter = getTomorrowStr();
+        num.cncRetryCount = (num.cncRetryCount || 0) + 1;
+      }
       break;
     case 'not_received':
-      num.disposition = 'not_received';
-      num.dialedBy = agentId;
-      num.dialedAt = now;
-      num.assignedTo = null;
-      num.retryAfter = getTomorrowStr();
+      // CNR: If already retried once (retryCount >= 1), permanently remove
+      if ((num.cnrRetryCount || 0) >= 1) {
+        num.disposition = 'dead_permanent';
+        num.dialedBy = agentId;
+        num.dialedAt = now;
+        num.assignedTo = null;
+        num.permanentlyRemoved = true;
+      } else {
+        num.disposition = 'not_received';
+        num.dialedBy = agentId;
+        num.dialedAt = now;
+        num.assignedTo = null;
+        num.retryAfter = getTomorrowStr();
+        num.cnrRetryCount = (num.cnrRetryCount || 0) + 1;
+      }
       break;
     case 'not_interested':
+      // Not interested: permanently remove, never dial again
       num.disposition = 'not_interested';
-      num.blockedUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       num.dialedBy = agentId;
       num.dialedAt = now;
       num.assignedTo = null;
+      num.permanentlyRemoved = true;
+      break;
+    case 'discard':
+      // Discard/Not-Eligible: permanently remove, never dial again
+      num.disposition = 'discard';
+      num.dialedBy = agentId;
+      num.dialedAt = now;
+      num.assignedTo = null;
+      num.permanentlyRemoved = true;
       break;
     case 'followup':
       num.disposition = 'followup';
       num.followupDate = extra && extra.followupDate ? extra.followupDate : null;
       num.followupTime = extra && extra.followupTime ? extra.followupTime : null;
+      num.followupNotes = extra && extra.followupNotes ? extra.followupNotes : '';
       num.followupLockedBy = agentId;
+      num.followupCount = (num.followupCount || 0) + 1;
+      // If followup count exceeds 2, auto-mark as not interested
+      if (num.followupCount > 2) {
+        num.disposition = 'not_interested';
+        num.permanentlyRemoved = true;
+      }
       num.dialedBy = agentId;
       num.dialedAt = now;
       num.assignedTo = null;
       break;
     case 'switch_off':
-      num.disposition = 'switch_off';
-      num.dialedBy = agentId;
-      num.dialedAt = now;
-      num.assignedTo = null;
-      num.retryAfter = getTomorrowStr();
+      // Switch OFF: If already retried once, permanently remove
+      if ((num.switchOffRetryCount || 0) >= 1) {
+        num.disposition = 'dead_permanent';
+        num.dialedBy = agentId;
+        num.dialedAt = now;
+        num.assignedTo = null;
+        num.permanentlyRemoved = true;
+      } else {
+        num.disposition = 'switch_off';
+        num.dialedBy = agentId;
+        num.dialedAt = now;
+        num.assignedTo = null;
+        num.retryAfter = getTomorrowStr();
+        num.switchOffRetryCount = (num.switchOffRetryCount || 0) + 1;
+      }
       break;
     case 'interested':
       num.disposition = 'interested';
@@ -458,8 +508,9 @@ function getAdminStats() {
     today: getTodayStr(),
     interestedCount: appState.numbers.filter(n => n.disposition === 'interested').length,
     followupCount: appState.numbers.filter(n => n.disposition === 'followup').length,
-    comingBackTomorrow: appState.numbers.filter(n => (n.disposition === 'not_received' || n.disposition === 'switch_off') && n.retryAfter && getTodayStr() < n.retryAfter).length,
-    overdueInterestedCount: appState.numbers.filter(n => n.disposition === 'interested' && !n.documentationComplete && (Date.now() - new Date(n.interestedAt).getTime()) >= DOC_DEADLINE_MS).length
+    comingBackTomorrow: appState.numbers.filter(n => (n.disposition === 'not_received' || n.disposition === 'switch_off' || n.disposition === 'dead') && n.retryAfter && !n.permanentlyRemoved && getTodayStr() < n.retryAfter).length,
+    overdueInterestedCount: appState.numbers.filter(n => n.disposition === 'interested' && !n.documentationComplete && (Date.now() - new Date(n.interestedAt).getTime()) >= DOC_DEADLINE_MS).length,
+    discardCount: appState.numbers.filter(n => n.disposition === 'discard').length
   };
 }
 
@@ -519,13 +570,16 @@ app.post('/api/admin/upload', numberUpload.single('file'), (req, res) => {
     const fileId = uuidv4();
     const phones = [];
     const existingPhones = new Set(appState.numbers.map(n => n.phone));
+    const newBatchPhones = new Set();
     let skipped = 0;
     rows.forEach((row, i) => {
       if (i === 0 && isNaN(row[0])) return;
       const phone = String(row[0] || '').trim().replace(/\s+/g, '');
       if (!phone || phone.length < 7) return;
-      if (existingPhones.has(phone)) { skipped++; return; }
+      // Skip if exists in system OR if duplicate within same batch
+      if (existingPhones.has(phone) || newBatchPhones.has(phone)) { skipped++; return; }
       existingPhones.add(phone);
+      newBatchPhones.add(phone);
       const name = row[1] ? String(row[1]).trim() : '';
       phones.push({ id: uuidv4(), phone, name, file: fileId, assignedTo: null, dialedBy: null, dialedAt: null });
     });
@@ -601,14 +655,14 @@ app.get('/api/admin/stats', (req, res) => res.json(getAdminStats()));
 
 // ─── Disposition API Endpoints ────────────────────────────────────────────────
 app.post('/api/agent/disposition', (req, res) => {
-  const { agentId, numberId, disposition, followupDate, followupTime, leadName, loanType, remarks, loanAmount, employmentType, city } = req.body;
+  const { agentId, numberId, disposition, followupDate, followupTime, followupNotes, leadName, loanType, remarks, loanAmount, employmentType, city } = req.body;
   if (!agentId || !numberId || !disposition) {
     return res.status(400).json({ error: 'agentId, numberId, and disposition are required' });
   }
   if (!VALID_DISPOSITIONS.includes(disposition)) {
     return res.status(400).json({ error: 'Invalid disposition. Must be one of: ' + VALID_DISPOSITIONS.join(', ') });
   }
-  applyDisposition(agentId, numberId, disposition, { followupDate, followupTime, leadName, loanType, remarks, loanAmount, employmentType, city });
+  applyDisposition(agentId, numberId, disposition, { followupDate, followupTime, followupNotes, leadName, loanType, remarks, loanAmount, employmentType, city });
   const nextNum = getNextNumber(agentId);
   const agent = appState.agents[agentId];
   if (nextNum && agent) {
@@ -646,16 +700,136 @@ app.get('/api/admin/interested', (req, res) => {
 });
 
 app.get('/api/admin/followups', (req, res) => {
-  const followups = appState.numbers.filter(n => n.disposition === 'followup').map(n => {
+  const agentFilter = req.query.agentId || null;
+  const followups = appState.numbers.filter(n => {
+    if (n.disposition !== 'followup') return false;
+    if (agentFilter && n.followupLockedBy !== agentFilter) return false;
+    return true;
+  }).map(n => {
     const agent = appState.agents[n.followupLockedBy];
     return {
       id: n.id, phone: n.phone, name: n.name || '',
       followupLockedBy: agent ? agent.name : n.followupLockedBy,
+      followupLockedById: n.followupLockedBy,
       followupDate: n.followupDate,
-      followupTime: n.followupTime
+      followupTime: n.followupTime,
+      followupNotes: n.followupNotes || '',
+      followupCount: n.followupCount || 1
     };
   });
+  // Sort by nearest date/time first
+  followups.sort((a, b) => {
+    const dateA = (a.followupDate || '9999-99-99') + ' ' + (a.followupTime || '99:99');
+    const dateB = (b.followupDate || '9999-99-99') + ' ' + (b.followupTime || '99:99');
+    return dateA.localeCompare(dateB);
+  });
   res.json(followups);
+});
+
+// Admin edit followup date/name
+app.post('/api/admin/edit-followup', (req, res) => {
+  const { numberId, followupDate, followupTime, name } = req.body;
+  if (!numberId) return res.status(400).json({ error: 'numberId required' });
+  const num = appState.numbers.find(n => n.id === numberId);
+  if (!num) return res.status(404).json({ error: 'Number not found' });
+  if (num.disposition !== 'followup') return res.status(400).json({ error: 'Not a followup' });
+  if (followupDate !== undefined) num.followupDate = followupDate;
+  if (followupTime !== undefined) num.followupTime = followupTime;
+  if (name !== undefined) num.name = name;
+  saveState(appState);
+  broadcastAdminStats();
+  res.json({ success: true });
+});
+
+// Remove followup (discards lead to NI)
+app.post('/api/agent/remove-followup', (req, res) => {
+  const { agentId, numberId } = req.body;
+  if (!agentId || !numberId) return res.status(400).json({ error: 'agentId and numberId required' });
+  const num = appState.numbers.find(n => n.id === numberId);
+  if (!num) return res.status(404).json({ error: 'Number not found' });
+  if (num.disposition !== 'followup') return res.status(400).json({ error: 'Not a followup' });
+  // Allow agent who owns it, or admin/TL
+  const agentEid = agentId.replace('emp_', '');
+  const eidData = appState.allowedEids[agentEid];
+  const role = getEidRole(eidData);
+  if (num.followupLockedBy !== agentId && role !== 'admin' && role !== 'tl') {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
+  num.disposition = 'not_interested';
+  num.permanentlyRemoved = true;
+  num.followupLockedBy = null;
+  saveState(appState);
+  broadcastAdminStats();
+  res.json({ success: true });
+});
+
+// Admin remove followup
+app.post('/api/admin/remove-followup', (req, res) => {
+  const { numberId } = req.body;
+  if (!numberId) return res.status(400).json({ error: 'numberId required' });
+  const num = appState.numbers.find(n => n.id === numberId);
+  if (!num) return res.status(404).json({ error: 'Number not found' });
+  if (num.disposition !== 'followup') return res.status(400).json({ error: 'Not a followup' });
+  num.disposition = 'not_interested';
+  num.permanentlyRemoved = true;
+  num.followupLockedBy = null;
+  saveState(appState);
+  broadcastAdminStats();
+  res.json({ success: true });
+});
+
+// Upload followup from custom Excel
+app.post('/api/admin/upload-followups', numberUpload.single('file'), (req, res) => {
+  try {
+    const { agentId } = req.body;
+    const wb = XLSX.readFile(req.file.path);
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws);
+    let added = 0, skipped = 0;
+    const existingPhones = new Set(appState.numbers.map(n => n.phone));
+    rows.forEach(row => {
+      const phone = String(row.Phone || row.phone || row.PHONE || '').trim().replace(/\s+/g, '');
+      if (!phone || phone.length < 7) return;
+      if (existingPhones.has(phone)) { skipped++; return; }
+      existingPhones.add(phone);
+      const name = String(row.Name || row.name || row.NAME || '').trim();
+      const followupDate = String(row.Date || row.date || row.DATE || row.FollowupDate || '').trim();
+      const followupTime = String(row.Time || row.time || row.TIME || row.FollowupTime || '').trim();
+      const notes = String(row.Notes || row.notes || row.NOTES || row.Remarks || '').trim();
+      const assignTo = agentId || null;
+      const newEntry = {
+        id: uuidv4(), phone, name, file: null,
+        assignedTo: null, dialedBy: assignTo, dialedAt: new Date().toISOString(),
+        disposition: 'followup',
+        followupDate: followupDate || null,
+        followupTime: followupTime || null,
+        followupNotes: notes || '',
+        followupLockedBy: assignTo,
+        followupCount: 1
+      };
+      appState.numbers.push(newEntry);
+      added++;
+    });
+    saveState(appState);
+    fs.unlinkSync(req.file.path);
+    broadcastAdminStats();
+    res.json({ success: true, added, skipped });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Download followup sample sheet
+app.get('/api/admin/followup-sample', (req, res) => {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['Phone', 'Name', 'Date', 'Time', 'Notes'],
+    ['9876543210', 'Amit Kumar', '2025-01-15', '14:30', 'Interested in BL'],
+    ['8765432109', 'Priya Sharma', '2025-01-16', '10:00', 'Follow up for LAP']
+  ]);
+  XLSX.utils.book_append_sheet(wb, ws, 'Followups');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  res.setHeader('Content-Disposition', 'attachment; filename=followup_sample.xlsx');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buf);
 });
 
 app.get('/api/agent/interested/:agentId', (req, res) => {
@@ -686,8 +860,16 @@ app.get('/api/agent/followups/:agentId', (req, res) => {
   const followups = appState.numbers.filter(n => n.disposition === 'followup' && n.followupLockedBy === agentId).map(n => ({
     id: n.id, phone: n.phone, name: n.name || '',
     followupDate: n.followupDate,
-    followupTime: n.followupTime
+    followupTime: n.followupTime,
+    followupNotes: n.followupNotes || '',
+    followupCount: n.followupCount || 1
   }));
+  // Sort by nearest date/time first
+  followups.sort((a, b) => {
+    const dateA = (a.followupDate || '9999-99-99') + ' ' + (a.followupTime || '99:99');
+    const dateB = (b.followupDate || '9999-99-99') + ' ' + (b.followupTime || '99:99');
+    return dateA.localeCompare(dateB);
+  });
   res.json(followups);
 });
 
@@ -1214,13 +1396,13 @@ io.on('connection', (socket) => {
     broadcastAdminStats();
   });
 
-  socket.on('agent-disposition', ({ agentId, numberId, disposition, followupDate, followupTime, leadName, loanType, remarks, loanAmount, employmentType, city }) => {
+  socket.on('agent-disposition', ({ agentId, numberId, disposition, followupDate, followupTime, followupNotes, leadName, loanType, remarks, loanAmount, employmentType, city }) => {
     appState = checkDailyReset(appState);
     const agent = appState.agents[agentId];
     if (!agent) return socket.emit('error', 'Agent not found');
     if (!VALID_DISPOSITIONS.includes(disposition)) return socket.emit('error', 'Invalid disposition');
 
-    applyDisposition(agentId, numberId, disposition, { followupDate, followupTime, leadName, loanType, remarks, loanAmount, employmentType, city });
+    applyDisposition(agentId, numberId, disposition, { followupDate, followupTime, followupNotes, leadName, loanType, remarks, loanAmount, employmentType, city });
 
     const num = getNextNumber(agentId);
     if (!num) {
@@ -1294,7 +1476,7 @@ app.get('/api/stats/dispositions', (req, res) => {
   const stats = {
     period,
     totalCalls: filteredLogs.length,
-    dead: 0, not_received: 0, not_interested: 0, followup: 0, switch_off: 0, interested: 0
+    dead: 0, not_received: 0, not_interested: 0, followup: 0, switch_off: 0, interested: 0, discard: 0
   };
 
   filteredLogs.forEach(entry => {
@@ -1483,14 +1665,14 @@ app.get('/api/rankings', (req, res) => {
 
   // Initialize from known agents
   for (const [id, a] of Object.entries(appState.agents)) {
-    agentScores[id] = { agentId: id, name: a.name, interested: 0, followups: 0, totalCalls: 0, notInterested: 0 };
+    agentScores[id] = { agentId: id, name: a.name, interested: 0, followups: 0, totalCalls: 0, notInterested: 0, discard: 0, cnc: 0, switchOff: 0 };
   }
 
   // Also ensure agents from allowedEids appear
   for (const [eid, val] of Object.entries(appState.allowedEids)) {
     const agId = 'emp_' + eid;
     if (!agentScores[agId]) {
-      agentScores[agId] = { agentId: agId, name: getEidName(val), interested: 0, followups: 0, totalCalls: 0, notInterested: 0 };
+      agentScores[agId] = { agentId: agId, name: getEidName(val), interested: 0, followups: 0, totalCalls: 0, notInterested: 0, discard: 0, cnc: 0, switchOff: 0 };
     }
   }
 
@@ -1502,18 +1684,26 @@ app.get('/api/rankings', (req, res) => {
 
     const aid = entry.agentId;
     if (!agentScores[aid]) {
-      agentScores[aid] = { agentId: aid, name: entry.agentName || aid, interested: 0, followups: 0, totalCalls: 0, notInterested: 0 };
+      agentScores[aid] = { agentId: aid, name: entry.agentName || aid, interested: 0, followups: 0, totalCalls: 0, notInterested: 0, discard: 0, cnc: 0, switchOff: 0 };
     }
 
     agentScores[aid].totalCalls++;
     if (entry.disposition === 'interested') agentScores[aid].interested++;
     else if (entry.disposition === 'followup') agentScores[aid].followups++;
     else if (entry.disposition === 'not_interested') agentScores[aid].notInterested++;
+    else if (entry.disposition === 'discard') agentScores[aid].discard++;
+    else if (entry.disposition === 'dead') agentScores[aid].cnc++;
+    else if (entry.disposition === 'switch_off') agentScores[aid].switchOff++;
   });
 
-  // Compute scores and sort
+  // NEW FORMULA: Telecaller Performance Score (0–100)
+  // = MAX(0, MIN(100, (((100×Interested) + (25×FollowUp) - (10×NotInterested) - (15×Discard) - (2×CNC) - (2×SwitchOff)) ÷ (TotalCalls×100)) × 100))
   const rankings = Object.values(agentScores).map(a => {
-    const score = (a.interested + a.followups + a.totalCalls) - a.notInterested;
+    let score = 0;
+    if (a.totalCalls > 0) {
+      const rawNumerator = (100 * a.interested) + (25 * a.followups) - (10 * a.notInterested) - (15 * a.discard) - (2 * a.cnc) - (2 * a.switchOff);
+      score = Math.max(0, Math.min(100, Math.round((rawNumerator / (a.totalCalls * 100)) * 100)));
+    }
     // Get profile photo
     const eidMatch = a.agentId.match(/^emp_(\d+)$/);
     let profilePhoto = null;
