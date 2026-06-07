@@ -1136,13 +1136,14 @@ app.post('/api/admin/hard-reset', (req, res) => {
 });
 
 app.post('/api/agent/register', (req, res) => {
-  const { name, employeeId } = req.body;
-  if (!name) return res.status(400).json({ error: 'Name required' });
+  let { name, employeeId } = req.body;
   if (!employeeId || !/^\d+$/.test(employeeId)) return res.status(400).json({ error: 'Valid numeric Employee ID required' });
 
   if (!appState.allowedEids[employeeId]) {
     return res.status(403).json({ error: 'Employee ID not recognised. Please contact your admin.' });
   }
+  // Auto-fill name from allowedEids if not provided
+  if (!name || !name.trim()) { name = getEidName(appState.allowedEids[employeeId]); }
   appState = checkDailyReset(appState);
   const agentId = 'emp_' + employeeId;
   const today   = getTodayStr();
