@@ -365,6 +365,11 @@
           <div class="dispo-stat-lbl">Switch OFF</div>
         </div>
         <div class="dispo-stat-card">
+          <div class="dispo-stat-indicator" style="background:#78350f"></div>
+          <div class="dispo-stat-val" id="adminStatsDiscard">0</div>
+          <div class="dispo-stat-lbl">Discard/Not-Eligible</div>
+        </div>
+        <div class="dispo-stat-card">
           <div class="dispo-stat-indicator" style="background:var(--green)"></div>
           <div class="dispo-stat-val" id="adminStatsInterested">0</div>
           <div class="dispo-stat-lbl">Interested</div>
@@ -538,11 +543,16 @@
 
   <!-- Followups Panel -->
   <div class="panel panel-followups">
-    <div class="panel-header">
+    <div class="panel-header" style="flex-wrap:wrap;gap:10px">
       <h2>Followups</h2>
-      <span style="font-size:12px;color:var(--muted)" id="followupsCountBadge">0 followups</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <select id="followupAgentFilter" onchange="onFollowupAgentFilterChange()" style="appearance:none;-webkit-appearance:none;padding:6px 28px 6px 12px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;outline:none;min-width:150px">
+          <option value="">All Agents</option>
+        </select>
+        <span style="font-size:12px;color:var(--muted)" id="followupsCountBadge">0 followups</span>
+      </div>
     </div>
-    <div class="panel-body" style="padding:0">
+    <div class="panel-body" style="padding:0;overflow-x:auto">
       <table class="leads-table">
         <thead>
           <tr>
@@ -551,12 +561,26 @@
             <th>Agent</th>
             <th>Date</th>
             <th>Time</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody id="followupsTable">
-          <tr><td colspan="5" class="empty">No followups yet</td></tr>
+          <tr><td colspan="6" class="empty">No followups yet</td></tr>
         </tbody>
       </table>
+    </div>
+    <div class="panel-body" style="border-top:1px solid var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px">
+        <h3 style="font-size:13px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.5px">Upload Custom Followups (Excel)</h3>
+        <a href="/api/admin/download-followup-sample" download class="btn" style="padding:6px 14px;font-size:12px;background:rgba(124,58,237,.1);color:var(--accent);border:1px solid rgba(124,58,237,.25);border-radius:6px;text-decoration:none;font-weight:700">&#128229; Download Sample Sheet</a>
+      </div>
+      <div class="upload-zone" id="followupDropZone" style="padding:20px">
+        <input type="file" id="followupFileInput" accept=".xlsx,.xls,.csv">
+        <div class="upload-icon" style="font-size:24px">&#128197;</div>
+        <p style="font-size:13px"><strong>Click or drag</strong> Excel file with followups</p>
+        <p style="margin-top:4px;font-size:11px;color:var(--muted)">Columns: phone, name, followupDate, followupTime, agentId</p>
+      </div>
+      <div id="followupUploadStatus" style="margin-top:8px;font-size:13px;color:var(--muted);display:none"></div>
     </div>
   </div>
 
@@ -666,6 +690,10 @@ socket.emit('join-admin');
 
 socket.on('stats-update', renderStats);
 socket.on('force-stop', () => showToast('All agents stopped', 'warn'));
+socket.on('timer-update', () => {
+  // Refresh stats when timer state changes
+  fetch('/api/admin/stats').then(r => r.json()).then(d => renderStats(d)).catch(() => {});
+});
 
 // Set today's dialed date label
 (function setDialedDate() {
@@ -905,8 +933,10 @@ function renderStats(data) {
 
 function formatMs(ms) {
   const total = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(total / 60);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
+  if (h > 0) return h + 'h ' + m + 'm';
   return m + ':' + String(s).padStart(2, '0');
 }
 
@@ -1244,14 +1274,71 @@ function renderCompletedLeads(leads) {
 }
 
 // ── Followups ─────────────────────────────────────────────────────────────────
+let followupAgentFilterId = '';
+
+function onFollowupAgentFilterChange() {
+  followupAgentFilterId = document.getElementById('followupAgentFilter').value;
+  fetchFollowups();
+}
+
+async function populateFollowupAgentFilter() {
+  try {
+    const r = await fetch('/api/admin/agents-list');
+    const agents = await r.json();
+    const sel = document.getElementById('followupAgentFilter');
+    const currentVal = sel.value;
+    while (sel.options.length > 1) sel.remove(1);
+    agents.sort((a, b) => a.name.localeCompare(b.name)).forEach(ag => {
+      const opt = document.createElement('option');
+      opt.value = ag.id;
+      opt.textContent = ag.name;
+      sel.appendChild(opt);
+    });
+    if (currentVal) sel.value = currentVal;
+  } catch (e) { /* silent */ }
+}
+
 async function fetchFollowups() {
   try {
-    const r = await fetch('/api/admin/followups');
-    const followups = await r.json();
+    let url = '/api/admin/followups';
+    if (followupAgentFilterId) {
+      url = '/api/admin/followups-by-agent';
+    }
+    const r = await fetch(url);
+    let followups = await r.json();
+    // If by-agent, flatten to array for the selected agent
+    if (followupAgentFilterId && !Array.isArray(followups)) {
+      const agentGroup = followups[followupAgentFilterId];
+      followups = agentGroup || [];
+    } else if (followupAgentFilterId && Array.isArray(followups)) {
+      followups = followups.filter(f => f.followupLockedByAgentId === followupAgentFilterId);
+    }
+    if (!Array.isArray(followups)) {
+      // followups-by-agent returns object - flatten all
+      const all = [];
+      Object.values(followups).forEach(arr => { if (Array.isArray(arr)) all.push(...arr); });
+      followups = all;
+    }
+    // Sort by nearest date/time
+    followups.sort((a, b) => {
+      const da = (a.followupDate || '') + ' ' + (a.followupTime || '00:00');
+      const db = (b.followupDate || '') + ' ' + (b.followupTime || '00:00');
+      return da.localeCompare(db);
+    });
     renderFollowups(followups);
   } catch (e) {
     console.error('Failed to fetch followups:', e);
   }
+}
+
+function formatTimeAmPm(timeStr) {
+  if (!timeStr) return '';
+  try {
+    const [h, m] = timeStr.split(':').map(Number);
+    const period = h >= 12 ? 'PM' : 'AM';
+    const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return hour12 + ':' + String(m).padStart(2,'0') + ' ' + period;
+  } catch(e) { return timeStr; }
 }
 
 function renderFollowups(followups) {
@@ -1259,17 +1346,87 @@ function renderFollowups(followups) {
   const badge = document.getElementById('followupsCountBadge');
   badge.textContent = followups.length + ' followup' + (followups.length !== 1 ? 's' : '');
   if (!followups || followups.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty">No followups yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No followups yet</td></tr>';
     return;
   }
-  tbody.innerHTML = followups.map(f => `<tr>
+  tbody.innerHTML = followups.map(f => {
+    const numberId = f.id || f.numberId || '';
+    return `<tr>
     <td><span class="phone-number">${escapeHtml(formatPhone(f.phone))}</span></td>
-    <td>${escapeHtml(f.name) || '&#8212;'}</td>
-    <td style="font-weight:500">${escapeHtml(f.agentName || f.followupLockedBy) || '&#8212;'}</td>
-    <td style="font-family:var(--mono);font-size:13px">${escapeHtml(formatDate(f.followupDate))}</td>
-    <td style="font-family:var(--mono);font-size:13px">${escapeHtml(f.followupTime) || '&#8212;'}</td>
-  </tr>`).join('');
+    <td><input type="text" value="${escapeHtml(f.followupName || f.name || '')}" onchange="editFollowup('${escapeHtml(numberId)}', 'followupName', this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);width:100px;font-family:var(--sans)" placeholder="Name"></td>
+    <td style="font-weight:500">${escapeHtml(f.agentName || f.followupLockedBy || '')}</td>
+    <td><input type="date" value="${escapeHtml(f.followupDate || '')}" onchange="editFollowup('${escapeHtml(numberId)}', 'followupDate', this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);font-family:var(--mono)"></td>
+    <td><input type="time" value="${escapeHtml(f.followupTime || '')}" onchange="editFollowup('${escapeHtml(numberId)}', 'followupTime', this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);font-family:var(--mono)"> <span style="font-size:11px;color:var(--muted)">${formatTimeAmPm(f.followupTime)}</span></td>
+    <td><button class="btn-del" onclick="removeFollowup('${escapeHtml(numberId)}')" style="padding:4px 10px">Remove</button></td>
+  </tr>`;
+  }).join('');
 }
+
+async function editFollowup(numberId, field, value) {
+  try {
+    const body = {};
+    body[field] = value;
+    const r = await fetch('/api/admin/followup/' + encodeURIComponent(numberId), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (d.error) { showToast('Edit failed: ' + d.error, 'error'); return; }
+    showToast('Followup updated', 'success');
+  } catch (e) {
+    showToast('Edit failed: ' + e.message, 'error');
+  }
+}
+
+async function removeFollowup(numberId) {
+  if (!confirm('Remove this followup? Lead will be moved to Not Interested.')) return;
+  try {
+    const r = await fetch('/api/admin/followup/' + encodeURIComponent(numberId), { method: 'DELETE' });
+    const d = await r.json();
+    if (d.error) { showToast('Remove failed: ' + d.error, 'error'); return; }
+    showToast('Followup removed (lead moved to NI)', 'success');
+    fetchFollowups();
+  } catch (e) {
+    showToast('Remove failed: ' + e.message, 'error');
+  }
+}
+
+// ── Followup Excel Upload ─────────────────────────────────────────────────────
+(function initFollowupUpload() {
+  const dropZone = document.getElementById('followupDropZone');
+  const fileInput = document.getElementById('followupFileInput');
+  if (!dropZone || !fileInput) return;
+  fileInput.addEventListener('change', () => uploadFollowupFile(fileInput.files[0]));
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); uploadFollowupFile(e.dataTransfer.files[0]); });
+})();
+
+async function uploadFollowupFile(file) {
+  if (!file) return;
+  const status = document.getElementById('followupUploadStatus');
+  status.style.display = 'block';
+  status.textContent = 'Uploading followups...';
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await fetch('/api/admin/upload-followups', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.success) {
+      status.textContent = 'Imported ' + (d.count || 0) + ' followups' + (d.skipped ? ' (' + d.skipped + ' skipped)' : '');
+      showToast('Followups uploaded successfully', 'success');
+      fetchFollowups();
+      setTimeout(() => status.style.display = 'none', 4000);
+    } else throw new Error(d.error || 'Upload failed');
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+    showToast('Followup upload failed: ' + e.message, 'error');
+  }
+  document.getElementById('followupFileInput').value = '';
+}
+
+populateFollowupAgentFilter();
 
 // ── Formatting helpers ────────────────────────────────────────────────────────
 function formatPhone(phone) {
@@ -1336,6 +1493,7 @@ async function fetchAdminDispoStats() {
     document.getElementById('adminStatsNotInterested').textContent = d.not_interested|| 0;
     document.getElementById('adminStatsFollowup').textContent      = d.followup      || 0;
     document.getElementById('adminStatsSwitchOff').textContent     = d.switch_off    || 0;
+    document.getElementById('adminStatsDiscard').textContent       = d.discard       || 0;
     document.getElementById('adminStatsInterested').textContent    = d.interested    || 0;
   } catch (e) { /* silent */ }
 }
@@ -1345,6 +1503,7 @@ async function populateAgentFilterDropdown() {
     const r = await fetch('/api/admin/agents-list');
     const agents = await r.json();
     const sel = document.getElementById('adminStatsAgentFilter');
+    const currentVal = sel.value;
     while (sel.options.length > 1) sel.remove(1);
     agents.sort((a, b) => a.name.localeCompare(b.name)).forEach(ag => {
       const opt = document.createElement('option');
@@ -1352,12 +1511,21 @@ async function populateAgentFilterDropdown() {
       opt.textContent = '👤 ' + ag.name;
       sel.appendChild(opt);
     });
+    // Restore previously selected value (sticky fix)
+    if (currentVal) {
+      sel.value = currentVal;
+      // If the agent no longer exists, reset
+      if (sel.value !== currentVal) {
+        adminStatsAgentId = '';
+        document.getElementById('adminStatsViewingLabel').textContent = '';
+      }
+    }
   } catch (e) { /* silent */ }
 }
 
 populateAgentFilterDropdown();
 fetchAdminDispoStats();
-socket.on('stats-update', () => populateAgentFilterDropdown());
+socket.on('stats-update', () => { populateAgentFilterDropdown(); populateFollowupAgentFilter(); });
 
 // ── EID Management ────────────────────────────────────────────────────────────
 async function loadEids() {
@@ -1509,14 +1677,22 @@ function getSmartRemarks(r, data, idx) {
   return '&#128200; ' + above.name.split(' ')[0] + ' से ' + gap + ' pts पीछे — ' + intNeeded + ' interested lead' + (intNeeded > 1 ? 's' : '') + ' लाओ और overtake करो!';
 }
 
-function renderAdminLeaderboard(data) {
+function renderAdminLeaderboard(data, formulaDesc) {
   const body = document.getElementById('adminLeaderboardBody');
   if (!data || data.length === 0) {
     body.innerHTML = '<div style="text-align:center;color:var(--muted);padding:30px">No ranking data available yet</div>';
     return;
   }
   const maxScore = Math.max(...data.map(d => d.score), 1);
-  let html = '<div class="lb-list">';
+  let html = '';
+  // Show formula description
+  if (formulaDesc) {
+    html += '<div style="background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.2);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:var(--muted);line-height:1.6">';
+    html += '<strong style="color:var(--accent)">Score Formula (0-100):</strong> ';
+    html += escapeHtml(formulaDesc);
+    html += '</div>';
+  }
+  html += '<div class="lb-list">';
   data.forEach((r, idx) => {
     const pct = Math.round((r.score / maxScore) * 100);
     const avatarSize = idx === 0 ? 76 : idx === 1 ? 66 : idx === 2 ? 58 : idx < 5 ? 50 : 42;
@@ -1555,8 +1731,20 @@ function renderAdminLeaderboard(data) {
 async function fetchAdminLeaderboard() {
   try {
     const r = await fetch('/api/rankings?period=' + adminLbPeriod);
-    const data = await r.json();
-    renderAdminLeaderboard(data);
+    const resp = await r.json();
+    // Handle new response format: { rankings: [...], formulaDescription: '...' }
+    let data, formulaDesc;
+    if (resp && resp.rankings && Array.isArray(resp.rankings)) {
+      data = resp.rankings;
+      formulaDesc = resp.formulaDescription || '';
+    } else if (Array.isArray(resp)) {
+      data = resp;
+      formulaDesc = '';
+    } else {
+      data = [];
+      formulaDesc = '';
+    }
+    renderAdminLeaderboard(data, formulaDesc);
   } catch (e) { /* silent */ }
 }
 
