@@ -1632,6 +1632,7 @@ async function fetchAgentInterested() {
     const leads=await r.json();
     document.getElementById('tla-interestedCount').textContent=leads.length+' lead'+(leads.length!==1?'s':'');
     document.getElementById('agentInterestedCount').textContent=leads.length;
+    tlInterestedCountToday = leads.length;
     const tb=document.getElementById('tla-interestedTable');
     if(!leads||!leads.length){tb.innerHTML='<tr><td colspan="6" class="empty">No interested leads yet</td></tr>';return;}
     tb.innerHTML=leads.map(l=>{
@@ -1730,11 +1731,11 @@ async function tlaRemoveFollowup(numberId) {
 
 // ── 20-Call Interested Reminder (TL Agent Mode) ──────────────────────────────
 let tlCallsSinceReminder = 0;
+let tlInterestedCountToday = 0;
 function checkTLInterestedReminder() {
   tlCallsSinceReminder++;
   if (tlCallsSinceReminder >= 20) {
-    const intCount = parseInt(document.getElementById('agentInterestedCount').textContent) || 0;
-    if (intCount === 0) {
+    if (tlInterestedCountToday === 0) {
       document.getElementById('tlReminderPopup').classList.add('active');
     }
     tlCallsSinceReminder = 0;
@@ -1754,6 +1755,8 @@ agentSubmitDisposition = function(d) {
 
 // ── Followup Due Popup (TL Agent Mode) ───────────────────────────────────────
 let tlDueFollowupInterval = null;
+let tlDueFollowupsAcknowledged = new Set();
+let tlLastDueFollowupsData = [];
 function startTLDueFollowupCheck() {
   if (tlDueFollowupInterval) clearInterval(tlDueFollowupInterval);
   tlDueFollowupInterval = setInterval(checkTLDueFollowups, 30000);
@@ -1765,14 +1768,20 @@ async function checkTLDueFollowups() {
     const r = await fetch('/api/agent/due-followups/' + encodeURIComponent(tlAgentId));
     const due = await r.json();
     if (due && due.length > 0) {
+      const newDue = due.filter(f => !tlDueFollowupsAcknowledged.has(f.id || f.numberId));
+      if (newDue.length === 0) return;
+      tlLastDueFollowupsData = newDue;
       const list = document.getElementById('tlFollowupDueList');
-      list.innerHTML = due.map(f => `<div class="due-item"><span class="phone">${escapeHtml(formatPhone(f.phone))}</span><span class="name">${escapeHtml(f.followupName || f.name || '')}</span></div>`).join('');
+      list.innerHTML = newDue.map(f => `<div class="due-item"><span class="phone">${escapeHtml(formatPhone(f.phone))}</span><span class="name">${escapeHtml(f.followupName || f.name || '')}</span></div>`).join('');
       document.getElementById('tlFollowupDuePopup').classList.add('active');
     }
   } catch(e) {}
 }
 function closeTLFollowupDuePopup() {
   document.getElementById('tlFollowupDuePopup').classList.remove('active');
+  tlLastDueFollowupsData.forEach(f => {
+    tlDueFollowupsAcknowledged.add(f.id || f.numberId);
+  });
 }
 
 // ── Timer Update Handler ─────────────────────────────────────────────────────

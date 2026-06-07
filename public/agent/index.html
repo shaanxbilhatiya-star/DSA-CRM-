@@ -1729,6 +1729,7 @@ async function fetchMyStats() {
     document.getElementById('myStatsFollowup').textContent      = d.followup || 0;
     document.getElementById('myStatsSwitchOff').textContent     = d.switch_off || 0;
     document.getElementById('myStatsInterested').textContent    = d.interested || 0;
+    interestedCountToday = d.interested || 0;
     document.getElementById('myStatsDiscard').textContent       = d.discard || 0;
   } catch (e) { /* silent */ }
 }
@@ -1845,12 +1846,12 @@ setInterval(() => { if (agentId) socket.emit('ping-alive', { agentId }); }, 3000
 
 // ── 20-Call Interested Reminder ──────────────────────────────────────────────
 let callsSinceLastReminder = 0;
+let interestedCountToday = 0;
 
 function checkInterestedReminder() {
   callsSinceLastReminder++;
   if (callsSinceLastReminder >= 20) {
-    const intCount = parseInt(document.getElementById('myStatsInterested').textContent) || 0;
-    if (intCount === 0) {
+    if (interestedCountToday === 0) {
       document.getElementById('reminderPopup').classList.add('active');
     }
     callsSinceLastReminder = 0;
@@ -1870,6 +1871,7 @@ submitDisposition = function(disposition) {
 
 // ── Followup Due Popup ───────────────────────────────────────────────────────
 let followupDueAcknowledged = new Set();
+let lastDueFollowupsData = [];
 
 async function checkDueFollowups() {
   if (!agentId) return;
@@ -1879,6 +1881,7 @@ async function checkDueFollowups() {
     if (!data || !Array.isArray(data) || data.length === 0) return;
     const newDue = data.filter(d => !followupDueAcknowledged.has(d.id || d.numberId));
     if (newDue.length === 0) return;
+    lastDueFollowupsData = newDue;
     const listEl = document.getElementById('followupDueList');
     listEl.innerHTML = newDue.map(d => `<div class="due-item">
       <span class="phone">${escapeHtml(formatPhone(d.phone))}</span>
@@ -1891,10 +1894,10 @@ async function checkDueFollowups() {
 
 function closeFollowupDuePopup() {
   document.getElementById('followupDuePopup').classList.remove('active');
-  // Mark all currently shown as acknowledged
-  const items = document.querySelectorAll('#followupDueList .due-item');
-  // We cannot easily get IDs from DOM, so just prevent re-show for 5 min by clearing interval temporarily
-  followupDueAcknowledged.add('_batch_' + Date.now());
+  // Mark all currently shown followups as acknowledged by their IDs
+  lastDueFollowupsData.forEach(d => {
+    followupDueAcknowledged.add(d.id || d.numberId);
+  });
 }
 
 // Check every 30 seconds for due followups

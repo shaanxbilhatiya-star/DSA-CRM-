@@ -1306,17 +1306,15 @@ async function fetchFollowups() {
     }
     const r = await fetch(url);
     let followups = await r.json();
-    // If by-agent, flatten to array for the selected agent
+    // If by-agent, extract the selected agent's followups from the keyed object
     if (followupAgentFilterId && !Array.isArray(followups)) {
       const agentGroup = followups[followupAgentFilterId];
-      followups = agentGroup || [];
-    } else if (followupAgentFilterId && Array.isArray(followups)) {
-      followups = followups.filter(f => f.followupLockedByAgentId === followupAgentFilterId);
+      followups = (agentGroup && agentGroup.followups) ? agentGroup.followups : [];
     }
     if (!Array.isArray(followups)) {
-      // followups-by-agent returns object - flatten all
+      // followups-by-agent returns object keyed by agentId - flatten all agents' followups
       const all = [];
-      Object.values(followups).forEach(arr => { if (Array.isArray(arr)) all.push(...arr); });
+      Object.values(followups).forEach(group => { if (group && Array.isArray(group.followups)) all.push(...group.followups); });
       followups = all;
     }
     // Sort by nearest date/time

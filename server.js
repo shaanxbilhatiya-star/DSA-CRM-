@@ -108,12 +108,15 @@ function checkDailyReset(state) {
       state.agents[id].totalTlModeMs = 0;
     }
     state.numbers.forEach(n => {
-      if ((n.disposition === 'not_received' || n.disposition === 'switch_off' || n.disposition === 'dead') && n.retryAfter && today >= n.retryAfter && !n.permanent && (n.retryCount || 0) < 2) {
-        n.disposition = null;
-        n.retryAfter = null;
-        n.dialedBy = null;
-        n.dialedAt = null;
-        n.assignedTo = null;
+      if ((n.disposition === 'not_received' || n.disposition === 'switch_off' || n.disposition === 'dead') && n.retryAfter && today >= n.retryAfter && !n.permanent) {
+        const dispoCount = (n.retryCounts && n.retryCounts[n.disposition]) || n.retryCount || 0;
+        if (dispoCount < 2) {
+          n.disposition = null;
+          n.retryAfter = null;
+          n.dialedBy = null;
+          n.dialedAt = null;
+          n.assignedTo = null;
+        }
       }
     });
     state.lastReset = today;
@@ -159,13 +162,19 @@ function getNextNumber(agentId) {
     if (n.disposition === 'discard') return false;
     if (n.disposition === 'not_interested') return false;
     if (n.permanent) return false;
-    if (n.disposition === 'dead' && n.retryCount >= 2) return false;
-    if (n.disposition === 'dead' && !n.retryAfter) return false;
-    if (n.disposition === 'dead' && n.retryAfter && today < n.retryAfter) return false;
+    if (n.disposition === 'dead') {
+      const deadCount = (n.retryCounts && n.retryCounts.dead) || n.retryCount || 0;
+      if (deadCount >= 2) return false;
+      if (!n.retryAfter) return false;
+      if (n.retryAfter && today < n.retryAfter) return false;
+    }
     if (n.disposition === 'followup' && n.followupLockedBy && n.followupLockedBy !== agentId) return false;
     if (n.disposition === 'interested') return false;
-    if ((n.disposition === 'not_received' || n.disposition === 'switch_off') && n.retryCount >= 2) return false;
-    if ((n.disposition === 'not_received' || n.disposition === 'switch_off') && n.retryAfter && today < n.retryAfter) return false;
+    if (n.disposition === 'not_received' || n.disposition === 'switch_off') {
+      const dispoCount = (n.retryCounts && n.retryCounts[n.disposition]) || n.retryCount || 0;
+      if (dispoCount >= 2) return false;
+      if (n.retryAfter && today < n.retryAfter) return false;
+    }
     return true;
   });
   if (!undialed) return null;
@@ -219,9 +228,12 @@ function applyDisposition(agentId, numberId, disposition, extra) {
   switch (disposition) {
     case 'dead':
       // CNC - retry counting: first time retryAfter tomorrow, second time permanent
+      if (!num.retryCounts) num.retryCounts = {};
+      if (!num.retryCounts.dead) num.retryCounts.dead = 0;
+      num.retryCounts.dead++;
       if (!num.retryCount) num.retryCount = 0;
       num.retryCount++;
-      if (num.retryCount >= 2) {
+      if (num.retryCounts.dead >= 2) {
         // Permanent removal - never dial again
         num.disposition = 'dead';
         num.permanent = true;
@@ -236,9 +248,12 @@ function applyDisposition(agentId, numberId, disposition, extra) {
       break;
     case 'not_received':
       // CNR - retry counting: first time retryAfter tomorrow, second time permanent
+      if (!num.retryCounts) num.retryCounts = {};
+      if (!num.retryCounts.not_received) num.retryCounts.not_received = 0;
+      num.retryCounts.not_received++;
       if (!num.retryCount) num.retryCount = 0;
       num.retryCount++;
-      if (num.retryCount >= 2) {
+      if (num.retryCounts.not_received >= 2) {
         // Permanent removal - never dial again
         num.disposition = 'not_received';
         num.permanent = true;
@@ -286,9 +301,12 @@ function applyDisposition(agentId, numberId, disposition, extra) {
       break;
     case 'switch_off':
       // Switch Off - retry counting: first time retryAfter tomorrow, second time permanent
+      if (!num.retryCounts) num.retryCounts = {};
+      if (!num.retryCounts.switch_off) num.retryCounts.switch_off = 0;
+      num.retryCounts.switch_off++;
       if (!num.retryCount) num.retryCount = 0;
       num.retryCount++;
-      if (num.retryCount >= 2) {
+      if (num.retryCounts.switch_off >= 2) {
         // Permanent removal - never dial again
         num.disposition = 'switch_off';
         num.permanent = true;
@@ -1679,6 +1697,9 @@ app.delete('/api/agent/followup/:numberId', (req, res) => {
   const num = appState.numbers.find(n => n.id === numberId);
   if (!num) return res.status(404).json({ error: 'Number not found' });
   if (num.disposition !== 'followup') return res.status(400).json({ error: 'Number is not a followup' });
+  if (agentId && num.followupLockedBy && num.followupLockedBy !== agentId) {
+    return res.status(403).json({ error: 'Not authorized to remove this followup' });
+  }
   num.disposition = 'not_interested';
   num.permanent = true;
   num.blockedUntil = null;
@@ -1717,7 +1738,7 @@ app.get('/api/admin/followups-by-agent', (req, res) => {
       return dateA.localeCompare(dateB);
     });
   });
-  res.json(Object.values(grouped));
+  res.json(grouped);
 });
 
 // GET /api/agent/due-followups/:agentId - Followups whose date+time has arrived (popup trigger)
@@ -1783,14 +1804,26 @@ app.post('/api/admin/upload-followups', followupUpload.single('file'), (req, res
         // If number exists, update its followup if not already permanently removed
         const existing = appState.numbers.find(n => n.phone === phone);
         if (existing && existing.disposition !== 'discard' && existing.disposition !== 'interested' && !existing.permanent) {
-          existing.disposition = 'followup';
-          existing.followupDate = followupDate;
-          existing.followupTime = followupTime;
-          existing.followupLockedBy = agentId || existing.followupLockedBy;
-          existing.followupName = followupName || existing.followupName || '';
           if (!existing.followupCount) existing.followupCount = 0;
-          existing.followupCount++;
-          added++;
+          if (existing.followupCount >= 2) {
+            // Enforce 2-max cap: auto-convert to NI
+            existing.disposition = 'not_interested';
+            existing.permanent = true;
+            existing.blockedUntil = null;
+            existing.followupDate = null;
+            existing.followupTime = null;
+            existing.followupLockedBy = null;
+            existing.followupName = null;
+            skipped++;
+          } else {
+            existing.disposition = 'followup';
+            existing.followupDate = followupDate;
+            existing.followupTime = followupTime;
+            existing.followupLockedBy = agentId || existing.followupLockedBy;
+            existing.followupName = followupName || existing.followupName || '';
+            existing.followupCount++;
+            added++;
+          }
         } else {
           skipped++;
         }
