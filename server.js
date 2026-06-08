@@ -1189,6 +1189,7 @@ app.post('/api/agent/register', (req, res) => {
 
   res.json({
     agentId, name, employeeId,
+    role: getEidRole(appState.allowedEids[employeeId]),
     resumeNumber,
     needsAutoResume,
     totalDialedToday: agent.totalDialedToday || 0,
