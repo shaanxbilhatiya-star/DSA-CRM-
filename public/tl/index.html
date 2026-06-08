@@ -784,14 +784,41 @@
 
 <!-- Doc ZIP Upload Modal (Agent Mode) -->
 <div class="modal-overlay" id="tlaDocZipModal">
-  <div class="modal-box">
-    <h3>&#128230; Upload Documents ZIP</h3>
-    <p>Upload a ZIP file containing all required documents for this lead.</p>
-    <input type="file" id="tlaDocZipFile" accept=".zip" style="margin-bottom:16px;color:var(--text)">
-    <div class="modal-actions">
-      <button class="btn-cancel" onclick="tlaCloseDocZipModal()">Cancel</button>
-      <button class="btn-confirm" onclick="tlaSubmitDocZip()">Upload</button>
+  <div class="modal-box" style="max-width:440px;text-align:center;">
+    <div style="font-size:48px;margin-bottom:12px;">📦</div>
+    <h3 style="margin-bottom:6px;">Upload Documents ZIP</h3>
+    <p class="modal-sub" style="margin-bottom:20px;">Upload all lead documents as a single ZIP file to complete documentation</p>
+    <div id="tlaDocZipDropZone" style="border:2px dashed var(--border-strong,#cbd5e1);border-radius:12px;padding:32px 20px;margin-bottom:16px;cursor:pointer;transition:all .2s;background:var(--surface2,#f1f5f9);"
+         onclick="document.getElementById('tlaDocZipFileInput').click()"
+         ondragover="event.preventDefault();this.style.borderColor='var(--green,#10b981)';this.style.background='rgba(16,185,129,.06)'"
+         ondragleave="this.style.borderColor='var(--border-strong,#cbd5e1)';this.style.background='var(--surface2,#f1f5f9)'"
+         ondrop="tlaHandleDocZipDrop(event)">
+      <div style="font-size:32px;margin-bottom:8px;">📁</div>
+      <div style="font-weight:600;color:var(--text,#1e293b);margin-bottom:4px;">Click or drag &amp; drop ZIP file</div>
+      <div style="font-size:12px;color:var(--muted,#64748b)">Only .zip files accepted · Max 100MB</div>
     </div>
+    <input type="file" id="tlaDocZipFileInput" accept=".zip,application/zip,application/x-zip-compressed" style="display:none" onchange="tlaHandleDocZipSelect(event)">
+    <div id="tlaDocZipSelected" style="display:none;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.25);border-radius:8px;padding:12px 16px;margin-bottom:16px;text-align:left;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:24px;">🗜️</span>
+        <div>
+          <div id="tlaDocZipFileName" style="font-weight:600;color:var(--green,#10b981);font-size:14px;"></div>
+          <div id="tlaDocZipFileSize" style="font-size:12px;color:var(--muted,#64748b);margin-top:2px;"></div>
+        </div>
+        <button onclick="tlaClearDocZipFile()" style="margin-left:auto;background:none;border:none;color:var(--muted,#64748b);cursor:pointer;font-size:18px;padding:0">✕</button>
+      </div>
+    </div>
+    <div id="tlaDocZipProgress" style="display:none;margin-bottom:16px;">
+      <div style="font-size:13px;color:var(--muted,#64748b);margin-bottom:8px;" id="tlaDocZipProgressText">Uploading…</div>
+      <div style="background:var(--surface2,#f1f5f9);border-radius:100px;height:8px;overflow:hidden;">
+        <div id="tlaDocZipProgressBar" style="height:100%;background:var(--green,#10b981);width:0%;transition:width .3s;border-radius:100px;"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn-confirm" id="tlaBtnUploadDocZip" onclick="tlaSubmitDocZip()" style="flex:1;background:var(--green,#10b981);color:#fff;border:none;padding:12px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px">📤 Upload &amp; Complete</button>
+      <button class="btn-cancel" onclick="tlaCloseDocZipModal()" style="flex:0 0 auto;padding:12px 16px;border-radius:8px;border:1px solid var(--border,#e2e8f0);background:none;color:var(--muted,#64748b);font-weight:600;cursor:pointer;font-size:14px">Cancel</button>
+    </div>
+    <p style="font-size:11px;color:var(--muted,#64748b);margin-top:12px;">Lead will be moved to Documentation Completed after successful upload</p>
   </div>
 </div>
 
@@ -1070,7 +1097,14 @@ function updateModeUI() {
 }
 
 // ── TL Monitor: fetch stats ───────────────────────────────────────────────────
-socket.on('stats-update', function(data) { if(inTLMode) renderTLStats(data); });
+socket.on('stats-update', function(data) {
+  if(inTLMode) {
+    renderTLStats(data);
+    fetchTLInterested();
+    fetchTLFollowups();
+    fetchTLCompleted();
+  }
+});
 
 // Sync savedTotalTlModeMs so Net Dialing Time stays accurate after mode switches
 socket.on('tlmode-ended', function(d) {
@@ -1973,33 +2007,122 @@ async function tlaRemoveInterested(numberId) {
 }
 
 // ── Agent Mode: Doc ZIP Upload ────────────────────────────────────────────────
-let tlaDocZipNumberId=null;
+let tlaDocZipNumberId = null;
+let tlaDocZipFile = null;
+
 function tlaOpenLoanForm(numberId) {
   window.open('/forms/PLJOB-main/index.html?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(tlAgentId), '_blank');
 }
+
 function tlaOpenDocZipModal(numberId) {
-  tlaDocZipNumberId=numberId;
-  document.getElementById('tlaDocZipFile').value='';
+  tlaDocZipNumberId = numberId;
+  tlaDocZipFile = null;
+  document.getElementById('tlaDocZipSelected').style.display = 'none';
+  document.getElementById('tlaDocZipProgress').style.display = 'none';
+  document.getElementById('tlaDocZipDropZone').style.display = 'block';
+  const btn = document.getElementById('tlaBtnUploadDocZip');
+  btn.disabled = false;
+  btn.textContent = '📤 Upload & Complete';
+  document.getElementById('tlaDocZipFileInput').value = '';
   document.getElementById('tlaDocZipModal').classList.add('active');
 }
+
 function tlaCloseDocZipModal() {
   document.getElementById('tlaDocZipModal').classList.remove('active');
-  tlaDocZipNumberId=null;
+  tlaDocZipNumberId = null;
+  tlaDocZipFile = null;
 }
-async function tlaSubmitDocZip() {
-  const fileInput=document.getElementById('tlaDocZipFile');
-  if(!fileInput.files||!fileInput.files[0]){showToast('Select a ZIP file','error');return;}
-  const formData=new FormData();
-  formData.append('docZip',fileInput.files[0]);
-  formData.append('agentId',tlAgentId);
-  try {
-    const r=await fetch('/api/agent/upload-doc-zip/'+tlaDocZipNumberId,{method:'POST',body:formData});
-    const d=await r.json();
-    if(d.error){showToast('Error: '+d.error,'error');return;}
-    showToast('Documents uploaded successfully','success');
-    tlaCloseDocZipModal();
-    refreshAgentLeadSections();
-  } catch(e){showToast('Upload failed','error');}
+
+function tlaHandleDocZipSelect(event) {
+  const file = event.target.files[0];
+  if (file) tlaSetDocZipFile(file);
+}
+
+function tlaHandleDocZipDrop(event) {
+  event.preventDefault();
+  const dz = document.getElementById('tlaDocZipDropZone');
+  dz.style.borderColor = 'var(--border-strong,#cbd5e1)';
+  dz.style.background = 'var(--surface2,#f1f5f9)';
+  const file = event.dataTransfer.files[0];
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.zip')) { showToast('Only ZIP files are accepted', 'error'); return; }
+  tlaSetDocZipFile(file);
+}
+
+function tlaSetDocZipFile(file) {
+  tlaDocZipFile = file;
+  document.getElementById('tlaDocZipFileName').textContent = file.name;
+  document.getElementById('tlaDocZipFileSize').textContent = tlaFormatBytes(file.size);
+  document.getElementById('tlaDocZipSelected').style.display = 'block';
+  document.getElementById('tlaDocZipDropZone').style.display = 'none';
+}
+
+function tlaClearDocZipFile() {
+  tlaDocZipFile = null;
+  document.getElementById('tlaDocZipFileInput').value = '';
+  document.getElementById('tlaDocZipSelected').style.display = 'none';
+  document.getElementById('tlaDocZipDropZone').style.display = 'block';
+}
+
+function tlaFormatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function tlaSubmitDocZip() {
+  if (!tlaDocZipFile) { showToast('Please select a ZIP file first', 'error'); return; }
+  if (!tlaDocZipNumberId) return;
+  const btn = document.getElementById('tlaBtnUploadDocZip');
+  btn.disabled = true;
+  btn.textContent = 'Uploading…';
+  document.getElementById('tlaDocZipProgress').style.display = 'block';
+  const bar = document.getElementById('tlaDocZipProgressBar');
+  const txt = document.getElementById('tlaDocZipProgressText');
+
+  const formData = new FormData();
+  formData.append('docZip', tlaDocZipFile);
+  formData.append('agentId', tlAgentId);
+
+  const xhr = new XMLHttpRequest();
+  xhr.upload.onprogress = function(e) {
+    if (e.lengthComputable) {
+      const pct = Math.round((e.loaded / e.total) * 100);
+      bar.style.width = pct + '%';
+      txt.textContent = 'Uploading… ' + pct + '%';
+    }
+  };
+  xhr.onload = function() {
+    try {
+      const resp = JSON.parse(xhr.responseText);
+      if (resp.error) {
+        showToast('Error: ' + resp.error, 'error');
+        btn.disabled = false;
+        btn.textContent = '📤 Upload & Complete';
+        document.getElementById('tlaDocZipProgress').style.display = 'none';
+        return;
+      }
+      bar.style.width = '100%';
+      txt.textContent = '✅ Upload complete!';
+      showToast('Documents uploaded! Lead moved to Documentation Completed ✅', 'success');
+      setTimeout(function() {
+        tlaCloseDocZipModal();
+        refreshAgentLeadSections();
+      }, 800);
+    } catch(e) {
+      showToast('Upload failed: unexpected response', 'error');
+      btn.disabled = false;
+      btn.textContent = '📤 Upload & Complete';
+    }
+  };
+  xhr.onerror = function() {
+    showToast('Upload failed: network error', 'error');
+    btn.disabled = false;
+    btn.textContent = '📤 Upload & Complete';
+    document.getElementById('tlaDocZipProgress').style.display = 'none';
+  };
+  xhr.open('POST', '/api/agent/upload-doc-zip/' + tlaDocZipNumberId);
+  xhr.send(formData);
 }
 
 // ── Agent Mode Timer ──────────────────────────────────────────────────────────
