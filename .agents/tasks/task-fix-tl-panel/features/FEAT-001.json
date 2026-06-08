@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "fix",
   "description": "Create the new tl/index.html with the complete structure: HTML head with both themes (light for agent mode, dark for TL mode), all CSS styles for both modes, login screen, agent mode screen (copied from agent.html), TL mode screen (from admin.html limited sections), and all modals. Then add the JavaScript for login, mode switching, agent mode logic, and TL mode logic.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Read the complete agent/index.html and admin/index.html to understand all features",
     "Delete existing public/tl/index.html",
@@ -21,5 +21,5 @@
     "cd /projects/sandbox/CRM && npm install"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "File size is ~208KB combining both agent and admin functionality. Used Python script to extract and merge both source files. Renamed conflicting IDs and function names between agent/admin JS (showToast->tlShowToast, formatMs->tlFormatMs, etc). Admin sections hidden via JS DOM manipulation in hideTlForbiddenSections(). Socket shared between both modes. Agent auto-login bypassed since TL login handles authentication."
 }
