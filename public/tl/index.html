@@ -350,6 +350,25 @@
   body.agent-mode-theme .phone-number-big { color: #6c2bd9 !important; }
   body.agent-mode-theme .modal-box-a { background: #fff !important; border-color: #e2e8f0 !important; color: #1a202c !important; box-shadow: 0 12px 50px rgba(0,0,0,.12) !important; }
   body.agent-mode-theme #toast { background: #fff !important; border-color: #e2e8f0 !important; color: #1a202c !important; box-shadow: 0 4px 12px rgba(0,0,0,.08) !important; }
+  
+  /* Agent mode: exact agent.html table styling */
+  body.agent-mode-theme .phone-mono { font-family: var(--mono); font-weight: 700; color: #6c2bd9; }
+  body.agent-mode-theme .loan-pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: rgba(108,43,217,.10); color: #6c2bd9; border: 1px solid rgba(108,43,217,.15); white-space: nowrap; }
+  body.agent-mode-theme .timer-badge { font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+  body.agent-mode-theme .timer-badge.active-timer { color: #059669; background: #ecfdf5; border: 1px solid #a7f3d0; }
+  body.agent-mode-theme .timer-badge.expired-timer { color: #dc2626; background: #fef2f2; border: 1px solid #fecaca; }
+  body.agent-mode-theme .action-cell { display: flex; gap: 5px; flex-wrap: wrap; }
+  body.agent-mode-theme .followup-date { font-family: var(--mono); font-size: 12px; font-weight: 700; color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe; padding: 3px 8px; border-radius: 6px; }
+  body.agent-mode-theme .btn-sm { padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all .2s; border: none; }
+  body.agent-mode-theme .btn-sm.blue { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+  body.agent-mode-theme .btn-sm.red { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+  body.agent-mode-theme .btn-sm:hover { filter: brightness(1.06); }
+  body.agent-mode-theme .panel-header.green-h { background: rgba(5,150,105,.05) !important; }
+  body.agent-mode-theme .panel-header.green-h h2 { color: #059669 !important; }
+  body.agent-mode-theme .panel-header.blue-h { background: rgba(37,99,235,.05) !important; }
+  body.agent-mode-theme .panel-header.blue-h h2 { color: #2563eb !important; }
+  body.agent-mode-theme .panel-header.accent-h { background: rgba(108,43,217,.10) !important; }
+  body.agent-mode-theme .panel-header.accent-h h2 { color: #6c2bd9 !important; }
 </style>
 
 
@@ -648,9 +667,9 @@
     </div><!-- end grid-2: Dialer + Dispo Stats -->
 
     <!-- INTERESTED LEADS (full width) -->
-    <div class="panel" style="margin-bottom:20px;border-top:3px solid var(--green)">
-      <div class="panel-header" style="background:rgba(16,185,129,.05)">
-        <h2 style="color:var(--green)">&#11088; My Interested Leads</h2>
+    <div class="panel" style="margin-bottom:20px">
+      <div class="panel-header green-h">
+        <h2>⭐ My Interested Leads</h2>
         <span style="font-size:12px;color:var(--muted)" id="tla-interestedCount">0 leads</span>
       </div>
       <div class="panel-body" style="padding:0;overflow-x:auto">
@@ -666,33 +685,55 @@
 
       <!-- Followups -->
       <div class="panel">
-        <div class="panel-header" style="background:rgba(99,102,241,.05)">
-          <h2 style="color:var(--accent2)">&#128197; My Followups</h2>
+        <div class="panel-header blue-h">
+          <h2>📅 My Followups</h2>
           <span style="font-size:12px;color:var(--muted)" id="tla-followupsCount">0 followups</span>
         </div>
         <div class="panel-body" style="padding:0;overflow-x:auto">
           <table class="leads-table">
-            <thead><tr><th>Phone</th><th>Name</th><th>Date</th><th>Time</th><th>Action</th></tr></thead>
-            <tbody id="tla-followupsTable"><tr><td colspan="5" class="empty">No followups yet</td></tr></tbody>
+            <thead><tr><th>Phone</th><th>Name</th><th>Followup Name</th><th>Date</th><th>Time</th><th>Action</th></tr></thead>
+            <tbody id="tla-followupsTable"><tr><td colspan="6" class="empty">No followups yet</td></tr></tbody>
           </table>
         </div>
       </div>
 
       <!-- Add Interested Lead Manually -->
       <div class="panel">
-        <div class="panel-header" style="background:rgba(124,58,237,.06)">
-          <h2 style="color:var(--tl)">&#10133; Add Interested Lead Manually</h2>
+        <div class="panel-header">
+          <h2>➕ Add Interested Lead Manually</h2>
         </div>
         <div class="panel-body">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div class="field"><label>Name <span style="color:#ef4444">*</span></label><input type="text" id="tla-addName" placeholder="e.g. Amit Kumar"></div>
-            <div class="field"><label>Mob No <span style="color:#ef4444">*</span></label><input type="text" id="tla-addPhone" placeholder="10-digit number" maxlength="10"></div>
-            <div class="field"><label>Loan Type <span style="color:#ef4444">*</span></label><select id="tla-manualLoanType" style="width:100%;padding:12px 16px;border-radius:10px;font-size:15px"><option value="">-- Select Loan Type --</option><option value="BL_Business">BL_Business</option><option value="LAP_Business">LAP_Business</option><option value="LAP_Salaried">LAP_Salaried</option><option value="PL_Business">PL_Business</option><option value="PL_Salaried">PL_Salaried</option></select></div>
-            <div class="field"><label>Required Amount <span style="color:#ef4444">*</span></label><input type="number" id="tla-addAmount" placeholder="e.g. 500000" min="1"></div>
-            <div class="field" style="grid-column:span 2"><label>Remarks <span style="color:#ef4444">*</span></label><input type="text" id="tla-addRemarks" placeholder="Notes about this lead"></div>
-          </div>
-          <div style="display:flex;justify-content:flex-end;margin-top:12px">
-            <button class="action-btn" onclick="tlaAddInterestedManually()" style="background:var(--green);color:#fff;max-width:240px">+ Add Lead</button>
+          <div class="add-lead-form">
+            <div class="field">
+              <label>Name <span style="color:#ef4444">*</span></label>
+              <input type="text" id="tla-addName" placeholder="e.g. Amit Kumar" autocomplete="off">
+            </div>
+            <div class="field">
+              <label>Mob No <span style="color:#ef4444">*</span></label>
+              <input type="text" id="tla-addPhone" placeholder="10-digit number" maxlength="10">
+            </div>
+            <div class="field">
+              <label>Loan Type <span style="color:#ef4444">*</span></label>
+              <select id="tla-manualLoanType">
+                <option value="">-- Select Loan Type --</option>
+                <option value="BL_Business">BL_Business</option>
+                <option value="LAP_Business">LAP_Business</option>
+                <option value="LAP_Salaried">LAP_Salaried</option>
+                <option value="PL_Business">PL_Business</option>
+                <option value="PL_Salaried">PL_Salaried</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Required Amount <span style="color:#ef4444">*</span></label>
+              <input type="number" id="tla-addAmount" placeholder="e.g. 500000" min="1">
+            </div>
+            <div class="field">
+              <label>Remarks <span style="color:#ef4444">*</span></label>
+              <input type="text" id="tla-addRemarks" placeholder="Notes about this lead">
+            </div>
+            <div class="field field-full" style="display:flex;justify-content:flex-end">
+              <button class="btn-add-lead" onclick="tlaAddInterestedManually()">+ Add Lead</button>
+            </div>
           </div>
         </div>
       </div>
@@ -700,9 +741,9 @@
     </div><!-- end grid-2: Followups + Add Lead -->
 
     <!-- COMPLETED LEADS (full width) -->
-    <div class="panel" style="margin-bottom:20px;border-top:3px solid var(--tl)">
-      <div class="panel-header" style="background:rgba(124,58,237,.06)">
-        <h2 style="color:var(--tl)">&#9989; Documentation Completed</h2>
+    <div class="panel" style="margin-bottom:20px">
+      <div class="panel-header accent-h">
+        <h2>✅ Documentation Completed</h2>
         <span style="font-size:12px;color:var(--muted)" id="tla-completedCount">0 leads</span>
       </div>
       <div class="panel-body" style="padding:0;overflow-x:auto">
@@ -1676,18 +1717,20 @@ async function fetchAgentInterested() {
     if(!leads||!leads.length){tb.innerHTML='<tr><td colspan="6" class="empty">No interested leads yet</td></tr>';return;}
     tb.innerHTML=leads.map(l=>{
       const rem=l.hoursRemaining;
-      const tc=rem<=0?'<span class="overdue-text">OVERDUE</span>'
-        :`<span class="time-remaining" data-interested-at="${escapeHtml(l.interestedAt)}">${Math.floor(rem)}h ${Math.round((rem%1)*60)}m</span>`;
-      return `<tr${rem<=0?' class="overdue-row"':''}>
-        <td><span class="phone-number">${escapeHtml(formatPhone(l.phone))}</span></td>
-        <td>${escapeHtml(l.name)||'\u2014'}</td>
-        <td><span class="loan-type-pill">${escapeHtml(l.loanType)||'\u2014'}</span></td>
-        <td style="font-family:var(--mono);font-size:13px">${escapeHtml(l.loanAmount)||'\u2014'}</td>
-        <td>${tc}</td>
-        <td style="white-space:nowrap">
-          <button class="btn-sm tl" onclick="tlaOpenLoanForm('${escapeHtml(l.id)}')">&#128196; Form</button>
-          <button class="btn-sm tl" onclick="tlaOpenDocZipModal('${escapeHtml(l.id)}')">&#128230; Upload</button>
-          <button class="btn-sm danger" onclick="tlaRemoveInterested('${escapeHtml(l.id)}')">Remove</button>
+      const tc=rem<=0?'EXPIRED':`${Math.floor(rem)}h ${Math.round((rem%1)*60)}m`;
+      const timerClass = rem<=0 ? 'expired-timer' : 'active-timer';
+      const loanAmt = l.loanAmount ? '₹' + escapeHtml(l.loanAmount) : '—';
+      return `<tr>
+        <td><span class="phone-mono">${escapeHtml(formatPhone(l.phone))}</span></td>
+        <td style="font-weight:600">${escapeHtml(l.name)||'—'}</td>
+        <td><span class="loan-pill">${escapeHtml(l.loanType)||'N/A'}</span></td>
+        <td style="font-family:var(--mono);font-size:13px;color:var(--green)">${loanAmt}</td>
+        <td><span class="timer-badge ${timerClass}" data-timer-for="${escapeHtml(l.id)}">${tc}</span></td>
+        <td>
+          <div class="action-cell">
+            <button class="btn-sm blue" onclick="tlaOpenLoanForm('${escapeHtml(l.id)}')">📄 Form</button>
+            <button class="btn-sm red" onclick="tlaRemoveInterested('${escapeHtml(l.id)}')">🗑</button>
+          </div>
         </td></tr>`;
     }).join('');
   } catch(e){}
@@ -1710,12 +1753,19 @@ async function fetchAgentFollowups() {
     });
     tb.innerHTML=fs.map(f=>{
       const numberId=f.numberId||f.id||'';
-      const overdueTag = f.overdue ? ' <span style="background:#fee2e2;color:#dc2626;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-left:4px">OVERDUE</span>' : '';
+      const timeAmPm = formatTimeAmPm(f.followupTime);
+      const overdueTag = f.overdue ? ' <span style="color:#dc2626;font-weight:700;font-size:11px;background:#fef2f2;border:1px solid #fecaca;padding:2px 6px;border-radius:4px;margin-left:4px">OVERDUE</span>' : '';
       return `<tr>
-      <td><span class="phone-number">${escapeHtml(formatPhone(f.phone))}</span></td>
-      <td>${escapeHtml(f.followupName||f.name)||'\u2014'}</td>
-      <td style="font-family:var(--mono);font-size:13px">${escapeHtml(f.followupDate||'\u2014')}</td>
-      <td style="font-family:var(--mono);font-size:13px">${formatTimeAmPm(f.followupTime)}${overdueTag}</td>
+      <td><span class="phone-mono">${escapeHtml(formatPhone(f.phone))}</span></td>
+      <td>${escapeHtml(f.name)||'—'}</td>
+      <td>${escapeHtml(f.followupName)||'—'}</td>
+      <td><span class="followup-date">${escapeHtml(f.followupDate||'—')}</span>${overdueTag}</td>
+      <td style="font-family:var(--mono);font-size:12px">${timeAmPm}</td>
+      <td><button class="btn-sm red" onclick="tlaRemoveFollowup('${escapeHtml(numberId)}')">🗑 Remove</button></td>
+    </tr>`;
+    }).join('');
+  } catch(e){}
+}
       <td><button class="btn-sm danger" onclick="tlaRemoveFollowup('${escapeHtml(numberId)}')">Remove</button></td></tr>`;
     }).join('');
   } catch(e){}
