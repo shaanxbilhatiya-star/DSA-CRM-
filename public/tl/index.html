@@ -1766,10 +1766,6 @@ async function fetchAgentFollowups() {
     }).join('');
   } catch(e){}
 }
-      <td><button class="btn-sm danger" onclick="tlaRemoveFollowup('${escapeHtml(numberId)}')">Remove</button></td></tr>`;
-    }).join('');
-  } catch(e){}
-}
 
 async function fetchAgentCompleted() {
   if(!tlAgentId) return;
