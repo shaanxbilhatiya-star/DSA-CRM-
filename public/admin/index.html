@@ -806,7 +806,10 @@ function renderStats(data) {
           <span class="file-meta">${f.dialed}/${f.total} dialed · ${f.remaining} left</span>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
         </div>
-        <button class="btn-del" onclick="deleteFile('${f.id}')">Delete</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <a href="/api/admin/download-numbers/${f.id}" download style="padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--accent);background:rgba(124,58,237,.1);color:var(--accent);text-decoration:none;font-family:var(--sans)">&#128229; Download</a>
+          <button class="btn-del" onclick="deleteFile('${f.id}')">Delete</button>
+        </div>
       </div>`;
     }).join('');
   }
