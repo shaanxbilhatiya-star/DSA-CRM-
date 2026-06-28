@@ -2134,6 +2134,28 @@ app.get('/api/stats/daily-numbers', (req, res) => {
   });
 });
 
+// ─── Admin: Download uploaded numbers sheet back as Excel ──────────────────────
+app.get('/api/admin/download-numbers/:fileId', (req, res) => {
+  const fid = req.params.fileId;
+  const fileInfo = appState.uploadedFiles.find(f => f.id === fid);
+  if (!fileInfo) return res.status(404).json({ error: 'File not found' });
+  const fileNumbers = appState.numbers.filter(n => n.file === fid);
+  if (fileNumbers.length === 0) return res.status(404).json({ error: 'No numbers found for this file' });
+  const rows = [['Phone', 'Name', 'Disposition', 'Dialed By', 'Dialed At']];
+  fileNumbers.forEach(n => {
+    const agentName = n.dialedBy && appState.agents[n.dialedBy] ? appState.agents[n.dialedBy].name : (n.dialedBy || '');
+    rows.push([n.phone || '', n.name || '', n.disposition || 'Pending', agentName, n.dialedAt || '']);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Numbers');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const downloadName = (fileInfo.name || 'numbers').replace(/\.[^.]+$/, '') + '_export.xlsx';
+  res.setHeader('Content-Disposition', 'attachment; filename=' + encodeURIComponent(downloadName));
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buf);
+});
+
 // ─── Page Routes ──────────────────────────────────────────────────────────────
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/admin/index.html')));
 app.get('/agent', (req, res) => res.sendFile(path.join(__dirname, 'public/agent/index.html')));

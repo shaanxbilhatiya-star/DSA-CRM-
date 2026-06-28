@@ -687,6 +687,23 @@
 
     </div><!-- end second grid-2 -->
 
+    <!-- DND Manual Add -->
+    <div class="panel panel-full" style="margin-bottom:20px">
+      <div class="panel-header" style="background:#fce4ec">
+        <h2 style="color:#c62828">🔕 DND (Do Not Disturb) Numbers</h2>
+        <span style="font-size:12px;color:var(--muted)" id="dndCountBadge">0 numbers</span>
+      </div>
+      <div class="panel-body">
+        <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+          <input type="text" id="dndPhoneInput" placeholder="Enter phone number" style="padding:10px 14px;border-radius:8px;background:var(--bg);border:1px solid var(--border-strong);font-family:var(--mono);font-size:14px;width:200px;color:var(--text);outline:none;" maxlength="15">
+          <button class="btn-add-lead" onclick="addDndManually()">+ Add to DND</button>
+        </div>
+        <div id="dndNumbersList" style="display:flex;flex-direction:column;gap:6px;max-height:250px;overflow-y:auto;">
+          <p class="empty">No DND numbers yet</p>
+        </div>
+      </div>
+    </div>
+
     <!-- COMPLETED LEADS (full width) -->
     <div class="panel panel-full">
       <div class="panel-header accent-h">
@@ -828,10 +845,10 @@
 
 <!-- ── SCRIPT POPUP (Feature 5) ── -->
 <div class="modal-overlay" id="scriptPopupModal">
-  <div class="modal-box" style="max-width:560px;max-height:85vh;overflow-y:auto;">
-    <h3 style="margin-bottom:12px;">📋 Call Script</h3>
-    <div id="scriptContent" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;font-size:14px;line-height:1.8;white-space:pre-wrap;max-height:50vh;overflow-y:auto;text-align:left;"></div>
-    <button class="btn-confirm blue" onclick="closeScriptPopup()" style="margin-top:20px;width:100%">✅ Call Completed</button>
+  <div class="modal-box" style="max-width:600px;max-height:90vh;display:flex;flex-direction:column;padding:24px;">
+    <h3 style="margin-bottom:12px;flex-shrink:0;">📋 Call Script</h3>
+    <div id="scriptContent" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;font-size:14px;line-height:1.8;white-space:pre-wrap;overflow-y:auto;flex:1;text-align:left;"></div>
+    <button class="btn-confirm blue" onclick="closeScriptPopup()" style="margin-top:16px;flex-shrink:0;width:100%">✅ Call Completed</button>
   </div>
 </div>
 
@@ -2035,8 +2052,10 @@ loadScript();
 
 function showScriptPopup() {
   if (!scriptContent) return; // No script uploaded
-  document.getElementById('scriptContent').textContent = scriptContent;
+  var el = document.getElementById('scriptContent');
+  el.textContent = scriptContent;
   document.getElementById('scriptPopupModal').classList.add('active');
+  setTimeout(function() { el.scrollTop = 0; }, 50);
   scriptPopupShown = true;
 }
 
@@ -2054,6 +2073,39 @@ showNumber = function(numberId, phone, name, totalDialedToday, resumed) {
     showScriptPopup();
   }
 };
+
+// ── DND Manual Management ─────────────────────────────────────────────────────
+async function loadDndNumbers() {
+  try { const r = await fetch('/api/dnd'); const d = await r.json(); renderDndNumbers(d.dndNumbers || []); } catch(e) {}
+}
+function renderDndNumbers(list) {
+  const el = document.getElementById('dndNumbersList'); const badge = document.getElementById('dndCountBadge');
+  if (badge) badge.textContent = list.length + ' number' + (list.length !== 1 ? 's' : '');
+  if (!list.length) { el.innerHTML = '<p class="empty">No DND numbers yet</p>'; return; }
+  el.innerHTML = list.map(d => '<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;"><span class="phone-mono">' + escapeHtml(formatPhone(d.phone)) + '</span><button class="btn-sm red" onclick="removeDndNumber(\'' + d.phone + '\')">Remove</button></div>').join('');
+}
+async function addDndManually() {
+  const input = document.getElementById('dndPhoneInput');
+  const phone = input.value.trim().replace(/\s+/g,'');
+  if (!phone || !/^\d{7,15}$/.test(phone)) { showToast('Enter a valid phone number','error'); return; }
+  try {
+    const r = await fetch('/api/dnd', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({phone, addedBy: agentId}) });
+    const d = await r.json();
+    if (d.error) { showToast(d.error,'error'); return; }
+    input.value = ''; showToast('Added to DND','success'); loadDndNumbers();
+  } catch(e) { showToast('Failed','error'); }
+}
+async function removeDndNumber(phone) {
+  if (!confirm('Remove ' + phone + ' from DND?')) return;
+  try {
+    const r = await fetch('/api/dnd/' + encodeURIComponent(phone), {method:'DELETE'});
+    const d = await r.json();
+    if (d.error) { showToast(d.error,'error'); return; }
+    showToast('Removed from DND','success'); loadDndNumbers();
+  } catch(e) { showToast('Failed','error'); }
+}
+if (agentId) loadDndNumbers();
+setInterval(() => { if (agentId) loadDndNumbers(); }, 30000);
 
 </script>
 

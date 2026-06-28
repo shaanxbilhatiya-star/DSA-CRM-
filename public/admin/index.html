@@ -383,6 +383,17 @@
     </div>
   </div>
 
+  <!-- DAILY DIALED NUMBERS COPY (below Disposition Stats) -->
+  <div class="panel" style="margin-bottom:20px">
+    <div class="panel-header" style="background:rgba(76,175,80,.06)">
+      <h2 style="color:var(--green)">&#128203; Daily Dialed Numbers (Copy)</h2>
+      <span style="font-size:12px;color:var(--muted)">10:00AM-5:43PM IST | Interested=MSME+Police | Follow-up=MSME | Others=Text only</span>
+    </div>
+    <div class="panel-body" id="dailyCopyPanel">
+      <div id="dailyCopyContent" style="font-size:13px;color:var(--muted)">Loading...</div>
+    </div>
+  </div>
+
   <!-- REMAINING STATS GRID -->
   <div class="stats-grid">
     <div class="stat-card">
@@ -618,17 +629,6 @@
     </div>
   </div>
 
-  <!-- Disposition Daily Copy Panel -->
-  <div class="panel" style="margin-bottom:20px">
-    <div class="panel-header" style="background:rgba(76,175,80,.06)">
-      <h2 style="color:var(--green)">&#128203; Daily Dialed Numbers (Copy)</h2>
-      <span style="font-size:12px;color:var(--muted)">Numbers dialed today 10:00AM - 5:43PM IST</span>
-    </div>
-    <div class="panel-body" id="dailyCopyPanel">
-      <div id="dailyCopyContent" style="font-size:13px;color:var(--muted)">Loading...</div>
-    </div>
-  </div>
-
   <!-- EID Whitelist Management Panel -->
   <div class="panel eid-panel">
     <div class="panel-header">
@@ -857,7 +857,10 @@ function renderStats(data) {
           <span class="file-meta">${f.dialed}/${f.total} dialed · ${f.remaining} left</span>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
         </div>
-        <button class="btn-del" onclick="deleteFile('${f.id}')">Delete</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <a href="/api/admin/download-numbers/${f.id}" download style="padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--accent);background:rgba(124,58,237,.1);color:var(--accent);text-decoration:none;font-family:var(--sans)">&#128229; Download</a>
+          <button class="btn-del" onclick="deleteFile('${f.id}')">Delete</button>
+        </div>
       </div>`;
     }).join('');
   }
@@ -1892,55 +1895,48 @@ async function loadCurrentScript() {
 }
 loadCurrentScript();
 
-// ── Daily Dialed Numbers Copy (Feature 6) ─────────────────────────────────────
+// ── Daily Dialed Numbers Copy + WhatsApp (Feature 6) ──────────────────────────
+const WA_MESSAGES = {
+  interested: "नमस्ते!\n\nRuralift (रूरालिफ्ट) में रुचि दिखाने के लिए आपका हार्दिक धन्यवाद।\n\nजैसा कि हमारी बात हुई, हम भारत सरकार के MSME (उद्यम) के तहत पंजीकृत फर्म हैं तथा मंडला के 80+ प्रमुख बैंक एवं NBFCs के साथ कार्य करते हैं। इनमें SBI, HDFC Bank, ICICI Bank, Axis Bank, Kotak Mahindra Bank, Capri Loans, Bajaj Finserv सहित अनेक संस्थान शामिल हैं।\n\nहमारा उद्देश्य आपके लिए सबसे उपयुक्त बैंक का चयन कराना तथा सबसे कम संभव ब्याज दर पर ऋण उपलब्ध कराने में सहायता करना है।\n\nकृपया आपसे मांगे गए अथवा आगे मांगे जाने वाले सभी आवश्यक दस्तावेज़ यथाशीघ्र उपलब्ध कराएँ, ताकि आपकी ऋण प्रक्रिया बिना किसी देरी के आगे बढ़ाई जा सके।\n\nआपके विश्वास एवं संतुष्टि के लिए हमने अपना MSME (उद्यम) पंजीकरण प्रमाणपत्र तथा पुलिस सूचना/सत्यापन संबंधी दस्तावेज़ भी आपके साथ साझा किए हैं।\n\nकार्यालय: जोबह टेंट हाउस के सामने, राजीव कॉलोनी, मॉन्टफोर्ट स्कूल रोड, मंडला (म.प्र.) – 481661\n\nसंपर्क एवं WhatsApp: 9425813414\n\nयह संदेश एक स्वचालित (Automated) नंबर से भेजा गया है। कृपया किसी भी प्रश्न, सहायता या उत्तर के लिए हमारे WhatsApp नंबर 9425813414 पर संपर्क करें।\n\nयदि आपके मन में कोई भी प्रश्न हो, तो बेझिझक हमसे संपर्क करें।\n\nRuralift (रूरालिफ्ट) – सही सलाह, सही बैंक, सही लोन।",
+  followup: "नमस्ते!\n\nजैसा कि हमारी बात हुई, मैं Ruralift (रूरालिफ्ट), मंडला से बोल रही हूँ।\n\nहम होम लोन, बिज़नेस लोन, पर्सनल लोन, एजुकेशन लोन, बैलेंस ट्रांसफर एवं अन्य बैंकिंग वित्तीय सेवाओं के लिए कार्य करते हैं।\n\nआपकी सुविधा के अनुसार मैं आपको बाद में पुनः संपर्क करूँगी।\n\nइस बीच, आपके विश्वास के लिए हमने अपना उद्यम (MSME) पंजीकरण प्रमाणपत्र भी आपके साथ साझा किया है।\n\nकार्यालय: जोबह टेंट हाउस के सामने, राजीव कॉलोनी, मॉन्टफोर्ट स्कूल रोड, मंडला (म.प्र.) – 481661\n\nसंपर्क एवं WhatsApp: 9425813414\n\nयह संदेश एक स्वचालित (Automated) नंबर से भेजा गया है। कृपया किसी भी उत्तर या सहायता के लिए हमारे WhatsApp नंबर 9425813414 पर संपर्क करें।\n\nधन्यवाद! जल्द ही आपसे पुनः बात होगी।",
+  dead: "नमस्ते!\n\nहमने Ruralift (रूरालिफ्ट), मंडला की ओर से आपके लोन संबंधी पूछताछ/सहायता के लिए आपसे संपर्क करने का प्रयास किया, लेकिन नंबर व्यस्त होने, स्विच ऑफ होने या कॉल रिसीव न होने के कारण बात नहीं हो सकी।\n\nहम होम लोन, बिजनेस लोन, पर्सनल लोन, एजुकेशन लोन, बैलेंस ट्रांसफर एवं अन्य बैंकिंग वित्तीय सेवाओं के लिए कार्य करते हैं।\n\nयदि आपको या आपके परिवार के किसी सदस्य को किसी भी प्रकार के लोन की आवश्यकता हो, तो आप हमसे संपर्क कर सकते हैं।\n\nकार्यालय: जोबह टेंट हाउस के सामने, राजीव कॉलोनी, मॉन्टफोर्ट स्कूल रोड, मंडला (म.प्र.) – 481661\n\nकार्यालय समय: सुबह 10:00 बजे से शाम 6:00 बजे तक\n\nसंपर्क एवं WhatsApp: 9425813414\n\nयदि आप भविष्य में संदेश प्राप्त नहीं करना चाहते हैं, तो कृपया 9425813414 पर \"STOP\" लिखकर भेज दें।",
+  not_received: "नमस्ते!\n\nहमने Ruralift (रूरालिफ्ट), मंडला की ओर से संपर्क प्रयास किया लेकिन बात नहीं हो सकी।\n\nलोन सहायता के लिए संपर्क करें: 9425813414\n\nSTOP भेजें अगर संदेश नहीं चाहिए।",
+  switch_off: "नमस्ते!\n\nहमने Ruralift (रूरालिफ्ट), मंडला की ओर से संपर्क प्रयास किया लेकिन बात नहीं हो सकी।\n\nलोन सहायता के लिए संपर्क करें: 9425813414\n\nSTOP भेजें अगर संदेश नहीं चाहिए।",
+  not_interested: "नमस्ते!\n\nआज अपना समय देने के लिए धन्यवाद। भविष्य में लोन सहायता चाहिए तो Ruralift, मंडला से संपर्क करें।\n\nWhatsApp: 9425813414\n\nSTOP भेजें अगर संदेश नहीं चाहिए।\n\n– टीम Ruralift, मंडला",
+  discard: "नमस्ते!\n\nवर्तमान बैंकिंग नियमों के कारण फिलहाल लोन प्रक्रिया आगे बढ़ाना संभव नहीं। पात्रता बनने पर सूचित करेंगे।\n\nWhatsApp: 9425813414\n\n– टीम Ruralift, मंडला",
+  dnd: "नमस्ते!\n\nआपका नंबर DND सूची में जोड़ दिया गया है। आगे कोई प्रचारात्मक संदेश नहीं भेजा जाएगा।\n\nभविष्य में सहायता चाहिए तो WhatsApp: 9425813414\n\nधन्यवाद। – टीम Ruralift, मंडला"
+};
+const DISPO_LABELS = {dead:'☠️ CNC',not_received:'📵 CNR',not_interested:'🚫 Not Interested',followup:'📅 Follow-up',switch_off:'📴 Switch OFF',interested:'⭐ Interested',discard:'🚫 Discard',dnd:'🔕 DND'};
+const DISPO_DOCS = {interested:'MSME + Police Verification',followup:'MSME only',dead:'No documents',not_received:'No documents',switch_off:'No documents',not_interested:'No documents',discard:'No documents',dnd:'No documents'};
+
 async function loadDailyCopyData() {
-  try {
-    const r = await fetch('/api/stats/daily-numbers');
-    const d = await r.json();
-    renderDailyCopyPanel(d);
-  } catch(e) {
-    document.getElementById('dailyCopyContent').textContent = 'Failed to load';
-  }
+  try { const r = await fetch('/api/stats/daily-numbers'); const d = await r.json(); renderDailyCopyPanel(d); }
+  catch(e) { document.getElementById('dailyCopyContent').textContent = 'Failed to load'; }
 }
 
 function renderDailyCopyPanel(data) {
   const container = document.getElementById('dailyCopyContent');
-  if (!data || !data.groups) {
-    container.innerHTML = '<div class="empty">No data available</div>';
-    return;
-  }
-  
-  const dummyNote = data.isDummy ? '<div style="background:rgba(255,152,0,.1);border:1px solid rgba(255,152,0,.3);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--warn)">&#9888; Showing dummy data for testing (no real calls today between 10:00AM-5:43PM)</div>' : '';
-  
+  if (!data || !data.groups) { container.innerHTML = '<div class="empty">No data</div>'; return; }
+  const dummyNote = data.isDummy ? '<div style="background:rgba(255,152,0,.1);border:1px solid rgba(255,152,0,.3);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--warn)">&#9888; Dummy data (no real calls today 10AM-5:43PM)</div>' : '';
   let html = dummyNote;
-  html += '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Date: <strong>' + escapeHtml(data.date) + '</strong> | Time Range: <strong>' + escapeHtml(data.timeRange) + '</strong></div>';
-  
-  const dispoLabels = {
-    dead: '☠️ Call Not Connected (CNC)',
-    not_received: '📵 Call Not Received (CNR)',
-    not_interested: '🚫 Not Interested',
-    followup: '📅 Followup',
-    switch_off: '📴 Switch OFF',
-    interested: '⭐ Interested',
-    discard: '🚫 Discard',
-    dnd: '🔕 DND'
-  };
-  
+  html += '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Date: <strong>'+escapeHtml(data.date)+'</strong> | Time: <strong>'+escapeHtml(data.timeRange)+'</strong></div>';
   Object.entries(data.groups).forEach(([dispo, phones]) => {
     if (dispo === '_isDummy') return;
-    const label = dispoLabels[dispo] || dispo;
+    const label = DISPO_LABELS[dispo] || dispo;
+    const docInfo = DISPO_DOCS[dispo] || '';
     const phoneStr = phones.join(',');
     html += '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:10px;">';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">';
-    html += '<span style="font-size:13px;font-weight:700;">' + label + ' (' + phones.length + ')</span>';
-    html += '<button onclick="copyToClipboard(\'' + escapeHtml(phoneStr).replace(/'/g,"\\'") + '\')" style="padding:5px 12px;border-radius:6px;border:1px solid var(--accent);background:rgba(124,58,237,.1);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;font-family:var(--sans)">&#128203; Copy</button>';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:6px"><span style="font-size:13px;font-weight:700">'+label+' ('+phones.length+')</span><span style="font-size:10px;color:var(--muted);background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:4px">📎 '+escapeHtml(docInfo)+'</span></div>';
+    html += '<div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">';
+    html += '<button onclick="copyText(\''+phoneStr.replace(/'/g,"\\'")+'\')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--accent);background:rgba(124,58,237,.1);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer">📋 Copy Numbers</button>';
+    html += '<button onclick="copyWaMsg(\''+dispo+'\')" style="padding:4px 10px;border-radius:6px;border:1px solid #25D366;background:rgba(37,211,102,.08);color:#128C7E;font-size:11px;font-weight:700;cursor:pointer">💬 Copy WhatsApp Msg</button>';
     html += '</div>';
-    html += '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);word-break:break-all;max-height:60px;overflow-y:auto;">' + escapeHtml(phoneStr) + '</div>';
-    html += '</div>';
+    html += '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-all;max-height:50px;overflow-y:auto">'+escapeHtml(phoneStr)+'</div></div>';
   });
-  
   container.innerHTML = html;
 }
+function copyText(t){navigator.clipboard.writeText(t).then(()=>showToast('Numbers copied!','success')).catch(()=>{const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();document.execCommand('copy');document.body.removeChild(a);showToast('Numbers copied!','success');});}
+function copyWaMsg(d){const m=WA_MESSAGES[d];if(!m){showToast('No template','error');return;}navigator.clipboard.writeText(m).then(()=>showToast('WhatsApp message copied!','success')).catch(()=>{const a=document.createElement('textarea');a.value=m;document.body.appendChild(a);a.select();document.execCommand('copy');document.body.removeChild(a);showToast('WhatsApp message copied!','success');});}
 
 function copyToClipboard(text) {
   navigator.clipboard.writeText(text).then(() => {
