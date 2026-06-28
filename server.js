@@ -22,11 +22,13 @@ const DATA_FILE = path.join(__dirname, 'data', 'state.json');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const LEAD_DOCS_DIR = path.join(__dirname, 'uploads', 'lead_docs');
 const AGENT_PHOTOS_DIR = path.join(__dirname, 'uploads', 'agent_photos');
+const SCRIPTS_DIR = path.join(__dirname, 'uploads', 'scripts');
 
 // Ensure directories exist
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 if (!fs.existsSync(LEAD_DOCS_DIR)) fs.mkdirSync(LEAD_DOCS_DIR, { recursive: true });
 if (!fs.existsSync(AGENT_PHOTOS_DIR)) fs.mkdirSync(AGENT_PHOTOS_DIR, { recursive: true });
+if (!fs.existsSync(SCRIPTS_DIR)) fs.mkdirSync(SCRIPTS_DIR, { recursive: true });
 
 const BREAK_DURATION_MS = 60 * 60 * 1000; // 1 hour
 const DOC_DEADLINE_MS = 72 * 60 * 60 * 1000; // 72 hours (changed from 48)
@@ -137,6 +139,9 @@ let appState = loadState();
 if (!appState.allowedEids) {
   appState.allowedEids = {};
 }
+if (!appState.dndNumbers) {
+  appState.dndNumbers = [];
+}
 appState = checkDailyReset(appState);
 
 for (const id in appState.agents) {
@@ -161,11 +166,14 @@ setInterval(() => {
 function getNextNumber(agentId) {
   appState = checkDailyReset(appState);
   const today = getTodayStr();
+  const dndPhones = new Set((appState.dndNumbers || []).map(d => d.phone));
   const undialed = appState.numbers.find(n => {
     if (n.dialedBy || n.assignedTo) return false;
     if (n.disposition === 'discard') return false;
     if (n.disposition === 'not_interested') return false;
+    if (n.disposition === 'dnd') return false;
     if (n.permanent) return false;
+    if (dndPhones.has(n.phone)) return false;
     if (n.disposition === 'dead') {
       const deadCount = (n.retryCounts && n.retryCounts.dead) || n.retryCount || 0;
       if (deadCount >= 2) return false;
@@ -219,7 +227,7 @@ function releaseNumber(agentId, numberId) {
 }
 
 // ─── Disposition System ───────────────────────────────────────────────────────
-const VALID_DISPOSITIONS = ['dead', 'not_received', 'not_interested', 'followup', 'switch_off', 'interested', 'discard'];
+const VALID_DISPOSITIONS = ['dead', 'not_received', 'not_interested', 'followup', 'switch_off', 'interested', 'discard', 'dnd'];
 const VALID_LOAN_TYPES = ['BL_Business', 'LAP_Business', 'LAP_Salaried', 'PL_Business', 'PL_Salaried'];
 
 function applyDisposition(agentId, numberId, disposition, extra) {
@@ -350,6 +358,20 @@ function applyDisposition(agentId, numberId, disposition, extra) {
       num.dialedBy = agentId;
       num.dialedAt = now;
       num.assignedTo = null;
+      break;
+    case 'dnd':
+      // DND - Do Not Disturb - permanent, never dial again
+      num.disposition = 'dnd';
+      num.permanent = true;
+      num.retryAfter = null;
+      num.blockedUntil = null;
+      num.dialedBy = agentId;
+      num.dialedAt = now;
+      num.assignedTo = null;
+      if (!appState.dndNumbers) appState.dndNumbers = [];
+      if (!appState.dndNumbers.find(d => d.phone === num.phone)) {
+        appState.dndNumbers.push({ phone: num.phone, addedAt: now, addedBy: agentId });
+      }
       break;
   }
 
@@ -545,6 +567,7 @@ function getAdminStats() {
     followupCount: appState.numbers.filter(n => n.disposition === 'followup').length,
     discardCount: appState.numbers.filter(n => n.disposition === 'discard').length,
     notInterestedCount: appState.numbers.filter(n => n.disposition === 'not_interested').length,
+    dndCount: (appState.dndNumbers || []).length,
     comingBackTomorrow: appState.numbers.filter(n => (n.disposition === 'not_received' || n.disposition === 'switch_off' || n.disposition === 'dead') && n.retryAfter && !n.permanent && (n.retryCount || 0) < 2 && getTodayStr() < n.retryAfter).length,
     overdueInterestedCount: appState.numbers.filter(n => n.disposition === 'interested' && !n.documentationComplete && (Date.now() - new Date(n.interestedAt).getTime()) >= DOC_DEADLINE_MS).length
   };
@@ -1424,7 +1447,7 @@ app.get('/api/stats/dispositions', (req, res) => {
   const stats = {
     period,
     totalCalls: filteredLogs.length,
-    dead: 0, not_received: 0, not_interested: 0, followup: 0, switch_off: 0, interested: 0, discard: 0
+    dead: 0, not_received: 0, not_interested: 0, followup: 0, switch_off: 0, interested: 0, discard: 0, dnd: 0
   };
 
   filteredLogs.forEach(entry => {
@@ -1938,6 +1961,120 @@ app.post('/api/admin/agent/meeting/end', (req, res) => {
   io.emit('timer-update', { agentId, type: 'meeting', action: 'end', ...result });
   broadcastAdminStats();
   res.json(result);
+});
+
+// ─── Admin: Download uploaded numbers sheet back as Excel ──────────────────────
+app.get('/api/admin/download-numbers/:fileId', (req, res) => {
+  const fid = req.params.fileId;
+  const fileInfo = appState.uploadedFiles.find(f => f.id === fid);
+  if (!fileInfo) return res.status(404).json({ error: 'File not found' });
+  const fileNumbers = appState.numbers.filter(n => n.file === fid);
+  if (fileNumbers.length === 0) return res.status(404).json({ error: 'No numbers found for this file' });
+  const rows = [['Phone', 'Name', 'Disposition', 'Dialed By', 'Dialed At']];
+  fileNumbers.forEach(n => {
+    const agentName = n.dialedBy && appState.agents[n.dialedBy] ? appState.agents[n.dialedBy].name : (n.dialedBy || '');
+    rows.push([n.phone || '', n.name || '', n.disposition || 'Pending', agentName, n.dialedAt || '']);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Numbers');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const downloadName = (fileInfo.name || 'numbers').replace(/\.[^.]+$/, '') + '_export.xlsx';
+  res.setHeader('Content-Disposition', 'attachment; filename=' + encodeURIComponent(downloadName));
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buf);
+});
+
+// ─── DND Management ──────────────────────────────────────────────────────────
+app.get('/api/dnd', (req, res) => {
+  res.json({ dndNumbers: appState.dndNumbers || [] });
+});
+
+app.post('/api/dnd', (req, res) => {
+  const { phone } = req.body;
+  if (!phone || !/^\d{7,15}$/.test(phone.replace(/\s+/g,''))) {
+    return res.status(400).json({ error: 'Valid phone number required' });
+  }
+  const cleanPhone = phone.replace(/\s+/g,'');
+  if (!appState.dndNumbers) appState.dndNumbers = [];
+  if (appState.dndNumbers.find(d => d.phone === cleanPhone)) {
+    return res.status(409).json({ error: 'Number already in DND list' });
+  }
+  appState.dndNumbers.push({ phone: cleanPhone, addedAt: new Date().toISOString(), addedBy: req.body.addedBy || 'manual' });
+  const existing = appState.numbers.find(n => n.phone === cleanPhone);
+  if (existing && existing.disposition !== 'interested') {
+    existing.disposition = 'dnd';
+    existing.permanent = true;
+    existing.assignedTo = null;
+  }
+  saveState(appState);
+  broadcastAdminStats();
+  res.json({ success: true, phone: cleanPhone });
+});
+
+app.delete('/api/dnd/:phone', (req, res) => {
+  const phone = req.params.phone;
+  if (!appState.dndNumbers) appState.dndNumbers = [];
+  const idx = appState.dndNumbers.findIndex(d => d.phone === phone);
+  if (idx === -1) return res.status(404).json({ error: 'Number not in DND list' });
+  appState.dndNumbers.splice(idx, 1);
+  saveState(appState);
+  res.json({ success: true });
+});
+
+// ─── Script Upload & Get (Feature 5) ─────────────────────────────────────────
+const scriptUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, SCRIPTS_DIR),
+    filename: (req, file, cb) => cb(null, 'call_script.txt')
+  }),
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'text/plain' || file.originalname.toLowerCase().endsWith('.txt')) cb(null, true);
+    else cb(new Error('Only TXT files are allowed'));
+  }
+});
+
+app.post('/api/admin/upload-script', scriptUpload.single('script'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No TXT file uploaded' });
+  res.json({ success: true, filename: req.file.originalname });
+});
+
+app.get('/api/script', (req, res) => {
+  const scriptPath = path.join(SCRIPTS_DIR, 'call_script.txt');
+  if (!fs.existsSync(scriptPath)) return res.json({ script: null });
+  try { res.json({ script: fs.readFileSync(scriptPath, 'utf8') }); }
+  catch (e) { res.json({ script: null }); }
+});
+
+// ─── Daily Dialed Numbers for Copy (Feature 6) ───────────────────────────────
+app.get('/api/stats/daily-numbers', (req, res) => {
+  const now = new Date();
+  const istNow = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+  const istTodayStr = istNow.toISOString().slice(0, 10);
+  const startIST = new Date(istTodayStr + 'T10:00:00.000+05:30');
+  const endIST = new Date(istTodayStr + 'T17:43:00.000+05:30');
+  const filteredLogs = appState.dialedLog.filter(entry => {
+    if (!entry.timestamp) return false;
+    const entryDate = new Date(entry.timestamp);
+    return entryDate >= startIST && entryDate <= endIST;
+  });
+  const groups = {};
+  filteredLogs.forEach(entry => {
+    const dispo = entry.disposition || 'unknown';
+    if (!groups[dispo]) groups[dispo] = [];
+    if (!groups[dispo].includes(entry.phone)) groups[dispo].push(entry.phone);
+  });
+  const hasSomeData = Object.keys(groups).length > 0;
+  if (!hasSomeData) {
+    groups.dead = ['9876543210', '9876543211'];
+    groups.not_received = ['9876543212', '9876543213'];
+    groups.not_interested = ['9876543214'];
+    groups.followup = ['9876543215'];
+    groups.switch_off = ['9876543216'];
+    groups.interested = ['9876543217'];
+  }
+  res.json({ date: istTodayStr, timeRange: '10:00 AM - 5:43 PM', groups, isDummy: !hasSomeData });
 });
 
 // ─── Page Routes ──────────────────────────────────────────────────────────────

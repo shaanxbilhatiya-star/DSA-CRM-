@@ -378,6 +378,17 @@
     </div>
   </div>
 
+  <!-- DAILY DIALED NUMBERS COPY (below Disposition Stats) -->
+  <div class="panel" style="margin-bottom:20px">
+    <div class="panel-header" style="background:rgba(76,175,80,.06)">
+      <h2 style="color:var(--green)">&#128203; Daily Dialed Numbers (Copy)</h2>
+      <span style="font-size:12px;color:var(--muted)">Numbers dialed today 10:00AM - 5:43PM IST | Documents: Interested = MSME + Police Verification | Follow-up = MSME only | Others = No documents, text only</span>
+    </div>
+    <div class="panel-body" id="dailyCopyPanel">
+      <div id="dailyCopyContent" style="font-size:13px;color:var(--muted)">Loading...</div>
+    </div>
+  </div>
+
   <!-- REMAINING STATS GRID -->
   <div class="stats-grid">
     <div class="stat-card">
@@ -575,6 +586,41 @@
         <p style="margin-top:4px;font-size:11px;color:var(--muted)">Columns: phone, name, followupDate, followupTime, agentId</p>
       </div>
       <div id="followupUploadStatus" style="margin-top:8px;font-size:13px;color:var(--muted);display:none"></div>
+    </div>
+  </div>
+
+  <!-- DND Management Panel -->
+  <div class="panel" style="margin-bottom:20px">
+    <div class="panel-header" style="background:rgba(198,40,40,.06)">
+      <h2 style="color:#c62828">&#128277; DND (Do Not Disturb) Numbers</h2>
+      <span style="font-size:12px;color:var(--muted)" id="dndCountBadge">0 numbers</span>
+    </div>
+    <div class="panel-body">
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-start">
+        <input type="text" id="newDndPhone" placeholder="Enter phone number" style="padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:14px;outline:none;width:200px;" maxlength="15">
+        <button onclick="addDndNumber()" style="padding:9px 18px;border-radius:8px;border:none;background:#c62828;color:#fff;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">+ Add to DND</button>
+      </div>
+      <div id="dndList" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;">
+        <div class="empty">No DND numbers</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script Upload Panel -->
+  <div class="panel" style="margin-bottom:20px">
+    <div class="panel-header" style="background:rgba(37,99,235,.06)">
+      <h2 style="color:#2563eb">&#128221; Call Script Upload</h2>
+      <span style="font-size:12px;color:var(--muted)">Upload .txt file shown to agents on each new call</span>
+    </div>
+    <div class="panel-body">
+      <div class="upload-zone" id="scriptDropZone" style="padding:20px">
+        <input type="file" id="scriptFileInput" accept=".txt,text/plain">
+        <div class="upload-icon" style="font-size:24px">&#128196;</div>
+        <p style="font-size:13px"><strong>Click or drag</strong> a TXT file here</p>
+        <p style="margin-top:4px;font-size:11px;color:var(--muted)">Only .txt files · Max 2MB</p>
+      </div>
+      <div id="scriptUploadStatus" style="margin-top:8px;font-size:13px;color:var(--muted);display:none"></div>
+      <div id="currentScriptPreview" style="margin-top:12px;display:none;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;max-height:200px;overflow-y:auto;font-size:13px;white-space:pre-wrap;line-height:1.6;"></div>
     </div>
   </div>
 
@@ -806,7 +852,10 @@ function renderStats(data) {
           <span class="file-meta">${f.dialed}/${f.total} dialed · ${f.remaining} left</span>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
         </div>
-        <button class="btn-del" onclick="deleteFile('${f.id}')">Delete</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <a href="/api/admin/download-numbers/${f.id}" download style="padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--accent);background:rgba(124,58,237,.1);color:var(--accent);text-decoration:none;font-family:var(--sans)">&#128229; Download</a>
+          <button class="btn-del" onclick="deleteFile('${f.id}')">Delete</button>
+        </div>
       </div>`;
     }).join('');
   }
@@ -1734,6 +1783,167 @@ async function fetchAdminLeaderboard() {
 
 setTimeout(fetchAdminLeaderboard, 500);
 setInterval(fetchAdminLeaderboard, 5000);
+
+// ── DND Management ────────────────────────────────────────────────────────────
+async function loadDndNumbers() {
+  try {
+    const r = await fetch('/api/dnd');
+    const d = await r.json();
+    renderDndList(d.dndNumbers || []);
+  } catch(e) {}
+}
+function renderDndList(list) {
+  const el = document.getElementById('dndList');
+  const badge = document.getElementById('dndCountBadge');
+  badge.textContent = list.length + ' number' + (list.length !== 1 ? 's' : '');
+  if (!list.length) { el.innerHTML = '<div class="empty">No DND numbers</div>'; return; }
+  el.innerHTML = list.map(d => '<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;">' +
+    '<span style="font-family:var(--mono);font-weight:700;color:var(--accent)">' + escapeHtml(formatPhone(d.phone)) + '</span>' +
+    '<button class="btn-del" onclick="removeDndNumber(\'' + escapeHtml(d.phone) + '\')" style="padding:4px 10px">Remove</button></div>').join('');
+}
+async function addDndNumber() {
+  const input = document.getElementById('newDndPhone');
+  const phone = input.value.trim().replace(/\s+/g,'');
+  if (!phone || !/^\d{7,15}$/.test(phone)) { showToast('Enter a valid phone number','error'); return; }
+  try {
+    const r = await fetch('/api/dnd', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({phone}) });
+    const d = await r.json();
+    if (d.error) { showToast(d.error,'error'); return; }
+    input.value = '';
+    showToast('Added to DND: ' + phone, 'success');
+    loadDndNumbers();
+  } catch(e) { showToast('Failed','error'); }
+}
+async function removeDndNumber(phone) {
+  if (!confirm('Remove ' + phone + ' from DND?')) return;
+  try {
+    const r = await fetch('/api/dnd/' + encodeURIComponent(phone), {method:'DELETE'});
+    const d = await r.json();
+    if (d.error) { showToast(d.error,'error'); return; }
+    showToast('Removed from DND','success');
+    loadDndNumbers();
+  } catch(e) { showToast('Failed','error'); }
+}
+loadDndNumbers();
+
+// ── Script Upload ─────────────────────────────────────────────────────────────
+(function initScriptUpload() {
+  const dz = document.getElementById('scriptDropZone');
+  const fi = document.getElementById('scriptFileInput');
+  if (!dz || !fi) return;
+  fi.addEventListener('change', () => uploadScriptFile(fi.files[0]));
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragover'); uploadScriptFile(e.dataTransfer.files[0]); });
+})();
+async function uploadScriptFile(file) {
+  if (!file) return;
+  const status = document.getElementById('scriptUploadStatus');
+  status.style.display = 'block'; status.textContent = 'Uploading script...';
+  const fd = new FormData(); fd.append('script', file);
+  try {
+    const r = await fetch('/api/admin/upload-script', { method:'POST', body: fd });
+    const d = await r.json();
+    if (d.success) { status.textContent = 'Script uploaded: ' + escapeHtml(d.filename); showToast('Script uploaded','success'); loadCurrentScript(); setTimeout(()=>status.style.display='none',3000); }
+    else throw new Error(d.error||'Failed');
+  } catch(e) { status.textContent = 'Error: '+e.message; showToast('Upload failed','error'); }
+  document.getElementById('scriptFileInput').value = '';
+}
+async function loadCurrentScript() {
+  try {
+    const r = await fetch('/api/script'); const d = await r.json();
+    const preview = document.getElementById('currentScriptPreview');
+    if (d.script) { preview.style.display = 'block'; preview.textContent = d.script; }
+    else { preview.style.display = 'none'; }
+  } catch(e) {}
+}
+loadCurrentScript();
+
+// ── Daily Dialed Numbers Copy + WhatsApp Messages ─────────────────────────────
+const WA_MESSAGES = {
+  interested: "नमस्ते!\n\nRuralift (रूरालिफ्ट) में रुचि दिखाने के लिए आपका हार्दिक धन्यवाद।\n\nजैसा कि हमारी बात हुई, हम भारत सरकार के MSME (उद्यम) के तहत पंजीकृत फर्म हैं तथा मंडला के 80+ प्रमुख बैंक एवं NBFCs के साथ कार्य करते हैं। इनमें SBI, HDFC Bank, ICICI Bank, Axis Bank, Kotak Mahindra Bank, Capri Loans, Bajaj Finserv सहित अनेक संस्थान शामिल हैं।\n\nहमारा उद्देश्य आपके लिए सबसे उपयुक्त बैंक का चयन कराना तथा सबसे कम संभव ब्याज दर पर ऋण उपलब्ध कराने में सहायता करना है।\n\nकृपया आपसे मांगे गए अथवा आगे मांगे जाने वाले सभी आवश्यक दस्तावेज़ यथाशीघ्र उपलब्ध कराएँ, ताकि आपकी ऋण प्रक्रिया बिना किसी देरी के आगे बढ़ाई जा सके।\n\nआपके विश्वास एवं संतुष्टि के लिए हमने अपना MSME (उद्यम) पंजीकरण प्रमाणपत्र तथा पुलिस सूचना/सत्यापन संबंधी दस्तावेज़ भी आपके साथ साझा किए हैं।\n\nकार्यालय: जोबह टेंट हाउस के सामने, राजीव कॉलोनी, मॉन्टफोर्ट स्कूल रोड, मंडला (म.प्र.) – 481661\n\nसंपर्क एवं WhatsApp: 9425813414\n\nयह संदेश एक स्वचालित (Automated) नंबर से भेजा गया है। कृपया किसी भी प्रश्न, सहायता या उत्तर के लिए हमारे WhatsApp नंबर 9425813414 पर संपर्क करें।\n\nयदि आपके मन में कोई भी प्रश्न हो, तो बेझिझक हमसे संपर्क करें।\n\nRuralift (रूरालिफ्ट) – सही सलाह, सही बैंक, सही लोन।",
+  followup: "नमस्ते!\n\nजैसा कि हमारी बात हुई, मैं Ruralift (रूरालिफ्ट), मंडला से बोल रही हूँ।\n\nहम होम लोन, बिज़नेस लोन, पर्सनल लोन, एजुकेशन लोन, बैलेंस ट्रांसफर एवं अन्य बैंकिंग वित्तीय सेवाओं के लिए कार्य करते हैं।\n\nआपकी सुविधा के अनुसार मैं आपको बाद में पुनः संपर्क करूँगी।\n\nइस बीच, आपके विश्वास के लिए हमने अपना उद्यम (MSME) पंजीकरण प्रमाणपत्र भी आपके साथ साझा किया है।\n\nकार्यालय: जोबह टेंट हाउस के सामने, राजीव कॉलोनी, मॉन्टफोर्ट स्कूल रोड, मंडला (म.प्र.) – 481661\n\nसंपर्क एवं WhatsApp: 9425813414\n\nयह संदेश एक स्वचालित (Automated) नंबर से भेजा गया है। कृपया किसी भी उत्तर या सहायता के लिए हमारे WhatsApp नंबर 9425813414 पर संपर्क करें।\n\nधन्यवाद! जल्द ही आपसे पुनः बात होगी।",
+  dead: "नमस्ते!\n\nहमने Ruralift (रूरालिफ्ट), मंडला की ओर से आपके लोन संबंधी पूछताछ/सहायता के लिए आपसे संपर्क करने का प्रयास किया, लेकिन नंबर व्यस्त होने, स्विच ऑफ होने या कॉल रिसीव न होने के कारण बात नहीं हो सकी।\n\nहम होम लोन, बिजनेस लोन, पर्सनल लोन, एजुकेशन लोन, बैलेंस ट्रांसफर एवं अन्य बैंकिंग वित्तीय सेवाओं के लिए कार्य करते हैं। 80+ प्रमुख बैंक एवं NBFCs के साथ मिलकर हम आपके लिए सबसे उपयुक्त बैंक एवं बेहतर लोन विकल्प चुनने में सहायता करते हैं।\n\nयदि आपको या आपके परिवार के किसी सदस्य को किसी भी प्रकार के लोन की आवश्यकता हो, तो आप हमसे संपर्क कर सकते हैं या हमारे कार्यालय आकर सिर्फ 10 मिनट में अपनी पात्रता (Eligibility) चेक करवा सकते हैं।\n\nकार्यालय: जोबह टेंट हाउस के सामने, राजीव कॉलोनी, मॉन्टफोर्ट स्कूल रोड, मंडला (म.प्र.) – 481661\n\nकार्यालय समय: सुबह 10:00 बजे से शाम 6:00 बजे तक\n\nसंपर्क एवं WhatsApp: 9425813414\n\nयह संदेश एक स्वचालित (Automated) नंबर से भेजा गया है। कृपया उत्तर देने या सहायता के लिए WhatsApp नंबर 9425813414 पर संपर्क करें।\n\nयदि आप भविष्य में हमारी ओर से कॉल या WhatsApp संदेश प्राप्त नहीं करना चाहते हैं, तो कृपया 9425813414 पर \"STOP\" लिखकर भेज दें। इसके बाद हम आपको आगे कोई प्रचारात्मक संदेश नहीं भेजेंगे।",
+  not_received: "नमस्ते!\n\nहमने Ruralift (रूरालिफ्ट), मंडला की ओर से आपके लोन संबंधी पूछताछ/सहायता के लिए आपसे संपर्क करने का प्रयास किया, लेकिन नंबर व्यस्त होने, स्विच ऑफ होने या कॉल रिसीव न होने के कारण बात नहीं हो सकी।\n\nहम होम लोन, बिजनेस लोन, पर्सनल लोन, एजुकेशन लोन, बैलेंस ट्रांसफर एवं अन्य बैंकिंग वित्तीय सेवाओं के लिए कार्य करते हैं। 80+ प्रमुख बैंक एवं NBFCs के साथ मिलकर हम आपके लिए सबसे उपयुक्त बैंक एवं बेहतर लोन विकल्प चुनने में सहायता करते हैं।\n\nयदि आपको या आपके परिवार के किसी सदस्य को किसी भी प्रकार के लोन की आवश्यकता हो, तो आप हमसे संपर्क कर सकते हैं या हमारे कार्यालय आकर सिर्फ 10 मिनट में अपनी पात्रता (Eligibility) चेक करवा सकते हैं।\n\nकार्यालय: जोबह टेंट हाउस के सामने, राजीव कॉलोनी, मॉन्टफोर्ट स्कूल रोड, मंडला (म.प्र.) – 481661\n\nकार्यालय समय: सुबह 10:00 बजे से शाम 6:00 बजे तक\n\nसंपर्क एवं WhatsApp: 9425813414\n\nयह संदेश एक स्वचालित (Automated) नंबर से भेजा गया है। कृपया उत्तर देने या सहायता के लिए WhatsApp नंबर 9425813414 पर संपर्क करें।\n\nयदि आप भविष्य में हमारी ओर से कॉल या WhatsApp संदेश प्राप्त नहीं करना चाहते हैं, तो कृपया 9425813414 पर \"STOP\" लिखकर भेज दें। इसके बाद हम आपको आगे कोई प्रचारात्मक संदेश नहीं भेजेंगे।",
+  switch_off: "नमस्ते!\n\nहमने Ruralift (रूरालिफ्ट), मंडला की ओर से आपके लोन संबंधी पूछताछ/सहायता के लिए आपसे संपर्क करने का प्रयास किया, लेकिन नंबर व्यस्त होने, स्विच ऑफ होने या कॉल रिसीव न होने के कारण बात नहीं हो सकी।\n\nहम होम लोन, बिजनेस लोन, पर्सनल लोन, एजुकेशन लोन, बैलेंस ट्रांसफर एवं अन्य बैंकिंग वित्तीय सेवाओं के लिए कार्य करते हैं। 80+ प्रमुख बैंक एवं NBFCs के साथ मिलकर हम आपके लिए सबसे उपयुक्त बैंक एवं बेहतर लोन विकल्प चुनने में सहायता करते हैं।\n\nयदि आपको या आपके परिवार के किसी सदस्य को किसी भी प्रकार के लोन की आवश्यकता हो, तो आप हमसे संपर्क कर सकते हैं या हमारे कार्यालय आकर सिर्फ 10 मिनट में अपनी पात्रता (Eligibility) चेक करवा सकते हैं।\n\nकार्यालय: जोबह टेंट हाउस के सामने, राजीव कॉलोनी, मॉन्टफोर्ट स्कूल रोड, मंडला (म.प्र.) – 481661\n\nकार्यालय समय: सुबह 10:00 बजे से शाम 6:00 बजे तक\n\nसंपर्क एवं WhatsApp: 9425813414\n\nयह संदेश एक स्वचालित (Automated) नंबर से भेजा गया है। कृपया उत्तर देने या सहायता के लिए WhatsApp नंबर 9425813414 पर संपर्क करें।\n\nयदि आप भविष्य में हमारी ओर से कॉल या WhatsApp संदेश प्राप्त नहीं करना चाहते हैं, तो कृपया 9425813414 पर \"STOP\" लिखकर भेज दें। इसके बाद हम आपको आगे कोई प्रचारात्मक संदेश नहीं भेजेंगे।",
+  not_interested: "नमस्ते!\n\nआज अपना समय देने के लिए आपका हार्दिक धन्यवाद।\n\nयदि भविष्य में आपको, आपके परिवार या किसी परिचित/मित्र को होम लोन, पर्सनल लोन, बिजनेस लोन, एजुकेशन लोन, बैलेंस ट्रांसफर अथवा किसी अन्य बैंकिंग वित्तीय सहायता की आवश्यकता हो, तो Ruralift (रूरालिफ्ट), मंडला से अवश्य संपर्क करें।\n\nकृपया हमारा नंबर \"Ruralift Mandla\" के नाम से सेव कर लें।\n\nसंपर्क एवं WhatsApp: 9425813414\n\nयह संदेश एक स्वचालित (Automated) नंबर से भेजा गया है। कृपया उत्तर देने या सहायता के लिए WhatsApp नंबर 9425813414 पर संपर्क करें।\n\nयदि आप भविष्य में हमारी ओर से कॉल या WhatsApp संदेश प्राप्त नहीं करना चाहते हैं, तो कृपया 9425813414 पर \"STOP\" लिखकर भेज दें।\n\n– टीम Ruralift (रूरालिफ्ट), मंडला",
+  discard: "नमस्ते!\n\nआपकी प्रोफ़ाइल की प्रारंभिक जाँच के अनुसार, वर्तमान बैंकिंग नियमों एवं नीतियों के कारण फिलहाल आपकी लोन प्रक्रिया आगे बढ़ाना संभव नहीं हो पा रहा है।\n\nजैसे ही आपके दस्तावेज़ों, आय, CIBIL स्कोर अथवा बैंकों की किसी नई योजना के आधार पर पात्रता बनती है, हम आपको अवश्य सूचित करेंगे।\n\nसंपर्क एवं WhatsApp: 9425813414\n\nयह संदेश एक स्वचालित (Automated) नंबर से भेजा गया है। कृपया किसी भी सहायता के लिए WhatsApp नंबर 9425813414 पर संपर्क करें।\n\n– टीम Ruralift (रूरालिफ्ट), मंडला",
+  dnd: "नमस्ते!\n\nआपके अनुरोध के अनुसार, हमने आपका नंबर Ruralift (रूरालिफ्ट), मंडला की कॉल एवं WhatsApp संपर्क सूची (DND) से हटाने की प्रक्रिया शुरू कर दी है।\n\nआगे से हमारी ओर से आपको किसी भी प्रकार की प्रचारात्मक कॉल या WhatsApp संदेश भेजने का प्रयास नहीं किया जाएगा।\n\nयदि भविष्य में कभी आपको होम लोन, पर्सनल लोन, बिजनेस लोन, एजुकेशन लोन, बैलेंस ट्रांसफर या किसी अन्य बैंकिंग वित्तीय सहायता की आवश्यकता हो, तो आप अपनी इच्छा से हमसे संपर्क कर सकते हैं।\n\nकार्यालय समय: सुबह 10:00 बजे से शाम 6:00 बजे तक\n\nसंपर्क एवं WhatsApp: 9425813414\n\nधन्यवाद।\n\n– टीम Ruralift (रूरालिफ्ट), मंडला"
+};
+
+const DISPO_LABELS = {
+  dead: '☠️ CNC (Call Not Connected)',
+  not_received: '📵 CNR (Call Not Received)',
+  not_interested: '🚫 Not Interested',
+  followup: '📅 Follow-up',
+  switch_off: '📴 Switch OFF',
+  interested: '⭐ Interested',
+  discard: '🚫 Discard/Not-Eligible',
+  dnd: '🔕 DND'
+};
+
+const DISPO_DOCS = {
+  interested: 'MSME + Police Verification',
+  followup: 'MSME only',
+  dead: 'No documents',
+  not_received: 'No documents',
+  switch_off: 'No documents',
+  not_interested: 'No documents',
+  discard: 'No documents',
+  dnd: 'No documents'
+};
+
+async function loadDailyCopyData() {
+  try {
+    const r = await fetch('/api/stats/daily-numbers');
+    const d = await r.json();
+    renderDailyCopyPanel(d);
+  } catch(e) { document.getElementById('dailyCopyContent').textContent = 'Failed to load'; }
+}
+
+function renderDailyCopyPanel(data) {
+  const container = document.getElementById('dailyCopyContent');
+  if (!data || !data.groups) { container.innerHTML = '<div class="empty">No data</div>'; return; }
+  const dummyNote = data.isDummy ? '<div style="background:rgba(255,152,0,.1);border:1px solid rgba(255,152,0,.3);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--warn)">&#9888; Dummy data (no real calls today 10AM-5:43PM)</div>' : '';
+  let html = dummyNote;
+  html += '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Date: <strong>' + escapeHtml(data.date) + '</strong> | Time: <strong>' + escapeHtml(data.timeRange) + '</strong></div>';
+  Object.entries(data.groups).forEach(([dispo, phones]) => {
+    if (dispo === '_isDummy') return;
+    const label = DISPO_LABELS[dispo] || dispo;
+    const docInfo = DISPO_DOCS[dispo] || 'No documents';
+    const phoneStr = phones.join(',');
+    const waMsg = WA_MESSAGES[dispo] || '';
+    html += '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:10px;">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:6px">';
+    html += '<span style="font-size:13px;font-weight:700;">' + label + ' (' + phones.length + ')</span>';
+    html += '<span style="font-size:10px;color:var(--muted);background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:4px">📎 ' + escapeHtml(docInfo) + '</span>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">';
+    html += '<button onclick="copyText(\'' + phoneStr.replace(/'/g,"\\'") + '\')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--accent);background:rgba(124,58,237,.1);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;">📋 Copy Numbers</button>';
+    if (waMsg) html += '<button onclick="copyWaMsg(\'' + escapeHtml(dispo) + '\')" style="padding:4px 10px;border-radius:6px;border:1px solid #25D366;background:rgba(37,211,102,.08);color:#128C7E;font-size:11px;font-weight:700;cursor:pointer;">💬 Copy WhatsApp Msg</button>';
+    html += '</div>';
+    html += '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-all;max-height:50px;overflow-y:auto;">' + escapeHtml(phoneStr) + '</div>';
+    html += '</div>';
+  });
+  container.innerHTML = html;
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => showToast('Numbers copied!','success')).catch(() => {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('Numbers copied!','success');
+  });
+}
+
+function copyWaMsg(dispo) {
+  const msg = WA_MESSAGES[dispo];
+  if (!msg) { showToast('No message template','error'); return; }
+  navigator.clipboard.writeText(msg).then(() => showToast('WhatsApp message copied!','success')).catch(() => {
+    const ta = document.createElement('textarea'); ta.value = msg; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('WhatsApp message copied!','success');
+  });
+}
+
+loadDailyCopyData();
+setInterval(loadDailyCopyData, 60000);
 </script>
 </body>
 </html>
