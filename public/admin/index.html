@@ -1924,9 +1924,13 @@ function renderDailyCopyPanel(data) {
     if (dispo === '_isDummy') return;
     const label = DISPO_LABELS[dispo] || dispo;
     const docInfo = DISPO_DOCS[dispo] || '';
+    const needsDocs = docInfo.indexOf('MSME') !== -1;
+    const docBadgeStyle = needsDocs
+      ? 'font-size:10px;font-weight:700;color:#FF9800;background:rgba(255,152,0,.16);border:1px solid #FF9800;padding:3px 10px;border-radius:4px'
+      : 'font-size:10px;color:var(--muted);background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:4px';
     const phoneStr = phones.join(',');
     html += '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:10px;">';
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:6px"><span style="font-size:13px;font-weight:700">'+label+' ('+phones.length+')</span><span style="font-size:10px;color:var(--muted);background:var(--surface);border:1px solid var(--border);padding:2px 8px;border-radius:4px">📎 '+escapeHtml(docInfo)+'</span></div>';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:6px"><span style="font-size:13px;font-weight:700">'+label+' ('+phones.length+')</span><span style="'+docBadgeStyle+'">📎 '+escapeHtml(docInfo)+'</span></div>';
     html += '<div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">';
     html += '<button onclick="copyText(\''+phoneStr.replace(/'/g,"\\'")+'\')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--accent);background:rgba(124,58,237,.1);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer">📋 Copy Numbers</button>';
     html += '<button onclick="copyWaMsg(\''+dispo+'\')" style="padding:4px 10px;border-radius:6px;border:1px solid #25D366;background:rgba(37,211,102,.08);color:#128C7E;font-size:11px;font-weight:700;cursor:pointer">💬 Copy WhatsApp Msg</button>';
