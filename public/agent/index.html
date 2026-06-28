@@ -518,6 +518,7 @@
             <button class="dispo-btn dispo-followup"      onclick="submitDisposition('followup')">📅 Followup</button>
             <button class="dispo-btn dispo-switch-off"    onclick="submitDisposition('switch_off')">📴 Switch OFF</button>
             <button class="dispo-btn dispo-discard"       onclick="submitDisposition('discard')">🚫 Discard/Not-Eligible</button>
+            <button class="dispo-btn dispo-discard" style="background:#fce4ec;color:#c62828;border:1.5px solid #ef9a9a" onclick="submitDisposition('dnd')">🔕 DND</button>
             <button class="dispo-btn dispo-interested"    onclick="submitDisposition('interested')">⭐ Interested</button>
           </div>
         </div>
@@ -822,6 +823,15 @@
     <h3 id="loginPopupTitle" style="margin-bottom:12px;"></h3>
     <p id="loginPopupMsg" style="font-size:14px;line-height:1.7;color:var(--text);white-space:pre-wrap;"></p>
     <button class="btn-confirm blue" onclick="closeLoginPopup()" style="margin-top:20px">OK</button>
+  </div>
+</div>
+
+<!-- ── SCRIPT POPUP (Feature 5) ── -->
+<div class="modal-overlay" id="scriptPopupModal">
+  <div class="modal-box" style="max-width:560px;max-height:85vh;overflow-y:auto;">
+    <h3 style="margin-bottom:12px;">📋 Call Script</h3>
+    <div id="scriptContent" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;font-size:14px;line-height:1.8;white-space:pre-wrap;max-height:50vh;overflow-y:auto;text-align:left;"></div>
+    <button class="btn-confirm blue" onclick="closeScriptPopup()" style="margin-top:20px;width:100%">✅ Call Completed</button>
   </div>
 </div>
 
@@ -2008,6 +2018,42 @@ socket.on('timer-update', (data) => {
   }
 });
 
+// ── Script Popup (Feature 5) ──────────────────────────────────────────────────
+let scriptContent = null;
+let scriptLoaded = false;
+let scriptPopupShown = false;
+
+async function loadScript() {
+  try {
+    const r = await fetch('/api/script');
+    const d = await r.json();
+    scriptContent = d.script;
+    scriptLoaded = true;
+  } catch(e) { scriptContent = null; scriptLoaded = true; }
+}
+loadScript();
+
+function showScriptPopup() {
+  if (!scriptContent) return; // No script uploaded
+  document.getElementById('scriptContent').textContent = scriptContent;
+  document.getElementById('scriptPopupModal').classList.add('active');
+  scriptPopupShown = true;
+}
+
+function closeScriptPopup() {
+  document.getElementById('scriptPopupModal').classList.remove('active');
+  scriptPopupShown = false;
+}
+
+// Override showNumber to also show script popup
+const _origShowNumber = showNumber;
+showNumber = function(numberId, phone, name, totalDialedToday, resumed) {
+  _origShowNumber(numberId, phone, name, totalDialedToday, resumed);
+  // Show script popup on every new number
+  if (scriptContent) {
+    showScriptPopup();
+  }
+};
 
 </script>
 
