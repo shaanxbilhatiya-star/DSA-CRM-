@@ -2316,6 +2316,38 @@ app.get('/api/admin/original-file/:fileId', (req, res) => {
   res.download(fileInfo.sheetPath, fileInfo.name);
 });
 
+// ─── Manual Lead Addition (Agent / TL-Agent) ──────────────────────────────────
+app.post('/api/agent/add-manual-number', (req, res) => {
+  const { agentId, phone, name } = req.body;
+  const clean = String(phone || '').trim().replace(/\s+/g, '');
+  if (!/^\d{10}$/.test(clean)) return res.status(400).json({ error: 'Valid 10-digit phone required' });
+  if (appState.numbers.find(n => n.phone === clean)) return res.status(400).json({ error: 'Number already exists in system' });
+  let manualFile = appState.uploadedFiles.find(f => f.id === 'manual');
+  if (!manualFile) {
+    manualFile = { id: 'manual', name: 'Manual Entries', uploadedAt: new Date().toISOString(), total: 0, hasOriginal: false };
+    appState.uploadedFiles.push(manualFile);
+  }
+  const newNum = { id: uuidv4(), phone: clean, name: String(name || '').trim(), file: 'manual', assignedTo: null, dialedBy: null, dialedAt: null };
+  appState.numbers.push(newNum);
+  manualFile.total = appState.numbers.filter(n => n.file === 'manual').length;
+  saveState(appState);
+  broadcastAdminStats();
+  res.json({ success: true, numberId: newNum.id });
+});
+
+// Remove a number from pool — blocked if lead is interested (real business data)
+app.delete('/api/agent/number/:numberId', (req, res) => {
+  const num = appState.numbers.find(n => n.id === req.params.numberId);
+  if (!num) return res.status(404).json({ error: 'Number not found' });
+  if (num.disposition === 'interested') return res.status(400).json({ error: 'Cannot remove an interested lead' });
+  appState.numbers = appState.numbers.filter(n => n.id !== req.params.numberId);
+  const manualFile = appState.uploadedFiles.find(f => f.id === 'manual');
+  if (manualFile) manualFile.total = appState.numbers.filter(n => n.file === 'manual').length;
+  saveState(appState);
+  broadcastAdminStats();
+  res.json({ success: true });
+});
+
 // ─── Page Routes ──────────────────────────────────────────────────────────────
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/admin/index.html')));
 app.get('/agent', (req, res) => res.sendFile(path.join(__dirname, 'public/agent/index.html')));
@@ -2328,3 +2360,4 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`   Agent Panel : http://YOUR-LAN-IP:${PORT}/agent`);
   console.log(`   TL Panel    : http://YOUR-LAN-IP:${PORT}/tl\n`);
 });
+
