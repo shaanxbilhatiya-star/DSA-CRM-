@@ -4325,9 +4325,16 @@ function renderTlDndList(dndNumbers) {
     el.innerHTML = '<div class="empty">No DND numbers</div>';
     return;
   }
+  var roleColors = { tl: '#7b1fa2', admin: '#455a64', agent: '#1565c0' };
+  var roleLabels = { tl: 'TL', admin: 'Admin', agent: 'Agent' };
   el.innerHTML = dndNumbers.map(function(d) {
+    var role = d.addedByRole || 'admin';
+    var who = escapeHtml(d.addedByName || (role === 'admin' ? 'Admin' : d.addedBy || 'Unknown'));
+    var noteColor = roleColors[role] || '#1565c0';
+    var noteLabel = roleLabels[role] || 'Agent';
     return '<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;">' +
-      '<span style="font-family:var(--mono);font-weight:700;color:var(--accent)">' + escapeHtml(d.phone) + '</span>' +
+      '<div><span style="font-family:var(--mono);font-weight:700;color:var(--accent)">' + escapeHtml(d.phone) + '</span>' +
+      '<div style="font-size:11px;margin-top:3px;color:' + noteColor + '">&#128221; Added by ' + who + ' &middot; <b>' + noteLabel + '</b></div></div>' +
       '<button class="btn-del" onclick="tlRemoveDndNumber(\'' + escapeHtml(d.phone) + '\')" style="padding:4px 10px">Remove</button></div>';
   }).join('');
 }
@@ -4339,7 +4346,7 @@ async function tlAddDndNumber() {
   try {
     var r = await fetch('/api/admin/dnd', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({phone:phone})
+      body: JSON.stringify({phone:phone, addedBy: agentId})
     });
     var d = await r.json();
     if (d.error) { showTlToast(d.error,'error'); return; }

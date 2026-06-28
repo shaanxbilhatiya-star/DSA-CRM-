@@ -1523,6 +1523,21 @@ function getEidRole(eidVal) {
   return 'agent';
 }
 
+// Helper: resolve who added a DND number to a display name + role (agent / tl / admin)
+// so admin.html and tl.html (TL mode) can show a note like "Added by Rohan (TL)".
+function resolveDndAddedBy(rawId) {
+  if (!rawId || rawId === 'admin') {
+    return { id: 'admin', name: 'Admin', role: 'admin' };
+  }
+  const agent = appState.agents && appState.agents[rawId];
+  if (agent) {
+    const eid = agent.employeeId;
+    const role = (eid && appState.allowedEids[eid]) ? getEidRole(appState.allowedEids[eid]) : 'agent';
+    return { id: rawId, name: agent.name || rawId, role: role };
+  }
+  return { id: rawId, name: rawId, role: 'agent' };
+}
+
 app.get('/api/admin/eids', (req, res) => {
   const list = Object.entries(appState.allowedEids).map(([eid, val]) => ({
     eid,
@@ -2011,11 +2026,15 @@ app.post('/api/admin/agent/meeting/end', (req, res) => {
 
 // ─── DND (Do Not Disturb) Management ──────────────────────────────────────────
 app.get('/api/admin/dnd', (req, res) => {
-  res.json({ dndNumbers: appState.dndNumbers || [] });
+  const list = (appState.dndNumbers || []).map(d => {
+    const info = resolveDndAddedBy(d.addedBy);
+    return Object.assign({}, d, { addedByName: info.name, addedByRole: info.role });
+  });
+  res.json({ dndNumbers: list });
 });
 
 app.post('/api/admin/dnd', (req, res) => {
-  const { phone } = req.body;
+  const { phone, addedBy } = req.body;
   if (!phone || !/^\d{7,15}$/.test(phone.replace(/\s+/g,''))) {
     return res.status(400).json({ error: 'Valid phone number required' });
   }
@@ -2024,7 +2043,9 @@ app.post('/api/admin/dnd', (req, res) => {
   if (appState.dndNumbers.find(d => d.phone === cleanPhone)) {
     return res.status(409).json({ error: 'Number already in DND list' });
   }
-  appState.dndNumbers.push({ phone: cleanPhone, addedAt: new Date().toISOString(), addedBy: 'admin' });
+  // Respect who actually submitted this (agent / TL / admin); default to 'admin' only when nobody is identified.
+  const info = resolveDndAddedBy(addedBy);
+  appState.dndNumbers.push({ phone: cleanPhone, addedAt: new Date().toISOString(), addedBy: info.id });
   // Also mark any existing number with this phone as dnd
   const existing = appState.numbers.find(n => n.phone === cleanPhone);
   if (existing && existing.disposition !== 'interested') {
@@ -2034,7 +2055,7 @@ app.post('/api/admin/dnd', (req, res) => {
   }
   saveState(appState);
   broadcastAdminStats();
-  res.json({ success: true, phone: cleanPhone });
+  res.json({ success: true, phone: cleanPhone, addedByName: info.name, addedByRole: info.role });
 });
 
 app.delete('/api/admin/dnd/:phone', (req, res) => {

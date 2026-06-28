@@ -1807,11 +1807,18 @@ function renderDndList(dndNumbers) {
     el.innerHTML = '<div class="empty">No DND numbers</div>';
     return;
   }
+  const roleColors = { tl: '#7b1fa2', admin: '#455a64', agent: '#1565c0' };
+  const roleLabels = { tl: 'TL', admin: 'Admin', agent: 'Agent' };
   el.innerHTML = dndNumbers.map(d => {
     const addedDate = d.addedAt ? formatTimestamp(d.addedAt) : '';
+    const role = d.addedByRole || 'admin';
+    const who = escapeHtml(d.addedByName || (role === 'admin' ? 'Admin' : d.addedBy || 'Unknown'));
+    const noteColor = roleColors[role] || '#1565c0';
+    const noteLabel = roleLabels[role] || 'Agent';
     return '<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;">' +
       '<div><span style="font-family:var(--mono);font-weight:700;color:var(--accent)">' + escapeHtml(formatPhone(d.phone)) + '</span>' +
-      '<span style="font-size:11px;color:var(--muted);margin-left:10px">' + addedDate + '</span></div>' +
+      '<span style="font-size:11px;color:var(--muted);margin-left:10px">' + addedDate + '</span>' +
+      '<div style="font-size:11px;margin-top:3px;color:' + noteColor + '">&#128221; Added by ' + who + ' &middot; <b>' + noteLabel + '</b></div></div>' +
       '<button class="btn-del" onclick="removeDndNumber(\'' + escapeHtml(d.phone) + '\')" style="padding:4px 10px">Remove</button></div>';
   }).join('');
 }
