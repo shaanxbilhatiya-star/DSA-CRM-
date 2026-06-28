@@ -374,6 +374,11 @@
           <div class="dispo-stat-val" id="adminStatsInterested">0</div>
           <div class="dispo-stat-lbl">Interested</div>
         </div>
+        <div class="dispo-stat-card">
+          <div class="dispo-stat-indicator" style="background:#c62828"></div>
+          <div class="dispo-stat-val" id="adminStatsDnd">0</div>
+          <div class="dispo-stat-lbl">DND</div>
+        </div>
       </div>
     </div>
   </div>
@@ -575,6 +580,52 @@
         <p style="margin-top:4px;font-size:11px;color:var(--muted)">Columns: phone, name, followupDate, followupTime, agentId</p>
       </div>
       <div id="followupUploadStatus" style="margin-top:8px;font-size:13px;color:var(--muted);display:none"></div>
+    </div>
+  </div>
+
+  <!-- DND Management Panel -->
+  <div class="panel" style="margin-bottom:20px">
+    <div class="panel-header" style="background:rgba(198,40,40,.06)">
+      <h2 style="color:#c62828">&#128277; DND (Do Not Disturb) Numbers</h2>
+      <span style="font-size:12px;color:var(--muted)" id="dndCountBadge">0 numbers</span>
+    </div>
+    <div class="panel-body">
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-start">
+        <input type="text" id="newDndPhone" placeholder="Enter phone number" style="padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:14px;outline:none;width:200px;" maxlength="15">
+        <button onclick="addDndNumber()" style="padding:9px 18px;border-radius:8px;border:none;background:#c62828;color:#fff;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">+ Add to DND</button>
+      </div>
+      <div id="dndList" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;">
+        <div class="empty">No DND numbers</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script Upload Panel -->
+  <div class="panel" style="margin-bottom:20px">
+    <div class="panel-header" style="background:rgba(37,99,235,.06)">
+      <h2 style="color:#2563eb">&#128221; Call Script Upload</h2>
+      <span style="font-size:12px;color:var(--muted)">Upload .txt file shown to agents on each new call</span>
+    </div>
+    <div class="panel-body">
+      <div class="upload-zone" id="scriptDropZone" style="padding:20px">
+        <input type="file" id="scriptFileInput" accept=".txt,text/plain">
+        <div class="upload-icon" style="font-size:24px">&#128196;</div>
+        <p style="font-size:13px"><strong>Click or drag</strong> a TXT file here</p>
+        <p style="margin-top:4px;font-size:11px;color:var(--muted)">Only .txt files accepted - Max 2MB</p>
+      </div>
+      <div id="scriptUploadStatus" style="margin-top:8px;font-size:13px;color:var(--muted);display:none"></div>
+      <div id="currentScriptPreview" style="margin-top:12px;display:none;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;max-height:200px;overflow-y:auto;font-size:13px;white-space:pre-wrap;line-height:1.6;"></div>
+    </div>
+  </div>
+
+  <!-- Disposition Daily Copy Panel -->
+  <div class="panel" style="margin-bottom:20px">
+    <div class="panel-header" style="background:rgba(76,175,80,.06)">
+      <h2 style="color:var(--green)">&#128203; Daily Dialed Numbers (Copy)</h2>
+      <span style="font-size:12px;color:var(--muted)">Numbers dialed today 10:00AM - 5:43PM IST</span>
+    </div>
+    <div class="panel-body" id="dailyCopyPanel">
+      <div id="dailyCopyContent" style="font-size:13px;color:var(--muted)">Loading...</div>
     </div>
   </div>
 
@@ -1479,6 +1530,7 @@ async function fetchAdminDispoStats() {
     document.getElementById('adminStatsSwitchOff').textContent     = d.switch_off    || 0;
     document.getElementById('adminStatsDiscard').textContent       = d.discard       || 0;
     document.getElementById('adminStatsInterested').textContent    = d.interested    || 0;
+    document.getElementById('adminStatsDnd').textContent           = d.dnd           || 0;
   } catch (e) { /* silent */ }
 }
 
@@ -1734,6 +1786,178 @@ async function fetchAdminLeaderboard() {
 
 setTimeout(fetchAdminLeaderboard, 500);
 setInterval(fetchAdminLeaderboard, 5000);
+
+// ── DND Management ────────────────────────────────────────────────────────────
+async function loadDndNumbers() {
+  try {
+    const r = await fetch('/api/admin/dnd');
+    const d = await r.json();
+    renderDndList(d.dndNumbers || []);
+  } catch(e) { /* silent */ }
+}
+
+function renderDndList(dndNumbers) {
+  const el = document.getElementById('dndList');
+  const badge = document.getElementById('dndCountBadge');
+  badge.textContent = dndNumbers.length + ' number' + (dndNumbers.length !== 1 ? 's' : '');
+  if (!dndNumbers || dndNumbers.length === 0) {
+    el.innerHTML = '<div class="empty">No DND numbers</div>';
+    return;
+  }
+  el.innerHTML = dndNumbers.map(d => {
+    const addedDate = d.addedAt ? formatTimestamp(d.addedAt) : '';
+    return '<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;">' +
+      '<div><span style="font-family:var(--mono);font-weight:700;color:var(--accent)">' + escapeHtml(formatPhone(d.phone)) + '</span>' +
+      '<span style="font-size:11px;color:var(--muted);margin-left:10px">' + addedDate + '</span></div>' +
+      '<button class="btn-del" onclick="removeDndNumber(\'' + escapeHtml(d.phone) + '\')" style="padding:4px 10px">Remove</button></div>';
+  }).join('');
+}
+
+async function addDndNumber() {
+  const input = document.getElementById('newDndPhone');
+  const phone = input.value.trim().replace(/\s+/g,'');
+  if (!phone || !/^\d{7,15}$/.test(phone)) { showToast('Enter a valid phone number','error'); return; }
+  try {
+    const r = await fetch('/api/admin/dnd', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({phone})
+    });
+    const d = await r.json();
+    if (d.error) { showToast(d.error,'error'); return; }
+    input.value = '';
+    showToast('Added to DND: ' + phone, 'success');
+    loadDndNumbers();
+  } catch(e) { showToast('Failed to add','error'); }
+}
+
+async function removeDndNumber(phone) {
+  if (!confirm('Remove ' + phone + ' from DND list?')) return;
+  try {
+    const r = await fetch('/api/admin/dnd/' + encodeURIComponent(phone), {method:'DELETE'});
+    const d = await r.json();
+    if (d.error) { showToast(d.error,'error'); return; }
+    showToast('Removed from DND','success');
+    loadDndNumbers();
+  } catch(e) { showToast('Failed','error'); }
+}
+
+loadDndNumbers();
+
+// ── Script Upload ─────────────────────────────────────────────────────────────
+(function initScriptUpload() {
+  const dropZone = document.getElementById('scriptDropZone');
+  const fileInput = document.getElementById('scriptFileInput');
+  if (!dropZone || !fileInput) return;
+  fileInput.addEventListener('change', () => uploadScriptFile(fileInput.files[0]));
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); uploadScriptFile(e.dataTransfer.files[0]); });
+})();
+
+async function uploadScriptFile(file) {
+  if (!file) return;
+  const status = document.getElementById('scriptUploadStatus');
+  status.style.display = 'block';
+  status.textContent = 'Uploading script...';
+  const fd = new FormData();
+  fd.append('script', file);
+  try {
+    const r = await fetch('/api/admin/upload-script', { method:'POST', body: fd });
+    const d = await r.json();
+    if (d.success) {
+      status.textContent = 'Script uploaded: ' + escapeHtml(d.filename);
+      showToast('Script uploaded successfully','success');
+      loadCurrentScript();
+      setTimeout(() => status.style.display='none', 3000);
+    } else throw new Error(d.error||'Failed');
+  } catch(e) {
+    status.textContent = 'Error: ' + e.message;
+    showToast('Script upload failed','error');
+  }
+  document.getElementById('scriptFileInput').value = '';
+}
+
+async function loadCurrentScript() {
+  try {
+    const r = await fetch('/api/script');
+    const d = await r.json();
+    const preview = document.getElementById('currentScriptPreview');
+    if (d.script) {
+      preview.style.display = 'block';
+      preview.textContent = d.script;
+    } else {
+      preview.style.display = 'none';
+    }
+  } catch(e) { /* silent */ }
+}
+loadCurrentScript();
+
+// ── Daily Dialed Numbers Copy (Feature 6) ─────────────────────────────────────
+async function loadDailyCopyData() {
+  try {
+    const r = await fetch('/api/stats/daily-numbers');
+    const d = await r.json();
+    renderDailyCopyPanel(d);
+  } catch(e) {
+    document.getElementById('dailyCopyContent').textContent = 'Failed to load';
+  }
+}
+
+function renderDailyCopyPanel(data) {
+  const container = document.getElementById('dailyCopyContent');
+  if (!data || !data.groups) {
+    container.innerHTML = '<div class="empty">No data available</div>';
+    return;
+  }
+  
+  const dummyNote = data.isDummy ? '<div style="background:rgba(255,152,0,.1);border:1px solid rgba(255,152,0,.3);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--warn)">&#9888; Showing dummy data for testing (no real calls today between 10:00AM-5:43PM)</div>' : '';
+  
+  let html = dummyNote;
+  html += '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Date: <strong>' + escapeHtml(data.date) + '</strong> | Time Range: <strong>' + escapeHtml(data.timeRange) + '</strong></div>';
+  
+  const dispoLabels = {
+    dead: '☠️ Call Not Connected (CNC)',
+    not_received: '📵 Call Not Received (CNR)',
+    not_interested: '🚫 Not Interested',
+    followup: '📅 Followup',
+    switch_off: '📴 Switch OFF',
+    interested: '⭐ Interested',
+    discard: '🚫 Discard',
+    dnd: '🔕 DND'
+  };
+  
+  Object.entries(data.groups).forEach(([dispo, phones]) => {
+    if (dispo === '_isDummy') return;
+    const label = dispoLabels[dispo] || dispo;
+    const phoneStr = phones.join(',');
+    html += '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:10px;">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">';
+    html += '<span style="font-size:13px;font-weight:700;">' + label + ' (' + phones.length + ')</span>';
+    html += '<button onclick="copyToClipboard(\'' + escapeHtml(phoneStr).replace(/'/g,"\\'") + '\')" style="padding:5px 12px;border-radius:6px;border:1px solid var(--accent);background:rgba(124,58,237,.1);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;font-family:var(--sans)">&#128203; Copy</button>';
+    html += '</div>';
+    html += '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);word-break:break-all;max-height:60px;overflow-y:auto;">' + escapeHtml(phoneStr) + '</div>';
+    html += '</div>';
+  });
+  
+  container.innerHTML = html;
+}
+
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('Copied to clipboard!','success');
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('Copied to clipboard!','success');
+  });
+}
+
+loadDailyCopyData();
+// Refresh daily copy data every 60 seconds
+setInterval(loadDailyCopyData, 60000);
 </script>
 </body>
 </html>

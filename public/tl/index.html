@@ -896,6 +896,7 @@
             <button class="dispo-btn dispo-followup"      onclick="submitDisposition('followup')">📅 Followup</button>
             <button class="dispo-btn dispo-switch-off"    onclick="submitDisposition('switch_off')">📴 Switch OFF</button>
             <button class="dispo-btn dispo-discard"       onclick="submitDisposition('discard')">🚫 Discard/Not-Eligible</button>
+            <button class="dispo-btn dispo-discard" style="background:#fce4ec;color:#c62828;border:1.5px solid #ef9a9a" onclick="submitDisposition('dnd')">🔕 DND</button>
             <button class="dispo-btn dispo-interested"    onclick="submitDisposition('interested')">⭐ Interested</button>
           </div>
         </div>
@@ -1202,6 +1203,15 @@
     <button class="btn-confirm blue" onclick="closeLoginPopup()" style="margin-top:20px">OK</button>
   </div>
 </div>
+
+<!-- ── SCRIPT POPUP (Feature 5 - TL Agent Mode) ── -->
+<div class="modal-overlay" id="scriptPopupModal">
+  <div class="modal-box" style="max-width:560px;max-height:85vh;overflow-y:auto;">
+    <h3 style="margin-bottom:12px;">&#128203; Call Script</h3>
+    <div id="scriptContent" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;font-size:14px;line-height:1.8;white-space:pre-wrap;max-height:50vh;overflow-y:auto;text-align:left;"></div>
+    <button class="btn-confirm blue" onclick="closeScriptPopup()" style="margin-top:20px;width:100%">&#9989; Call Completed</button>
+  </div>
+</div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
@@ -1300,7 +1310,23 @@
           <div class="dispo-stat-val" id="adminStatsInterested">0</div>
           <div class="dispo-stat-lbl">Interested</div>
         </div>
+        <div class="dispo-stat-card">
+          <div class="dispo-stat-indicator" style="background:#c62828"></div>
+          <div class="dispo-stat-val" id="adminStatsDnd">0</div>
+          <div class="dispo-stat-lbl">DND</div>
+        </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Disposition Daily Copy Panel (TL Mode) -->
+  <div class="panel" style="margin-bottom:20px">
+    <div class="panel-header" style="background:rgba(76,175,80,.06)">
+      <h2 style="color:var(--green)">&#128203; Daily Dialed Numbers (Copy)</h2>
+      <span style="font-size:12px;color:var(--muted)">Numbers dialed today 10:00AM - 5:43PM IST</span>
+    </div>
+    <div class="panel-body" id="tlDailyCopyPanel">
+      <div id="tlDailyCopyContent" style="font-size:13px;color:var(--muted)">Loading...</div>
     </div>
   </div>
 
@@ -1458,6 +1484,23 @@
           <tr><td colspan="9" class="empty">No completed leads yet</td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- DND Management Panel (TL Mode) -->
+  <div class="panel" style="margin-bottom:20px">
+    <div class="panel-header" style="background:rgba(198,40,40,.06)">
+      <h2 style="color:#c62828">&#128277; DND (Do Not Disturb) Numbers</h2>
+      <span style="font-size:12px;color:var(--muted)" id="tlDndCountBadge">0 numbers</span>
+    </div>
+    <div class="panel-body">
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-start">
+        <input type="text" id="tlNewDndPhone" placeholder="Enter phone number" style="padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:14px;outline:none;width:200px;" maxlength="15">
+        <button onclick="tlAddDndNumber()" style="padding:9px 18px;border-radius:8px;border:none;background:#c62828;color:#fff;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">+ Add to DND</button>
+      </div>
+      <div id="tlDndList" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;">
+        <div class="empty">No DND numbers</div>
+      </div>
     </div>
   </div>
 
@@ -3813,6 +3856,7 @@ async function fetchAdminDispoStats() {
     document.getElementById('adminStatsSwitchOff').textContent     = d.switch_off    || 0;
     document.getElementById('adminStatsDiscard').textContent       = d.discard       || 0;
     document.getElementById('adminStatsInterested').textContent    = d.interested    || 0;
+    document.getElementById('adminStatsDnd').textContent           = d.dnd           || 0;
   } catch (e) { /* silent */ }
 }
 
@@ -4068,6 +4112,165 @@ async function fetchAdminLeaderboard() {
 
 setTimeout(fetchAdminLeaderboard, 500);
 setInterval(fetchAdminLeaderboard, 5000);
+
+// ── Script Popup (Feature 5 - Agent Mode) ─────────────────────────────────────
+let scriptContent = null;
+let scriptLoaded = false;
+let scriptPopupShown = false;
+
+async function loadScript() {
+  try {
+    const r = await fetch('/api/script');
+    const d = await r.json();
+    scriptContent = d.script;
+    scriptLoaded = true;
+  } catch(e) { scriptContent = null; scriptLoaded = true; }
+}
+loadScript();
+
+function showScriptPopup() {
+  if (!scriptContent) return;
+  document.getElementById('scriptContent').textContent = scriptContent;
+  document.getElementById('scriptPopupModal').classList.add('active');
+  scriptPopupShown = true;
+}
+
+function closeScriptPopup() {
+  document.getElementById('scriptPopupModal').classList.remove('active');
+  scriptPopupShown = false;
+}
+
+// Override showNumber to also show script popup
+if (typeof showNumber === 'function') {
+  const _origShowNumberTL = showNumber;
+  showNumber = function(numberId, phone, name, totalDialedToday, resumed) {
+    _origShowNumberTL(numberId, phone, name, totalDialedToday, resumed);
+    if (scriptContent) showScriptPopup();
+  };
+}
+
+// ── Daily Dialed Numbers Copy (Feature 6 - TL Mode) ──────────────────────────
+async function loadTlDailyCopyData() {
+  try {
+    const r = await fetch('/api/stats/daily-numbers');
+    const d = await r.json();
+    renderTlDailyCopyPanel(d);
+  } catch(e) {
+    const el = document.getElementById('tlDailyCopyContent');
+    if (el) el.textContent = 'Failed to load';
+  }
+}
+
+function renderTlDailyCopyPanel(data) {
+  const container = document.getElementById('tlDailyCopyContent');
+  if (!container) return;
+  if (!data || !data.groups) {
+    container.innerHTML = '<div class="empty">No data available</div>';
+    return;
+  }
+  
+  const dummyNote = data.isDummy ? '<div style="background:rgba(255,152,0,.1);border:1px solid rgba(255,152,0,.3);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--warn)">&#9888; Showing dummy data for testing (no real calls today between 10:00AM-5:43PM)</div>' : '';
+  
+  let html = dummyNote;
+  html += '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Date: <strong>' + escapeHtml(data.date) + '</strong> | Time Range: <strong>' + escapeHtml(data.timeRange) + '</strong></div>';
+  
+  const dispoLabels = {
+    dead: '&#9760; Call Not Connected (CNC)',
+    not_received: '&#128245; Call Not Received (CNR)',
+    not_interested: '&#128683; Not Interested',
+    followup: '&#128197; Followup',
+    switch_off: '&#128244; Switch OFF',
+    interested: '&#11088; Interested',
+    discard: '&#128683; Discard',
+    dnd: '&#128277; DND'
+  };
+  
+  Object.entries(data.groups).forEach(function(entry) {
+    var dispo = entry[0], phones = entry[1];
+    if (dispo === '_isDummy') return;
+    var label = dispoLabels[dispo] || dispo;
+    var phoneStr = phones.join(',');
+    html += '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:10px;">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">';
+    html += '<span style="font-size:13px;font-weight:700;">' + label + ' (' + phones.length + ')</span>';
+    html += '<button onclick="tlCopyToClipboard(\'' + phoneStr.replace(/'/g,"\\'") + '\')" style="padding:5px 12px;border-radius:6px;border:1px solid var(--accent);background:rgba(124,58,237,.1);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer;">&#128203; Copy</button>';
+    html += '</div>';
+    html += '<div style="font-family:var(--mono);font-size:12px;color:var(--muted);word-break:break-all;max-height:60px;overflow-y:auto;">' + escapeHtml(phoneStr) + '</div>';
+    html += '</div>';
+  });
+  
+  container.innerHTML = html;
+}
+
+function tlCopyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(function() {
+    showTlToast('Copied to clipboard!','success');
+  }).catch(function() {
+    var ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    showTlToast('Copied to clipboard!','success');
+  });
+}
+
+loadTlDailyCopyData();
+setInterval(loadTlDailyCopyData, 60000);
+
+// ── DND Management (TL Mode) ─────────────────────────────────────────────────
+async function loadTlDndNumbers() {
+  try {
+    const r = await fetch('/api/admin/dnd');
+    const d = await r.json();
+    renderTlDndList(d.dndNumbers || []);
+  } catch(e) { /* silent */ }
+}
+
+function renderTlDndList(dndNumbers) {
+  const el = document.getElementById('tlDndList');
+  const badge = document.getElementById('tlDndCountBadge');
+  if (!el || !badge) return;
+  badge.textContent = dndNumbers.length + ' number' + (dndNumbers.length !== 1 ? 's' : '');
+  if (!dndNumbers || dndNumbers.length === 0) {
+    el.innerHTML = '<div class="empty">No DND numbers</div>';
+    return;
+  }
+  el.innerHTML = dndNumbers.map(function(d) {
+    return '<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;">' +
+      '<span style="font-family:var(--mono);font-weight:700;color:var(--accent)">' + escapeHtml(d.phone) + '</span>' +
+      '<button class="btn-del" onclick="tlRemoveDndNumber(\'' + escapeHtml(d.phone) + '\')" style="padding:4px 10px">Remove</button></div>';
+  }).join('');
+}
+
+async function tlAddDndNumber() {
+  var input = document.getElementById('tlNewDndPhone');
+  var phone = input.value.trim().replace(/\s+/g,'');
+  if (!phone || !/^\d{7,15}$/.test(phone)) { showTlToast('Enter a valid phone number','error'); return; }
+  try {
+    var r = await fetch('/api/admin/dnd', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({phone:phone})
+    });
+    var d = await r.json();
+    if (d.error) { showTlToast(d.error,'error'); return; }
+    input.value = '';
+    showTlToast('Added to DND: ' + phone, 'success');
+    loadTlDndNumbers();
+  } catch(e) { showTlToast('Failed to add','error'); }
+}
+
+async function tlRemoveDndNumber(phone) {
+  if (!confirm('Remove ' + phone + ' from DND list?')) return;
+  try {
+    var r = await fetch('/api/admin/dnd/' + encodeURIComponent(phone), {method:'DELETE'});
+    var d = await r.json();
+    if (d.error) { showTlToast(d.error,'error'); return; }
+    showTlToast('Removed from DND','success');
+    loadTlDndNumbers();
+  } catch(e) { showTlToast('Failed','error'); }
+}
+
+loadTlDndNumbers();
 
 </script>
 
