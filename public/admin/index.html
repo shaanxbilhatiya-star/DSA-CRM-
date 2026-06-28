@@ -859,7 +859,6 @@ function renderStats(data) {
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
-          ${f.hasOriginal ? `<a href="/api/admin/original-file/${f.id}" download style="padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid #4caf50;background:rgba(76,175,80,.1);color:#4caf50;text-decoration:none;font-family:var(--sans)">&#128190; Original File</a>` : ''}
           <a href="/api/admin/download-numbers/${f.id}" download style="padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--accent);background:rgba(124,58,237,.1);color:var(--accent);text-decoration:none;font-family:var(--sans)">&#128229; Download</a>
           <button class="btn-del" onclick="deleteFile('${f.id}')">Delete</button>
         </div>
