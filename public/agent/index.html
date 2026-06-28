@@ -477,6 +477,7 @@
             <div class="lead-name" id="leadName"></div>
             <div class="phone-number" id="phoneDisplay">—</div>
             <div class="number-hint">Dial this number now</div>
+            <button onclick="removeCurrentLead()" style="margin-top:10px;padding:5px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid #ef4444;background:rgba(239,68,68,.08);color:#ef4444;font-family:inherit">🗑 Remove Lead</button>
           </div>
         </div>
 
@@ -535,6 +536,7 @@
           <button class="action-btn" id="btnEndWashroom" onclick="endWashroom()"  style="background:#6366f1;color:#fff;display:none;">▶ Done — Resume Dialing</button>
           <button class="action-btn" id="btnMeeting"     onclick="takeMeeting()"  style="background:#cffafe;color:#0891b2;border:1.5px solid #67e8f9;display:none;">📋 Meeting</button>
           <button class="action-btn" id="btnEndMeeting"  onclick="endMeeting()"   style="background:#0891b2;color:#fff;display:none;">▶ Meeting Done — Resume</button>
+          <button class="action-btn" onclick="openAddLeadModal()" style="background:#f0fdf4;color:#16a34a;border:1.5px solid #bbf7d0">➕ Add Lead to Dialer</button>
         </div>
       </div>
 
@@ -862,6 +864,23 @@
   </div>
 </div>
 
+<!-- ── ADD LEAD MODAL ── -->
+<div class="modal-overlay" id="addLeadModal">
+  <div class="modal-box">
+    <h3>➕ Add Lead to Dialer</h3>
+    <p class="modal-sub">Manually add a number to the calling pool</p>
+    <div class="field">
+      <label>Phone Number <span style="color:#ef4444">*</span></label>
+      <input type="text" id="addLeadPhone" placeholder="10-digit number" maxlength="10" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Name</label>
+      <input type="text" id="addLeadName" placeholder="e.g. Amit Kumar" autocomplete="off">
+    </div>
+    <button class="btn-confirm blue" onclick="confirmAddLead()">➕ Add to Dialer</button>
+    <button class="btn-cancel-modal" onclick="closeAddLeadModal()">Cancel</button>
+  </div>
+</div>
 <script src="/socket.io/socket.io.js"></script>
 
 <!-- ── 20-CALL REMINDER POPUP ── -->
@@ -1803,6 +1822,44 @@ async function addInterestedManually() {
     showToast('Lead added successfully', 'success');
     refreshLeadSections();
   } catch (e) { alert('Failed to add lead'); }
+}
+
+// ── Add Lead to Dialer (manual number) ────────────────────────────────────────
+function openAddLeadModal() {
+  document.getElementById('addLeadPhone').value = '';
+  document.getElementById('addLeadName').value  = '';
+  document.getElementById('addLeadModal').classList.add('active');
+}
+function closeAddLeadModal() { document.getElementById('addLeadModal').classList.remove('active'); }
+
+async function confirmAddLead() {
+  const phone = document.getElementById('addLeadPhone').value.trim();
+  const name  = document.getElementById('addLeadName').value.trim();
+  if (!phone || !/^\d{10}$/.test(phone)) { alert('Please enter a valid 10-digit phone number'); return; }
+  try {
+    const r = await fetch('/api/agent/add-manual-number', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId, phone, name })
+    });
+    const d = await r.json();
+    if (d.error) { alert(d.error); return; }
+    closeAddLeadModal();
+    showToast('Lead added to dialer ✅', 'success');
+  } catch (e) { alert('Failed to add lead'); }
+}
+
+async function removeCurrentLead() {
+  if (!currentNumberId) return;
+  if (!confirm('Remove this lead from the dialer pool?')) return;
+  try {
+    const r = await fetch('/api/agent/number/' + currentNumberId, { method: 'DELETE' });
+    const d = await r.json();
+    if (d.error) { alert(d.error); return; }
+    currentNumberId = null;
+    document.getElementById('numberDisplay').style.display = 'none';
+    showToast('Lead removed', 'success');
+    startDialing();
+  } catch (e) { alert('Failed to remove lead'); }
 }
 
 // ── My Stats ──────────────────────────────────────────────────────────────────
