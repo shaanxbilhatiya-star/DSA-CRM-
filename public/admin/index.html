@@ -726,17 +726,6 @@ socket.on('timer-update', () => {
   fetch('/api/admin/stats').then(r => r.json()).then(d => renderStats(d)).catch(() => {});
 });
 
-// ── Auto Daily Report at 6:30 PM IST ────────────────────────────────────────
-socket.on('auto-report', function(data) {
-  showToast('📊 Daily Report is ready! Downloading now…', 'success');
-  const a = document.createElement('a');
-  a.href = data.url;
-  a.download = 'CRM_Daily_Report_' + data.date + '.xlsx';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-});
-
 // Live break ticks — update admin break timers every second
 let lastStats = null;
 setInterval(() => { if (lastStats) tickBreakTimers(); }, 1000);
