@@ -1471,6 +1471,7 @@ io.on('connection', (socket) => {
 
   socket.on('agent-start', ({ agentId }) => {
     socketAgentId = agentId;
+    socket.join('agent-room'); // join agent-room so auto-report broadcasts reach clients
     appState = checkDailyReset(appState);
     const agent = appState.agents[agentId];
     if (!agent) return socket.emit('error', 'Agent not found');
@@ -2347,6 +2348,102 @@ app.delete('/api/agent/number/:numberId', (req, res) => {
   broadcastAdminStats();
   res.json({ success: true });
 });
+
+// ─── Automatic Daily Report at 6:30 PM IST ────────────────────────────────────
+// Generates an XLSX report and broadcasts a download trigger to admin and client
+// rooms every day at 18:30 IST (13:00 UTC).
+function generateDailyReportBuffer() {
+  const now = new Date();
+  const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+  const dateStr = istNow.toISOString().slice(0, 10);
+
+  // ── Summary sheet ──────────────────────────────────────────────────────────
+  const stats = getAdminStats();
+  const summaryRows = [
+    ['Ruralift CRM — Daily Report', dateStr],
+    [],
+    ['Metric', 'Count'],
+    ['Total Numbers', stats.total],
+    ['Dialed', stats.dialed],
+    ['Remaining', stats.remaining],
+    ['Interested', stats.interestedCount],
+    ['Follow-up', stats.followupCount],
+    ['Not Interested', stats.notInterestedCount],
+    ['Discard / Not Eligible', stats.discardCount],
+    ['DND', stats.dndCount],
+  ];
+
+  // ── Agent performance sheet ────────────────────────────────────────────────
+  const agentRows = [
+    ['Agent ID', 'Name', 'Dialed Today', 'First Login', 'Late Login', 'Break (min)', 'Washroom (min)', 'Meeting (min)']
+  ];
+  stats.agentStats.forEach(a => {
+    agentRows.push([
+      a.id,
+      a.name || '',
+      a.totalDialedToday || 0,
+      a.firstLoginToday || '-',
+      a.lateLogin ? 'Yes' : 'No',
+      Math.round((a.totalBreakMs || 0) / 60000),
+      Math.round((a.totalWashroomMs || 0) / 60000),
+      Math.round((a.totalMeetingMs || 0) / 60000),
+    ]);
+  });
+
+  // ── All leads sheet ────────────────────────────────────────────────────────
+  const leadRows = [
+    ['Phone', 'Name', 'Disposition', 'Dialed By', 'Dialed At', 'File']
+  ];
+  appState.numbers.forEach(n => {
+    const agentName = n.dialedBy && appState.agents[n.dialedBy]
+      ? appState.agents[n.dialedBy].name : (n.dialedBy || '');
+    const fileName = (appState.uploadedFiles.find(f => f.id === n.file) || {}).name || n.file || '';
+    leadRows.push([
+      n.phone || '', n.name || '', n.disposition || 'Pending',
+      agentName, n.dialedAt || '', fileName
+    ]);
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), 'Summary');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(agentRows),   'Agents');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(leadRows),    'All Leads');
+
+  return { buf: XLSX.write(wb, { type: 'base64', bookType: 'xlsx' }), dateStr };
+}
+
+// Expose report as a downloadable endpoint (used by the auto-download link)
+app.get('/api/admin/daily-report', (req, res) => {
+  const { buf, dateStr } = generateDailyReportBuffer();
+  const filename = `CRM_Daily_Report_${dateStr}.xlsx`;
+  res.setHeader('Content-Disposition', 'attachment; filename=' + encodeURIComponent(filename));
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(Buffer.from(buf, 'base64'));
+});
+
+// Scheduler: fire at 6:30 PM IST every day
+// 6:30 PM IST = 13:00 UTC
+let lastAutoReportDate = '';
+setInterval(() => {
+  const now = new Date();
+  const istNow = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+  const hh = istNow.getUTCHours();
+  const mm = istNow.getUTCMinutes();
+  const dateStr = istNow.toISOString().slice(0, 10);
+  // Trigger once per day when IST clock is between 18:30 and 18:31
+  if (hh === 18 && mm === 30 && lastAutoReportDate !== dateStr) {
+    lastAutoReportDate = dateStr;
+    console.log(`[AutoReport] Generating daily report for ${dateStr}...`);
+    try {
+      // Emit download signal to admin and agent (client) rooms
+      io.to('admin-room').emit('auto-report', { date: dateStr, url: '/api/admin/daily-report' });
+      io.to('agent-room').emit('auto-report', { date: dateStr, url: '/api/admin/daily-report' });
+      console.log(`[AutoReport] Broadcast sent for ${dateStr}`);
+    } catch (e) {
+      console.error('[AutoReport] Error:', e.message);
+    }
+  }
+}, 60 * 1000); // check every minute
 
 // ─── Page Routes ──────────────────────────────────────────────────────────────
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/admin/index.html')));
