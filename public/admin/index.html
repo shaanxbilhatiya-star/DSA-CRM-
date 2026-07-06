@@ -8,16 +8,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    /* ADMIN theme: pure black + deep-purple (more saturated/darker than TL's indigo-violet) */
-    --bg: #080810; --surface: #100f1e; --surface2: #17162a; --border: #25233d;
-    --accent: #7c3aed; --accent2: #9333ea; --danger: #F44336;
-    --warn: #FF9800; --text: #E0E0E0; --muted: #9E9E9E;
-    --green: #4CAF50; --mono: 'JetBrains Mono', monospace; --sans: 'Space Grotesk', sans-serif;
+    /* ADMIN theme: light, airy purple */
+    --bg: #f6f3fc; --surface: #ffffff; --surface2: #f3eefc; --border: #e2d9f5;
+    --accent: #7c3aed; --accent2: #9333ea; --danger: #dc2626;
+    --warn: #d97706; --text: #251b3a; --muted: #746b8c;
+    --green: #15803d; --mono: 'JetBrains Mono', monospace; --sans: 'Space Grotesk', sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #080810; color: var(--text); font-family: var(--sans); min-height: 100vh; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
 
-  header { background: linear-gradient(135deg, #080810 0%, #100f1e 100%); border-bottom: 1px solid var(--border); box-shadow: 0 2px 20px rgba(124,58,237,.2); padding: 14px 32px; display: flex; align-items: center; justify-content: space-between; }
+  header { background: linear-gradient(135deg, #ffffff 0%, #f3eefc 100%); border-bottom: 1px solid var(--border); box-shadow: 0 2px 16px rgba(124,58,237,.1); padding: 14px 32px; display: flex; align-items: center; justify-content: space-between; }
   .logo { display: flex; flex-direction: column; align-items: center; gap: 5px; flex: 1; }
   .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
@@ -27,7 +27,7 @@
     border: 2px solid rgba(124,58,237,.4); background: rgba(255,255,255,.04);
     filter: drop-shadow(0 0 12px rgba(124,58,237,.65)) drop-shadow(0 0 24px rgba(124,58,237,.3));
     animation: logo-glow-admin 2.5s ease-in-out infinite;
-    box-shadow: 0 4px 16px rgba(124,58,237,.2), 0 1px 4px rgba(0,0,0,.3);
+    box-shadow: 0 4px 16px rgba(124,58,237,.18), 0 1px 4px rgba(0,0,0,.06);
   }
   @keyframes logo-glow-admin {
     0%,100% { filter: drop-shadow(0 0 8px rgba(124,58,237,.55)) drop-shadow(0 0 18px rgba(124,58,237,.25)); }
@@ -38,7 +38,7 @@
   .main { padding: 28px 32px; max-width: 1400px; margin: 0 auto; }
 
   .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 28px; }
-  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 2px 12px rgba(0,0,0,.4); transition: transform .2s, box-shadow .2s; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 2px 12px rgba(124,58,237,.06); transition: transform .2s, box-shadow .2s; }
   .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(124,58,237,.2); }
   .stat-label { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
   .stat-value { font-family: var(--mono); font-size: 36px; font-weight: 700; }
@@ -49,7 +49,7 @@
 
   .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
 
-  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,.4); }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(124,58,237,.06); }
   .panel-header { padding: 16px 20px; background: var(--surface2); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
   .panel-header h2 { font-size: 14px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
   .panel-body { padding: 20px; }
@@ -104,7 +104,7 @@
   .btn-danger { background: rgba(244,67,54,.12); color: var(--danger); border: 1px solid rgba(244,67,54,.3); }
   .btn-danger:hover { background: var(--danger); color: #fff; }
 
-  #toast { position: fixed; bottom: 28px; right: 28px; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 14px 20px; font-size: 14px; transform: translateY(100px); opacity: 0; transition: all .3s; z-index: 999; display: flex; align-items: center; gap: 10px; box-shadow: 0 4px 20px rgba(0,0,0,.5); }
+  #toast { position: fixed; bottom: 28px; right: 28px; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 14px 20px; font-size: 14px; transform: translateY(100px); opacity: 0; transition: all .3s; z-index: 999; display: flex; align-items: center; gap: 10px; box-shadow: 0 4px 20px rgba(0,0,0,.12); }
   #toast.show { transform: translateY(0); opacity: 1; }
   #toast.success { border-color: var(--accent); }
   #toast.error { border-color: var(--danger); }
@@ -175,9 +175,9 @@
   .btn-transfer { background: rgba(76,175,80,.1); color: var(--accent); border: 1px solid rgba(76,175,80,.25); padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: var(--sans); transition: all .2s; white-space: nowrap; }
   .btn-transfer:hover { background: var(--accent); color: #fff; }
 
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 1000; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(37,27,58,.35); z-index: 1000; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity .2s; }
   .modal-overlay.active { opacity: 1; pointer-events: all; }
-  .modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px 32px; min-width: 360px; max-width: 440px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+  .modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px 32px; min-width: 360px; max-width: 440px; box-shadow: 0 20px 60px rgba(124,58,237,.18); }
   .modal-box h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
   .modal-box p { font-size: 13px; color: var(--muted); margin-bottom: 18px; }
   .modal-box label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
@@ -216,7 +216,7 @@
   .lb-period-tab { padding: 6px 16px; border-radius: 6px; border: none; background: transparent; color: rgba(255,255,255,.6); font-size: 12px; font-weight: 700; cursor: pointer; transition: all .2s; }
   .lb-period-tab:hover { color: #fff; background: rgba(255,255,255,.15); }
   .lb-period-tab.active { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(124,58,237,.5); }
-  .leaderboard-body { padding: 20px 24px 24px; background: linear-gradient(180deg, #12102a 0%, #080810 80px); }
+  .leaderboard-body { padding: 20px 24px 24px; background: linear-gradient(180deg, #ede9fe 0%, #ffffff 80px); }
   .face-bar { display: flex; align-items: flex-end; justify-content: center; gap: 20px; padding: 24px 0 20px; margin-bottom: 8px; }
   .face-bar-item { display: flex; flex-direction: column; align-items: center; position: relative; }
   .face-ring { border-radius: 50%; overflow: hidden; flex-shrink: 0; position: relative; transition: transform .3s; }
@@ -233,7 +233,7 @@
   .face-ring.r2 .face-letter { font-size: 28px; }
   .face-ring.r3 { width: 62px; height: 62px; border: 3px solid #f97316; box-shadow: 0 0 0 3px rgba(249,115,22,.2), 0 4px 14px rgba(249,115,22,.3); }
   .face-ring.r3 .face-letter { font-size: 22px; }
-  .face-crown { font-size: 20px; margin-bottom: -6px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.4)); z-index: 2; position: relative; }
+  .face-crown { font-size: 20px; margin-bottom: -6px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.15)); z-index: 2; position: relative; }
   .face-rank-badge { position: absolute; bottom: -2px; right: -2px; width: 22px; height: 22px; border-radius: 50%; font-size: 11px; font-weight: 800; color: #fff; display: flex; align-items: center; justify-content: center; border: 2px solid var(--surface); z-index: 3; }
   .face-rank-badge.r1 { background: #f59e0b; }
   .face-rank-badge.r2 { background: #94a3b8; }
@@ -245,7 +245,7 @@
   .face-bar-item.r3 .face-score { color: #f97316; }
   .face-remarks { font-size: 9px; color: var(--green); font-style: italic; margin-top: 4px; text-align: center; max-width: 96px; line-height: 1.4; }
   .lb-list { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
-  .lb-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); transition: all .2s; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+  .lb-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); transition: all .2s; box-shadow: 0 1px 4px rgba(124,58,237,.06); }
   .lb-row:hover { border-color: var(--accent2); box-shadow: 0 4px 16px rgba(124,58,237,.15); transform: translateX(3px); }
   .lb-rank-badge { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; background: var(--surface2); color: var(--muted); border: 1.5px solid var(--border); flex-shrink: 0; font-family: monospace; }
   .lb-row-avatar { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: #fff; background: var(--accent); overflow: hidden; flex-shrink: 0; border: 2px solid var(--border); }
@@ -439,42 +439,15 @@
       <span style="font-size:12px;color:var(--muted)">View &amp; manage uploaded batches</span>
     </div>
     <div class="panel-body">
+      <div class="upload-zone" id="dropZone" style="margin-bottom:20px">
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+        <div class="upload-icon">&#128193;</div>
+        <p><strong>Click or drag</strong> an Excel/CSV file here to upload numbers</p>
+        <p style="margin-top:4px;font-size:11px;color:var(--muted)">Accepted: .xlsx, .xls, .csv</p>
+      </div>
+      <div id="uploadStatus" style="margin-bottom:16px;font-size:13px;color:var(--muted);display:none"></div>
       <div class="file-list" id="fileList">
         <div class="empty">No files uploaded yet</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Active Agents Panel (full width) -->
-  <div class="panel" style="margin-bottom:20px">
-    <div class="panel-header">
-      <h2>Active Agents</h2>
-      <span id="agentCount" style="font-size:12px;color:var(--muted)">0 agents</span>
-    </div>
-    <div class="panel-body" style="padding:0;overflow-x:auto">
-      <table class="agents-table" style="min-width:900px">
-        <thead>
-          <tr>
-            <th>Agent</th>
-            <th>Login</th>
-            <th>Status</th>
-            <th>Total No. Dialed</th>
-            <th>Net Dialing Time <span title="Net Dialing Time = 8h shift - Break - Meeting - Washroom - TL Mode (time available for actual calling)" style="cursor:help;opacity:.7">&#9432;</span></th>
-            <th>Break Used</th>
-            <th>&#128699; Washroom</th>
-            <th>&#128203; Meeting</th>
-            <th>&#128203; TL Mode</th>
-          </tr>
-        </thead>
-        <tbody id="agentTable">
-          <tr><td colspan="9" class="empty">No agents registered</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="panel-body">
-      <div class="btn-row">
-        <button class="btn btn-danger" onclick="clearAll()">&#128465; Clear All Numbers</button>
-        <button class="btn btn-danger" onclick="hardReset()" style="background:rgba(244,67,54,.25);border:2px solid var(--danger);font-weight:800;letter-spacing:.5px">&#128163; HARD RESET (Factory Reset)</button>
       </div>
     </div>
   </div>
@@ -631,6 +604,40 @@
         <input type="file"   id="newEidPhoto" accept="image/*" style="font-size:12px;max-width:180px;">
         <button class="btn-add-eid" onclick="addEid()">+ Add Agent</button>
         <div class="eid-err" id="eidErr"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active Agents Panel (full width) -->
+  <div class="panel" style="margin-bottom:20px">
+    <div class="panel-header">
+      <h2>Active Agents</h2>
+      <span id="agentCount" style="font-size:12px;color:var(--muted)">0 agents</span>
+    </div>
+    <div class="panel-body" style="padding:0;overflow-x:auto">
+      <table class="agents-table" style="min-width:900px">
+        <thead>
+          <tr>
+            <th>Agent</th>
+            <th>Login</th>
+            <th>Status</th>
+            <th>Total No. Dialed</th>
+            <th>Net Dialing Time <span title="Net Dialing Time = 8h shift - Break - Meeting - Washroom - TL Mode (time available for actual calling)" style="cursor:help;opacity:.7">&#9432;</span></th>
+            <th>Break Used</th>
+            <th>&#128699; Washroom</th>
+            <th>&#128203; Meeting</th>
+            <th>&#128203; TL Mode</th>
+          </tr>
+        </thead>
+        <tbody id="agentTable">
+          <tr><td colspan="9" class="empty">No agents registered</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="panel-body">
+      <div class="btn-row">
+        <button class="btn btn-danger" onclick="clearAll()">&#128465; Clear All Numbers</button>
+        <button class="btn btn-danger" onclick="hardReset()" style="background:rgba(244,67,54,.25);border:2px solid var(--danger);font-weight:800;letter-spacing:.5px">&#128163; HARD RESET (Factory Reset)</button>
       </div>
     </div>
   </div>
@@ -916,7 +923,7 @@ function renderStats(data) {
       const netDialingTime = netH + 'h ' + netM + 'm';
 
       const tlModeCell = a.onTlMode
-        ? `<span id="tlmode-timer-${a.id}" style="font-family:var(--mono);font-size:12px;color:#a78bfa;font-weight:700">${formatMs(a.totalTlModeMs||0)} &#9654;</span>`
+        ? `<span id="tlmode-timer-${a.id}" style="font-family:var(--mono);font-size:12px;color:#7c3aed;font-weight:700">${formatMs(a.totalTlModeMs||0)} &#9654;</span>`
         : `<span style="font-family:var(--mono);font-size:12px;color:var(--muted)">${formatMs(a.totalTlModeMs||0)}</span>`;
 
       return `<tr>
