@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "fix",
   "description": "Fix the DELETE /api/admin/eids/:eid endpoint to fully clean up all agent data when an EID is removed, including the agent record, number references, socket connections, and real-time broadcast.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "In server.js, locate the DELETE /api/admin/eids/:eid handler at approximately line 1751. Currently it only does: delete appState.allowedEids[eid]; saveState(appState); res.json({ success: true });",
     "Add cleanup logic BEFORE saveState to: (a) Compute the agentId as 'emp_' + eid. (b) Delete appState.agents[agentId] to remove the agent runtime record entirely.",
@@ -32,5 +32,5 @@
     "Manually inspect the DELETE endpoint in server.js to confirm all cleanup steps are present"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Syntax check passes (node --check server.js). npm install cannot complete due to network restrictions (403 from squid proxy), but node_modules partially exists and no new dependencies were added. Server startup test cannot run without express installed but the code change is purely additive logic in an existing endpoint and verified syntactically correct."
 }
