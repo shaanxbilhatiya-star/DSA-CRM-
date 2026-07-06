@@ -2272,43 +2272,52 @@ setInterval(tickLiveClock, 1000);
   };
 
   // ── Apply remote state onto this page ─────────────────────────────────────
+  // IMPORTANT: this function ONLY touches timer cards/state.
+  // It never calls showIdle() — each CRM's dialer state is independent.
+  // When a timer ends via sync, we just hide the card and restore buttons
+  // based on what THIS CRM already had showing (currentNumberId / dialerWasActive).
+  function restoreButtonsAfterSync() {
+    // Re-show the correct buttons for whatever state this CRM is in,
+    // without touching numberDisplay or dispositionPanel at all.
+    if (!breakExhausted && !onBreak && !onWashroom && !onMeeting) {
+      // Only show break button if dialing is active on THIS CRM
+      if (currentNumberId || dialerWasActive) {
+        document.getElementById('btnBreak').style.display    = 'block';
+        document.getElementById('btnBreak').disabled         = false;
+        document.getElementById('btnBreak').textContent      = '☕ Take a Break';
+        document.getElementById('btnWashroom').style.display = 'block';
+        document.getElementById('btnMeeting').style.display  = 'block';
+      }
+    } else if (breakExhausted && !onBreak && !onWashroom && !onMeeting) {
+      if (currentNumberId || dialerWasActive) {
+        document.getElementById('btnBreak').style.display    = 'block';
+        document.getElementById('btnBreak').disabled         = true;
+        document.getElementById('btnBreak').textContent      = '☕ No Break Time Left';
+        document.getElementById('btnWashroom').style.display = 'block';
+        document.getElementById('btnMeeting').style.display  = 'block';
+      }
+    }
+  }
+
   function applyRemoteState(remote) {
     _syncLocked = true;
     try {
       // ── Break ──────────────────────────────────────────────────────────────
       if (remote.onBreak && !onBreak) {
-        // Remote is on break but we are not — start break here
-        onBreak         = true;
+        onBreak          = true;
         dialerWasOnBreak = true;
-        breakStartedAt  = remote.breakStartedAt || Date.now();
-        totalBreakMs    = remote.totalBreakMs   || 0;
-        // Update allowed ms if server differs
+        breakStartedAt   = remote.breakStartedAt || Date.now();
+        totalBreakMsUsed = remote.totalBreakMs   || 0;
         if (remote.breakAllowedMs) breakAllowedMs = remote.breakAllowedMs;
         showBreakMode();
         startBreakCountdown();
       } else if (!remote.onBreak && onBreak) {
-        // Remote ended break — end it here
         onBreak = false; dialerWasOnBreak = false; breakStartedAt = null;
         totalBreakMsUsed = remote.totalBreakMs || totalBreakMsUsed;
         breakExhausted   = totalBreakMsUsed >= breakAllowedMs;
         stopBreakCountdown(); updateBreakUsedDisplay(); hideBreakMode();
-        if (currentNumberId) {
-          document.getElementById('numberDisplay').style.display    = 'block';
-          document.getElementById('dispositionPanel').style.display = 'block';
-          if (!breakExhausted) {
-            document.getElementById('btnBreak').style.display = 'block';
-            document.getElementById('btnBreak').disabled      = false;
-            document.getElementById('btnBreak').textContent   = '☕ Take a Break';
-          } else {
-            document.getElementById('btnBreak').style.display = 'block';
-            document.getElementById('btnBreak').disabled      = true;
-            document.getElementById('btnBreak').textContent   = '☕ No Break Time Left';
-          }
-          document.getElementById('btnWashroom').style.display = 'block';
-          document.getElementById('btnMeeting').style.display  = 'block';
-        } else { showIdle(); }
+        restoreButtonsAfterSync();
       } else if (remote.onBreak && onBreak) {
-        // Both on break — just sync the accumulated ms so timers stay in step
         totalBreakMsUsed = remote.totalBreakMs || totalBreakMsUsed;
         if (remote.breakStartedAt && Math.abs((breakStartedAt || 0) - remote.breakStartedAt) > 5000) {
           breakStartedAt = remote.breakStartedAt;
@@ -2317,52 +2326,40 @@ setInterval(tickLiveClock, 1000);
 
       // ── Washroom ───────────────────────────────────────────────────────────
       if (remote.onWashroom && !onWashroom && !onBreak) {
-        onWashroom        = true;
-        washroomStartedAt = remote.washroomStartedAt || Date.now();
-        totalWashroomMsUsed = remote.totalWashroomMs || 0;
+        onWashroom          = true;
+        washroomStartedAt   = remote.washroomStartedAt || Date.now();
+        totalWashroomMsUsed = remote.totalWashroomMs   || 0;
         showWashroomMode();
         startWashroomTimer();
       } else if (!remote.onWashroom && onWashroom) {
         onWashroom = false; washroomStartedAt = null;
         totalWashroomMsUsed = remote.totalWashroomMs || totalWashroomMsUsed;
         stopWashroomTimer(); updateWashroomUsedDisplay(); hideWashroomMode();
-        if (currentNumberId) {
-          document.getElementById('numberDisplay').style.display    = 'block';
-          document.getElementById('dispositionPanel').style.display = 'block';
-          if (!breakExhausted) { document.getElementById('btnBreak').style.display = 'block'; document.getElementById('btnBreak').disabled = false; }
-          document.getElementById('btnWashroom').style.display = 'block';
-          document.getElementById('btnMeeting').style.display  = 'block';
-        } else { showIdle(); }
+        restoreButtonsAfterSync();
       } else if (remote.onWashroom && onWashroom) {
         totalWashroomMsUsed = remote.totalWashroomMs || totalWashroomMsUsed;
       }
 
       // ── Meeting ────────────────────────────────────────────────────────────
       if (remote.onMeeting && !onMeeting && !onBreak && !onWashroom) {
-        onMeeting        = true;
-        meetingStartedAt = remote.meetingStartedAt || Date.now();
-        totalMeetingMsUsed = remote.totalMeetingMs || 0;
+        onMeeting          = true;
+        meetingStartedAt   = remote.meetingStartedAt || Date.now();
+        totalMeetingMsUsed = remote.totalMeetingMs   || 0;
         showMeetingMode();
         startMeetingTimer();
       } else if (!remote.onMeeting && onMeeting) {
         onMeeting = false; meetingStartedAt = null;
         totalMeetingMsUsed = remote.totalMeetingMs || totalMeetingMsUsed;
         stopMeetingTimer(); updateMeetingUsedDisplay(); hideMeetingMode();
-        if (currentNumberId) {
-          document.getElementById('numberDisplay').style.display    = 'block';
-          document.getElementById('dispositionPanel').style.display = 'block';
-          if (!breakExhausted) { document.getElementById('btnBreak').style.display = 'block'; document.getElementById('btnBreak').disabled = false; }
-          document.getElementById('btnWashroom').style.display = 'block';
-          document.getElementById('btnMeeting').style.display  = 'block';
-        } else { showIdle(); }
+        restoreButtonsAfterSync();
       } else if (remote.onMeeting && onMeeting) {
         totalMeetingMsUsed = remote.totalMeetingMs || totalMeetingMsUsed;
       }
 
       // ── Sync accumulated ms for stat cards even when no mode change ────────
-      if (!remote.onBreak && !onBreak)       { totalBreakMsUsed    = remote.totalBreakMs    || totalBreakMsUsed;    updateBreakUsedDisplay(); }
-      if (!remote.onWashroom && !onWashroom)  { totalWashroomMsUsed = remote.totalWashroomMs || totalWashroomMsUsed; updateWashroomUsedDisplay(); }
-      if (!remote.onMeeting  && !onMeeting)   { totalMeetingMsUsed  = remote.totalMeetingMs  || totalMeetingMsUsed;  updateMeetingUsedDisplay(); }
+      if (!remote.onBreak    && !onBreak)    { totalBreakMsUsed    = remote.totalBreakMs    || totalBreakMsUsed;    updateBreakUsedDisplay(); }
+      if (!remote.onWashroom && !onWashroom) { totalWashroomMsUsed = remote.totalWashroomMs || totalWashroomMsUsed; updateWashroomUsedDisplay(); }
+      if (!remote.onMeeting  && !onMeeting)  { totalMeetingMsUsed  = remote.totalMeetingMs  || totalMeetingMsUsed;  updateMeetingUsedDisplay(); }
 
     } finally {
       _syncLocked = false;
