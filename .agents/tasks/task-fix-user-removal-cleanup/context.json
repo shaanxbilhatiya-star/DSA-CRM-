@@ -1,0 +1,22 @@
+{
+  "project_type": "Node.js Express + Socket.IO real-time CRM application",
+  "language": "JavaScript (Node.js)",
+  "build_system": "npm",
+  "test_framework": "No test framework - no tests exist in the project",
+  "build_command": "npm install",
+  "test_command": "node -e \"require('./server.js')\" is not safe (starts server). Use syntax validation: node --check server.js",
+  "verification_instructions": "1. Run npm install to ensure deps are present. 2. Run node --check server.js to verify syntax. 3. Start server briefly with timeout to confirm no startup crash.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "cd /projects/sandbox/DSA-CRM- && npm install",
+  "environment_constraints": "No test framework exists. Verification is via syntax check and manual inspection of logic. Server uses port 3000.",
+  "contribution_requirements": "No CONTRIBUTING.md exists. Follow existing code patterns in server.js.",
+  "key_patterns": "Single-file architecture (server.js, 2427 lines). State is in-memory appState object persisted to state.json via saveState(). Agent IDs follow pattern 'emp_<eid>'. Numbers track references to agents via: assignedTo, dialedBy, interestedBy, followupLockedBy. Socket.IO used for real-time updates - broadcastAdminStats() pushes to admin-room. Rankings built from appState.agents + appState.allowedEids + appState.dialedLog.",
+  "relevant_files": [
+    "server.js (lines 1751-1757: DELETE /api/admin/eids/:eid endpoint)",
+    "server.js (lines 618-686: getAdminStats function - iterates appState.agents)",
+    "server.js (lines 1117-1129: /api/admin/agents-list - iterates both agents and allowedEids)",
+    "server.js (lines 1860-1970: /api/rankings - iterates agents, allowedEids, dialedLog)",
+    "server.js (lines 1515-1530: Socket.IO connection handler with socketAgentId tracking)"
+  ],
+  "directory_structure": "server.js (main backend), public/ (static frontend: admin/, agent/, tl/, forms/), data/ (empty - state stored externally), package.json"
+}
