@@ -18,6 +18,9 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+// Map agentId -> socket.id so we can force-disconnect a specific agent server-side
+const agentSocketMap = new Map();
+
 const PORT = 3000;
 
 function ensureDir(d) { if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true }); }
@@ -1524,6 +1527,7 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     if (socketAgentId) {
+      agentSocketMap.delete(socketAgentId);
       const agent = appState.agents[socketAgentId];
       if (agent) { agent.active = false; saveState(appState); }
       broadcastAdminStats();
@@ -1532,6 +1536,7 @@ io.on('connection', (socket) => {
 
   socket.on('agent-start', ({ agentId }) => {
     socketAgentId = agentId;
+    agentSocketMap.set(agentId, socket.id);
     appState = checkDailyReset(appState);
     const agent = appState.agents[agentId];
     if (!agent) return socket.emit('error', 'Agent not found');
@@ -1780,8 +1785,19 @@ app.delete('/api/admin/eids/:eid', (req, res) => {
 
   saveState(appState);
 
-  // Force disconnect any active socket for the removed agent
-  io.emit('force-stop-agent', { agentId });
+  // Force disconnect the agent's socket server-side if connected
+  const agentSocketId = agentSocketMap.get(agentId);
+  if (agentSocketId) {
+    const agentSocket = io.sockets.sockets.get(agentSocketId);
+    if (agentSocket) {
+      agentSocket.emit('force-stop-agent', { agentId });
+      agentSocket.disconnect(true);
+    }
+    agentSocketMap.delete(agentId);
+  } else {
+    // Fallback broadcast in case the map entry is stale or missing
+    io.emit('force-stop-agent', { agentId });
+  }
 
   // Broadcast updated stats so admin panel reflects the removal immediately
   broadcastAdminStats();

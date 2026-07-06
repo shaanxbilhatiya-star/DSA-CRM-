@@ -1,0 +1,24 @@
+{
+  "id": "FEAT-002",
+  "type": "fix",
+  "description": "Add server-side socket disconnection for removed agents by maintaining a module-level agentId-to-socketId map, so that when an admin removes an EID the corresponding socket is actively disconnected server-side rather than relying solely on client-side handling.",
+  "status": "in_progress",
+  "steps": [
+    "Add a module-level Map (agentSocketMap) near the Socket.IO setup to track agentId -> socket.id mappings.",
+    "In the 'agent-start' socket handler, store the mapping: agentSocketMap.set(agentId, socket.id).",
+    "In the 'disconnect' socket handler, remove the mapping: agentSocketMap.delete(socketAgentId).",
+    "In the DELETE /api/admin/eids/:eid handler, after saveState, look up the socket from agentSocketMap and call socket.disconnect(true) to force server-side disconnection. Remove the entry from the map. Keep the io.emit('force-stop-agent') as a fallback."
+  ],
+  "acceptance_criteria": [
+    "A module-level agentSocketMap exists that maps agentId to socket.id",
+    "On agent-start, the mapping is stored",
+    "On disconnect, the mapping is removed",
+    "On DELETE /api/admin/eids/:eid, the agent's socket is found via the map and disconnected server-side",
+    "node --check server.js passes (no syntax errors)"
+  ],
+  "verification": [
+    "Run: cd /projects/sandbox/DSA-CRM- && NODE_OPTIONS='' node --check server.js"
+  ],
+  "blocked_reason": null,
+  "findings": null
+}
