@@ -26,9 +26,30 @@
   .footer-links a{color:#64748b;text-decoration:none;font-size:13px;font-weight:600;transition:color .2s}
   .footer-links a:hover{color:#7c3aed}
 
+  /* ── Responsive: Tablet (max-width: 768px) ── */
+  @media(max-width:768px){
+    body{padding:28px 16px}
+    header h1{font-size:22px}
+    .cards{grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+    .card{padding:22px 18px}
+    .footer-links{gap:16px;margin-top:36px;padding-top:20px}
+  }
+
+  /* ── Responsive: Phone (max-width: 600px) ── */
   @media(max-width:600px){
     body{padding:20px 12px}
-    .cards{grid-template-columns:1fr}
+    header{margin-bottom:28px}
+    header img{height:44px;margin-bottom:10px}
+    header h1{font-size:20px}
+    header p{font-size:12px}
+    .section-title{font-size:14px;margin:24px 0 12px}
+    .cards{grid-template-columns:1fr;gap:12px}
+    .card{padding:20px 16px;border-radius:12px}
+    .card .icon{font-size:28px;margin-bottom:8px}
+    .card h2{font-size:15px}
+    .card p{font-size:11px}
+    .footer-links{flex-direction:column;align-items:center;gap:12px;margin-top:32px}
+    .footer-links a{font-size:12px}
   }
 </style>
 </head>

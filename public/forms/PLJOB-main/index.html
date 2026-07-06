@@ -263,10 +263,42 @@
       color: #4b5563;
     }
 
+    /* ── Responsive: Tablet (max-width: 768px) ── */
+    @media (max-width: 768px) {
+      body { padding: 1.2rem 1rem 3rem; }
+      .hero { padding: 1.5rem; border-radius: 1.5rem; margin-bottom: 1.5rem; }
+      .hero h1 { font-size: 1.4rem; }
+      .cards-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+      .app-card { padding: 1.2rem 1rem 1.4rem; }
+      .whatsapp-tool { padding: 1.4rem 1.2rem; border-radius: 1.4rem; }
+      .section-title { font-size: 1.2rem; }
+      .form-row { gap: 0.8rem; }
+      .field-group { min-width: 160px; }
+    }
+
+    /* ── Responsive: Phone (max-width: 680px) ── */
     @media (max-width: 680px) {
-      body { padding: 1rem 1rem 3rem; }
-      .hero h1 { font-size: 1.5rem; }
-      .whatsapp-tool { padding: 1.2rem; }
+      body { padding: 1rem 0.75rem 3rem; }
+      .hero { padding: 1.2rem; border-radius: 1.2rem; }
+      .hero h1 { font-size: 1.25rem; }
+      .hero p { font-size: 0.85rem; }
+      .badge { font-size: 0.7rem; padding: 0.25rem 0.8rem; }
+      .cards-grid { grid-template-columns: 1fr; gap: 0.8rem; }
+      .app-card { padding: 1rem; border-radius: 1rem; }
+      .app-card h3 { font-size: 1.1rem; }
+      .card-icon { font-size: 2rem; margin-bottom: 0.6rem; }
+      .whatsapp-tool { padding: 1rem; border-radius: 1rem; }
+      .section-title { font-size: 1.1rem; padding-left: 0.8rem; }
+      .form-row { flex-direction: column; gap: 0.8rem; }
+      .field-group { min-width: 100%; }
+      .field-group input, .field-group select, .field-group textarea { font-size: 16px; padding: 0.8rem; min-height: 44px; }
+      .message-preview { font-size: 0.8rem; padding: 1rem; max-height: 260px; }
+      .btn-copy { width: 100%; min-height: 44px; padding: 0.9rem 1.4rem; font-size: 0.95rem; }
+      .flex-buttons { flex-direction: column; }
+      .conditional-panel { padding: 0.8rem; }
+      .checkbox-group { flex-direction: column; gap: 0.7rem; }
+      .radio-group { flex-direction: column; gap: 0.6rem; }
+      footer { font-size: 0.7rem; margin-top: 2rem; }
     }
   </style>
 </head>
