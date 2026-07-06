@@ -1751,8 +1751,41 @@ app.post('/api/admin/eids', (req, res) => {
 app.delete('/api/admin/eids/:eid', (req, res) => {
   const eid = req.params.eid;
   if (!appState.allowedEids[eid]) return res.status(404).json({ error: 'EID not found' });
+
+  const agentId = 'emp_' + eid;
+
+  // Remove from allowedEids
   delete appState.allowedEids[eid];
+
+  // Remove agent runtime record
+  delete appState.agents[agentId];
+
+  // Clean up number references for the removed agent
+  if (appState.numbers && Array.isArray(appState.numbers)) {
+    appState.numbers.forEach(n => {
+      // Release assigned numbers back to the pool
+      if (n.assignedTo === agentId) {
+        n.assignedTo = null;
+      }
+      // Release followup locks so others can manage them
+      if (n.followupLockedBy === agentId) {
+        n.followupLockedBy = null;
+      }
+      // Clear interested lead ownership so admin can reassign
+      if (n.interestedBy === agentId) {
+        n.interestedBy = null;
+      }
+    });
+  }
+
   saveState(appState);
+
+  // Force disconnect any active socket for the removed agent
+  io.emit('force-stop-agent', { agentId });
+
+  // Broadcast updated stats so admin panel reflects the removal immediately
+  broadcastAdminStats();
+
   res.json({ success: true });
 });
 
@@ -1918,6 +1951,17 @@ app.get('/api/rankings', (req, res) => {
     else if (entry.disposition === 'dead') agentScores[aid].dead++;
     else if (entry.disposition === 'switch_off') agentScores[aid].switchOff++;
   });
+
+  // Filter out agents that have been removed (no longer in agents or allowedEids)
+  for (const aid of Object.keys(agentScores)) {
+    const eidMatch = aid.match(/^emp_(\d+)$/);
+    if (eidMatch) {
+      const eidVal = eidMatch[1];
+      if (!appState.agents[aid] && !appState.allowedEids[eidVal]) {
+        delete agentScores[aid];
+      }
+    }
+  }
 
   // New formula: MAX(0, MIN(100, (((100*Interested) + (25*FollowUp) - (10*NotInterested) - (15*NotEligible/discard) - (2*CNC) - (2*SwitchOff)) / (TotalCalls*100)) * 100))
   const rankings = Object.values(agentScores).map(a => {
