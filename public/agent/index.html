@@ -2242,6 +2242,7 @@ setInterval(tickLiveClock, 1000);
   // ── State tracking (avoid infinite loops) ─────────────────────────────────
   let _syncLocked  = false;   // true while we are applying a remote state change
   let _lastSyncKey = '';      // stringified last-seen remote state to detect changes
+  let _dialerWasActiveBeforeSync = false;
 
   // ── Helper: call every peer to perform an action ───────────────────────────
   function notifyPeers(type, action) {
@@ -2277,25 +2278,24 @@ setInterval(tickLiveClock, 1000);
   // When a timer ends via sync, we just hide the card and restore buttons
   // based on what THIS CRM already had showing (currentNumberId / dialerWasActive).
   function restoreButtonsAfterSync() {
-    // Re-show the correct buttons for whatever state this CRM is in,
-    // without touching numberDisplay or dispositionPanel at all.
-    if (!breakExhausted && !onBreak && !onWashroom && !onMeeting) {
-      // Only show break button if dialing is active on THIS CRM
-      if (currentNumberId || dialerWasActive) {
+    const wasActive = currentNumberId || dialerWasActive || _dialerWasActiveBeforeSync;
+    _dialerWasActiveBeforeSync = false;
+    if (!onBreak && !onWashroom && !onMeeting && wasActive) {
+      if (currentNumberId) {
+        document.getElementById('numberDisplay').style.display    = 'block';
+        document.getElementById('dispositionPanel').style.display = 'block';
+      }
+      if (!breakExhausted) {
         document.getElementById('btnBreak').style.display    = 'block';
         document.getElementById('btnBreak').disabled         = false;
         document.getElementById('btnBreak').textContent      = '☕ Take a Break';
-        document.getElementById('btnWashroom').style.display = 'block';
-        document.getElementById('btnMeeting').style.display  = 'block';
-      }
-    } else if (breakExhausted && !onBreak && !onWashroom && !onMeeting) {
-      if (currentNumberId || dialerWasActive) {
+      } else {
         document.getElementById('btnBreak').style.display    = 'block';
         document.getElementById('btnBreak').disabled         = true;
         document.getElementById('btnBreak').textContent      = '☕ No Break Time Left';
-        document.getElementById('btnWashroom').style.display = 'block';
-        document.getElementById('btnMeeting').style.display  = 'block';
       }
+      document.getElementById('btnWashroom').style.display = 'block';
+      document.getElementById('btnMeeting').style.display  = 'block';
     }
   }
 
@@ -2309,6 +2309,7 @@ setInterval(tickLiveClock, 1000);
         breakStartedAt   = remote.breakStartedAt || Date.now();
         totalBreakMsUsed = remote.totalBreakMs   || 0;
         if (remote.breakAllowedMs) breakAllowedMs = remote.breakAllowedMs;
+        _dialerWasActiveBeforeSync = !!(currentNumberId || dialerWasActive);
         showBreakMode();
         startBreakCountdown();
       } else if (!remote.onBreak && onBreak) {
@@ -2329,6 +2330,7 @@ setInterval(tickLiveClock, 1000);
         onWashroom          = true;
         washroomStartedAt   = remote.washroomStartedAt || Date.now();
         totalWashroomMsUsed = remote.totalWashroomMs   || 0;
+        _dialerWasActiveBeforeSync = !!(currentNumberId || dialerWasActive);
         showWashroomMode();
         startWashroomTimer();
       } else if (!remote.onWashroom && onWashroom) {
@@ -2345,6 +2347,7 @@ setInterval(tickLiveClock, 1000);
         onMeeting          = true;
         meetingStartedAt   = remote.meetingStartedAt || Date.now();
         totalMeetingMsUsed = remote.totalMeetingMs   || 0;
+        _dialerWasActiveBeforeSync = !!(currentNumberId || dialerWasActive);
         showMeetingMode();
         startMeetingTimer();
       } else if (!remote.onMeeting && onMeeting) {
