@@ -629,26 +629,6 @@ function adminLogout(){
     </div>
   </div>
 
-  <!-- EID Whitelist Management Panel -->
-  <div class="panel eid-panel">
-    <div class="panel-header">
-      <h2>&#128274; Allowed Agent EIDs</h2>
-      <span style="font-size:12px;color:var(--muted)">Only these Employee IDs can log into the Agent panel</span>
-    </div>
-    <div class="panel-body">
-      <div class="eid-list" id="eidList">
-        <div class="eid-empty">Loading...</div>
-      </div>
-      <div class="eid-add-form">
-        <input type="number" id="newEid" placeholder="Employee ID" min="1" autocomplete="off">
-        <input type="text"   id="newEidName" placeholder="Agent Name" autocomplete="off">
-        <input type="file"   id="newEidPhoto" accept="image/*" style="font-size:12px;max-width:180px;">
-        <button class="btn-add-eid" onclick="addEid()">+ Add Agent</button>
-        <div class="eid-err" id="eidErr"></div>
-      </div>
-    </div>
-  </div>
-
   <!-- Active Agents Panel (full width) -->
   <div class="panel" style="margin-bottom:20px">
     <div class="panel-header">
@@ -674,6 +654,26 @@ function adminLogout(){
           <tr><td colspan="9" class="empty">No agents registered</td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- EID Whitelist Management Panel -->
+  <div class="panel eid-panel">
+    <div class="panel-header">
+      <h2>&#128274; Allowed Agent EIDs</h2>
+      <span style="font-size:12px;color:var(--muted)">Only these Employee IDs can log into the Agent panel</span>
+    </div>
+    <div class="panel-body">
+      <div class="eid-list" id="eidList">
+        <div class="eid-empty">Loading...</div>
+      </div>
+      <div class="eid-add-form">
+        <input type="number" id="newEid" placeholder="Employee ID" min="1" autocomplete="off">
+        <input type="text"   id="newEidName" placeholder="Agent Name" autocomplete="off">
+        <input type="file"   id="newEidPhoto" accept="image/*" style="font-size:12px;max-width:180px;">
+        <button class="btn-add-eid" onclick="addEid()">+ Add Agent</button>
+        <div class="eid-err" id="eidErr"></div>
+      </div>
     </div>
   </div>
 
