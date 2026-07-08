@@ -473,6 +473,13 @@
     50% { box-shadow: 0 4px 20px rgba(245,158,11,.35), 0 0 40px rgba(245,158,11,.1); }
   }
   .rank-1-avatar { border-color: #f59e0b !important; box-shadow: 0 0 12px rgba(245,158,11,.4); }
+
+  /* ── Script: right-side slide panel; Current Lead panel stays fully visible ── */
+  #scriptPopupModal { background:transparent !important; justify-content:flex-end !important; align-items:stretch !important; transition:none !important; }
+  #scriptPopupModal.active { pointer-events:none !important; opacity:1 !important; }
+  #scriptPopupModal > .modal-box { pointer-events:all; width:52vw !important; max-width:720px !important; height:100vh !important; max-height:100vh !important; border-radius:18px 0 0 18px !important; border-left:2px solid var(--border); box-shadow:-8px 0 40px rgba(0,0,0,.22); transform:translateX(110%); transition:transform .28s cubic-bezier(.4,0,.2,1) !important; padding:28px 32px !important; display:flex !important; flex-direction:column !important; }
+  #scriptPopupModal.active > .modal-box { transform:translateX(0); }
+  @media (max-width:768px) { #scriptPopupModal > .modal-box { width:88vw !important; } }
 </style>
 </head>
 <body>
