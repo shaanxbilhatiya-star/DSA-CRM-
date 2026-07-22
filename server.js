@@ -1330,7 +1330,7 @@ app.get('/share/:token', (req, res) => {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   const num = appState.numbers.find(n => n.shareToken === req.params.token);
   if (!num) {
-    return res.status(404).send('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Not found</title></head><body style="font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;text-align:center;padding:24px"><div><div style="font-size:56px">\uD83D\uDD0D</div><h1 style="font-weight:700">Link not found</h1><p style="color:#94a3b8">This document link is invalid or has been removed.</p></div></body></html>');
+    return res.status(404).send('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Not found</title></head><body style="font-family:system-ui,sans-serif;background:linear-gradient(135deg,#1e1b4b,#312e81);color:#e2e8f0;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;text-align:center;padding:24px"><div><div style="font-size:56px">\uD83D\uDD0D</div><h1 style="font-weight:700;color:#c4b5fd">Link not found</h1><p style="color:#a78bfa">This document link is invalid or has been removed.</p></div></body></html>');
   }
   const token = num.shareToken;
   const docs = num.shareDocs || [];
@@ -1363,32 +1363,70 @@ app.get('/share/:token', (req, res) => {
 <title>${esc(name)} — Loan Documents</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#eef2ff,#f0f9ff 55%,#faf5ff);color:#0f172a;min-height:100vh;padding:24px 14px 60px}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#f5f3ff,#ede9fe 40%,#faf5ff 80%,#fdf4ff);color:#0f172a;min-height:100vh;padding:24px 14px 60px}
   .wrap{max-width:760px;margin:0 auto}
-  .card{background:#fff;border:1px solid rgba(15,23,42,.06);border-radius:16px;box-shadow:0 8px 30px rgba(37,99,235,.08);padding:22px 24px;margin-bottom:18px}
-  .head{background:linear-gradient(135deg,#1e40af,#2563eb 60%,#3b82f6);color:#fff;border:none}
+  .card{background:#fff;border:1px solid rgba(88,28,135,.06);border-radius:16px;box-shadow:0 8px 30px rgba(124,58,237,.08);padding:22px 24px;margin-bottom:18px}
+  .head{background:linear-gradient(135deg,#4c1d95,#6d28d9 50%,#7c3aed 100%);color:#fff;border:none;padding:24px 24px 20px}
   .head h1{font-size:24px;font-weight:700;letter-spacing:-.3px}
-  .head .logo-bar{display:flex;align-items:center;gap:14px;margin-bottom:12px}
-  .head .logo-bar img{height:44px;width:auto;border-radius:10px;background:#fff;padding:4px 8px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
-  .head .logo-bar .brand{font-size:13px;font-weight:600;color:#bfdbfe;letter-spacing:.3px}
-  .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-  .pill{background:rgba(255,255,255,.16);color:#eff6ff;font-size:12px;font-weight:600;border-radius:20px;padding:5px 12px}
-  h2{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#2563eb;margin-bottom:14px;padding-bottom:8px;border-bottom:1.5px solid #dbeafe}
-  .info{white-space:pre-wrap;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.6;color:#1e293b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;overflow-x:auto}
-  .doc{display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:10px;transition:box-shadow .15s,border-color .15s}
-  .doc:hover{border-color:#bfdbfe;box-shadow:0 2px 10px rgba(37,99,235,.08)}
+  .head .logo-bar{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+  .head .logo-bar img{height:44px;width:auto;border-radius:10px;background:#fff;padding:4px 8px;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+  .head .logo-bar .brand{font-size:13px;font-weight:600;color:#ddd6fe;letter-spacing:.3px}
+  .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .pill{background:rgba(255,255,255,.15);color:#ede9fe;font-size:12px;font-weight:600;border-radius:20px;padding:5px 12px;backdrop-filter:blur(4px)}
+  h2{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#7c3aed;margin-bottom:14px;padding-bottom:8px;border-bottom:1.5px solid #ede9fe}
+  .info{white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word;font-family:'SFMono-Regular',ui-monospace,'Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.7;color:#1e293b;background:#faf5ff;border:1px solid #ede9fe;border-radius:12px;padding:18px;overflow-x:auto;max-width:100%}
+  .doc{display:flex;align-items:center;gap:14px;padding:13px 14px;border:1px solid #e9d5ff;border-radius:12px;margin-bottom:10px;transition:box-shadow .15s,border-color .15s}
+  .doc:hover{border-color:#c084fc;box-shadow:0 2px 12px rgba(124,58,237,.1)}
   .doc-ic{font-size:26px;flex-shrink:0}
   .doc-meta{flex:1;min-width:0}
   .doc-name{font-weight:600;font-size:14px;color:#0f172a;text-transform:capitalize}
   .doc-sub{font-size:12px;color:#64748b;margin-top:2px;word-break:break-all}
   .doc-actions{display:flex;gap:8px;flex-shrink:0}
-  .btn{font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:8px;text-decoration:none;cursor:pointer;white-space:nowrap}
-  .btn.solid{background:#2563eb;color:#fff}
-  .btn.ghost{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe}
+  .btn{font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:8px;text-decoration:none;cursor:pointer;white-space:nowrap;transition:all .15s}
+  .btn.solid{background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;box-shadow:0 2px 6px rgba(124,58,237,.25)}
+  .btn.solid:hover{box-shadow:0 4px 12px rgba(124,58,237,.35);transform:translateY(-1px)}
+  .btn.ghost{background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe}
+  .btn.ghost:hover{background:#ede9fe;border-color:#c084fc}
   .empty{color:#64748b;font-size:14px;padding:8px 0}
-  .foot{text-align:center;color:#94a3b8;font-size:12px;margin-top:8px;display:flex;align-items:center;justify-content:center;gap:8px}
-  .foot img{height:22px;width:auto;opacity:.6;border-radius:4px}
-  @media(max-width:520px){.doc{flex-wrap:wrap}.doc-actions{width:100%}.btn{flex:1;text-align:center}}
+  .foot{text-align:center;color:#a78bfa;font-size:12px;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px}
+  .foot img{height:22px;width:auto;opacity:.7;border-radius:4px}
+
+  /* ── Tablet (max-width: 768px) ── */
+  @media(max-width:768px){
+    body{padding:18px 12px 50px}
+    .card{padding:18px 18px;border-radius:14px}
+    .head{padding:20px 18px 16px}
+    .head h1{font-size:21px}
+    .info{font-size:11.5px;padding:14px;line-height:1.65}
+    .doc{gap:10px;padding:11px 12px}
+    .doc-name{font-size:13px}
+    .doc-sub{font-size:11px}
+  }
+
+  /* ── Phone (max-width: 520px) ── */
+  @media(max-width:520px){
+    body{padding:12px 8px 40px}
+    .wrap{max-width:100%}
+    .card{padding:14px 13px;border-radius:12px;margin-bottom:12px}
+    .head{padding:16px 14px 14px;border-radius:12px}
+    .head h1{font-size:18px}
+    .head .logo-bar{gap:10px;margin-bottom:10px}
+    .head .logo-bar img{height:36px;padding:3px 6px}
+    .head .logo-bar .brand{font-size:11.5px}
+    .pills{gap:6px;margin-top:10px}
+    .pill{font-size:11px;padding:4px 9px}
+    h2{font-size:12px;margin-bottom:10px}
+    .info{font-size:10.5px;padding:12px 10px;line-height:1.6;border-radius:9px;white-space:pre-wrap;word-break:break-word}
+    .doc{flex-wrap:wrap;gap:8px;padding:10px 11px}
+    .doc-ic{font-size:22px}
+    .doc-meta{min-width:calc(100% - 40px)}
+    .doc-name{font-size:13px}
+    .doc-sub{font-size:10.5px}
+    .doc-actions{width:100%;margin-top:4px}
+    .btn{flex:1;text-align:center;padding:9px 10px;font-size:12px}
+    .foot{font-size:11px;gap:6px}
+    .foot img{height:18px}
+  }
 </style>
 </head><body>
 <div class="wrap">
