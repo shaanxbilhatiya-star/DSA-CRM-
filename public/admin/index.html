@@ -1848,13 +1848,35 @@ fetchAdminDispoStats();
 socket.on('stats-update', () => { populateAgentFilterDropdown(); populateFollowupAgentFilter(); });
 
 // ── EID Management ────────────────────────────────────────────────────────────
+
+// ── Fetch with timeout (prevents infinite "Loading..." on cold start) ────────
+async function fetchWithTimeout(url, ms = 12000) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(id);
+    return r;
+  } catch (e) {
+    clearTimeout(id);
+    throw e;
+  }
+}
+async function retryFetch(fn, label, retries = 2, delay = 3000) {
+  for (let i = 0; i <= retries; i++) {
+    try { return await fn(); } catch (e) {
+      if (i < retries) await new Promise(r => setTimeout(r, delay));
+      else throw new Error(label + ': ' + (e.message || 'failed'));
+    }
+  }
+}
 async function loadEids() {
   try {
-    const r = await fetch('/api/admin/eids');
+    const r = await retryFetch(() => fetchWithTimeout('/api/admin/eids'), 'EIDs');
     const d = await r.json();
     renderEids(d.eids);
   } catch (e) {
-    document.getElementById('eidList').innerHTML = '<div class="eid-empty">Failed to load EIDs</div>';
+    document.getElementById('eidList').innerHTML = '<div class="eid-empty" style="color:var(--warn)">⚠ Failed to load EIDs — <a href="" onclick="event.preventDefault();loadEids()" style="color:var(--accent)">retry</a></div>';
   }
 }
 
@@ -2050,7 +2072,7 @@ function renderAdminLeaderboard(data, formulaDesc) {
 
 async function fetchAdminLeaderboard() {
   try {
-    const r = await fetch('/api/rankings?period=' + adminLbPeriod);
+    const r = await retryFetch(() => fetchWithTimeout('/api/rankings?period=' + adminLbPeriod), 'Rankings');
     const resp = await r.json();
     // Handle new response format: { rankings: [...], formulaDescription: '...' }
     let data, formulaDesc;
@@ -2065,7 +2087,10 @@ async function fetchAdminLeaderboard() {
       formulaDesc = '';
     }
     renderAdminLeaderboard(data, formulaDesc);
-  } catch (e) { /* silent */ }
+  } catch (e) {
+    const body = document.getElementById('adminLeaderboardBody');
+    if (body) body.innerHTML = '<div style="text-align:center;color:var(--warn);padding:16px">⚠ Failed to load rankings — <a href="" onclick="event.preventDefault();fetchAdminLeaderboard()" style="color:var(--accent)">retry</a></div>';
+  }
 }
 
 setTimeout(fetchAdminLeaderboard, 500);
@@ -2198,8 +2223,8 @@ const DISPO_LABELS = {dead:'☠️ CNC',not_received:'📵 CNR',not_interested:'
 const DISPO_DOCS = {interested:'MSME + Police Verification',followup:'MSME only',dead:'No documents',not_received:'No documents',switch_off:'No documents',not_interested:'No documents',discard:'No documents',dnd:'No documents'};
 
 async function loadDailyCopyData() {
-  try { const r = await fetch('/api/stats/daily-numbers'); const d = await r.json(); renderDailyCopyPanel(d); }
-  catch(e) { document.getElementById('dailyCopyContent').textContent = 'Failed to load'; }
+  try { const r = await retryFetch(() => fetchWithTimeout('/api/stats/daily-numbers'), 'Daily numbers'); const d = await r.json(); renderDailyCopyPanel(d); }
+  catch(e) { document.getElementById('dailyCopyContent').innerHTML = '<span style="color:var(--warn)">⚠ Failed to load — <a href="" onclick="event.preventDefault();loadDailyCopyData()" style="color:var(--accent)">retry</a></span>'; }
 }
 
 function renderDailyCopyPanel(data) {
@@ -2278,14 +2303,15 @@ async function loadAdminRecordings() {
     if (date) url += 'date=' + encodeURIComponent(date) + '&';
     if (important) url += 'important=true&';
 
-    const r = await fetch(url);
+    const r = await retryFetch(() => fetchWithTimeout(url), 'Recordings');
     const data = await r.json();
     adminRecordingsData = data.recordings || [];
     renderAdminRecordings(adminRecordingsData, data.stats || {});
     await populateAdminRecAgentFilter();
   } catch (e) {
     console.error('Failed to load recordings:', e);
-    showToast('Failed to load recordings', 'error');
+    const tbody = document.getElementById('adminRecordingsTable');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="empty" style="color:var(--warn)">⚠ Failed to load recordings — <a href="" onclick="event.preventDefault();loadAdminRecordings()" style="color:var(--accent)">retry</a></td></tr>';
   }
 }
 
