@@ -3234,7 +3234,7 @@ setTimeout(cleanupOldRecordings, 10000);
 app.use('/uploads/recordings', express.static(path.join(DATA_ROOT, 'uploads', 'recordings')));
 
 // Recording upload endpoint
-app.post('/api/recordings/upload', uploadRecording.array('recordings', 10), (req, res) => {
+app.post('/api/recordings/upload', uploadRecording.array('recordings', 200), (req, res) => {
   try {
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No files uploaded' });
     const { agentName, agentEmail, leadPhone, leadName } = req.body;
@@ -3298,7 +3298,7 @@ app.patch('/api/recordings/:id/important', (req, res) => {
   const { id } = req.params;
   const { important } = req.body;
   if (!appState.recordings) return res.status(404).json({ error: 'Recording not found' });
-  const recording = appState.recordings.find(rec => rec.id === id);
+  const recording = appState.recordings.find(rec => String(rec.id) === String(id));
   if (!recording) return res.status(404).json({ error: 'Recording not found' });
   recording.important = important !== undefined ? important : !recording.important;
   saveState(appState);
@@ -3309,7 +3309,7 @@ app.patch('/api/recordings/:id/important', (req, res) => {
 app.delete('/api/recordings/:id', (req, res) => {
   const { id } = req.params;
   if (!appState.recordings) return res.status(404).json({ error: 'Recording not found' });
-  const idx = appState.recordings.findIndex(rec => rec.id === id);
+  const idx = appState.recordings.findIndex(rec => String(rec.id) === String(id));
   if (idx === -1) return res.status(404).json({ error: 'Recording not found' });
   const recording = appState.recordings[idx];
   const filePath = path.join(DATA_ROOT, 'uploads', 'recordings', recording.filename);
@@ -3323,7 +3323,7 @@ app.delete('/api/recordings/:id', (req, res) => {
 app.get('/api/recordings/:id/download', (req, res) => {
   const { id } = req.params;
   if (!appState.recordings) return res.status(404).json({ error: 'Recording not found' });
-  const recording = appState.recordings.find(rec => rec.id == id);
+  const recording = appState.recordings.find(rec => String(rec.id) === String(id));
   if (!recording) return res.status(404).json({ error: 'Recording not found' });
   const filePath = path.join(DATA_ROOT, 'uploads', 'recordings', recording.filename);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Recording file not found on disk' });

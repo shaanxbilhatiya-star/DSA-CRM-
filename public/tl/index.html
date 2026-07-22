@@ -4807,53 +4807,87 @@ async function submitRecordings() {
   btnUpload.textContent = 'Uploading...';
   if (progressContainer) progressContainer.style.display = 'block';
 
-  const formData = new FormData();
-  selectedRecordingFiles.forEach(f => formData.append('recordings', f));
-  formData.append('agentName', agentName || '');
-  formData.append('agentEmail', empId || '');
+  const BATCH_SIZE = 10;
+  const totalFiles = selectedRecordingFiles.length;
+  let uploadedCount = 0;
+  let failedCount = 0;
+  const totalBatches = Math.ceil(totalFiles / BATCH_SIZE);
 
-  try {
-    const xhr = new XMLHttpRequest();
+  for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+    const start = batchIdx * BATCH_SIZE;
+    const end = Math.min(start + BATCH_SIZE, totalFiles);
+    const batchFiles = selectedRecordingFiles.slice(start, end);
 
-    xhr.upload.addEventListener('progress', (e) => {
-      if (e.lengthComputable) {
-        const pct = Math.round((e.loaded / e.total) * 100);
-        if (progressBar) progressBar.style.width = pct + '%';
-        if (progressText) progressText.textContent = `Uploading... ${pct}%`;
-      }
-    });
+    if (progressText) progressText.textContent = `Uploading batch ${batchIdx + 1}/${totalBatches} (${uploadedCount}/${totalFiles} files done)...`;
 
-    xhr.addEventListener('load', () => {
-      if (xhr.status === 200) {
-        const response = JSON.parse(xhr.responseText);
-        showToast(`✅ ${response.recordings.length} recording(s) uploaded successfully!`, 'success');
-        selectedRecordingFiles = [];
-        renderRecordingFileList();
-        const fileInput = document.getElementById('recordingFileInput');
-        if (fileInput) fileInput.value = '';
-        if (progressContainer) progressContainer.style.display = 'none';
-        btnUpload.disabled = false;
-        btnUpload.textContent = '📤 Upload Recordings';
-      } else {
-        throw new Error('Upload failed with status ' + xhr.status);
-      }
-    });
+    const formData = new FormData();
+    batchFiles.forEach(f => formData.append('recordings', f));
+    formData.append('agentName', agentName || '');
+    formData.append('agentEmail', empId || '');
 
-    xhr.addEventListener('error', () => {
-      showToast('Failed to upload recordings. Please try again.', 'error');
-      btnUpload.disabled = false;
-      btnUpload.textContent = '📤 Upload Recordings';
-      if (progressContainer) progressContainer.style.display = 'none';
-    });
+    try {
+      await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
 
-    xhr.open('POST', '/api/recordings/upload');
-    xhr.send(formData);
-  } catch (error) {
-    showToast('Failed to upload recordings. Please try again.', 'error');
-    btnUpload.disabled = false;
-    btnUpload.textContent = '📤 Upload Recordings';
-    if (progressContainer) progressContainer.style.display = 'none';
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const batchProgress = e.loaded / e.total;
+            const overallProgress = ((batchIdx + batchProgress) / totalBatches) * 100;
+            if (progressBar) progressBar.style.width = Math.round(overallProgress) + '%';
+            if (progressText) progressText.textContent = `Uploading batch ${batchIdx + 1}/${totalBatches}... ${Math.round(overallProgress)}%`;
+          }
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status === 200) {
+            try {
+              const response = JSON.parse(xhr.responseText);
+              uploadedCount += (response.recordings ? response.recordings.length : batchFiles.length);
+            } catch(e) {
+              uploadedCount += batchFiles.length;
+            }
+            resolve();
+          } else {
+            failedCount += batchFiles.length;
+            resolve();
+          }
+        });
+
+        xhr.addEventListener('error', () => {
+          failedCount += batchFiles.length;
+          resolve();
+        });
+
+        xhr.addEventListener('timeout', () => {
+          failedCount += batchFiles.length;
+          resolve();
+        });
+
+        xhr.timeout = 120000;
+        xhr.open('POST', '/api/recordings/upload');
+        xhr.send(formData);
+      });
+    } catch (error) {
+      failedCount += batchFiles.length;
+    }
   }
+
+  if (progressBar) progressBar.style.width = '100%';
+  if (failedCount === 0) {
+    if (progressText) progressText.textContent = `✅ All ${uploadedCount} recording(s) uploaded successfully!`;
+    showToast(`✅ ${uploadedCount} recording(s) uploaded successfully!`, 'success');
+  } else {
+    if (progressText) progressText.textContent = `⚠️ ${uploadedCount} uploaded, ${failedCount} failed`;
+    showToast(`⚠️ ${uploadedCount} uploaded, ${failedCount} failed. Try re-uploading failed files.`, 'error');
+  }
+
+  selectedRecordingFiles = [];
+  renderRecordingFileList();
+  const fileInput = document.getElementById('recordingFileInput');
+  if (fileInput) fileInput.value = '';
+  btnUpload.disabled = false;
+  btnUpload.textContent = '📤 Upload Recordings';
+  setTimeout(() => { if (progressContainer) progressContainer.style.display = 'none'; }, 3000);
 }
 
 // Manual upload button trigger (can be called before 5:45 PM)
