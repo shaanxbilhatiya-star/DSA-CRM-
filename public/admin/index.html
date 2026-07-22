@@ -1450,6 +1450,23 @@ async function fetchCompletedLeads() {
   }
 }
 
+function copyShareLink(token) {
+  const url = location.origin + '/share/' + token;
+  function toast() {
+    var t = document.createElement('div');
+    t.textContent = '\uD83D\uDD17 Link copied!';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#16a34a;color:#fff;padding:10px 20px;border-radius:30px;font-size:13px;z-index:99999;box-shadow:0 4px 20px rgba(0,0,0,.25)';
+    document.body.appendChild(t); setTimeout(function(){ t.remove(); }, 2200);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(toast).catch(function(){ window.prompt('Copy this link:', url); });
+  } else { window.prompt('Copy this link:', url); }
+}
+function editLeadForm(numberId, agentId) {
+  if (!agentId) { alert('This lead has no assigned agent, so it cannot be edited from here.'); return; }
+  window.open('/forms/PLJOB-main/index.html?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId), '_blank');
+}
+
 function renderCompletedLeads(leads) {
   const tbody = document.getElementById('completedTable');
   const badge = document.getElementById('completedCountBadge');
@@ -1477,9 +1494,14 @@ function renderCompletedLeads(leads) {
     </select>${elapsedStr}`;
     const remarksCell = `<input type="text" value="${escapeHtml(l.remarks || '')}" onchange="adminUpdateInterested('${escapeHtml(l.id)}','remarks',this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);width:100px;font-family:var(--sans)" placeholder="Add remarks">`;
     const loanAmtCell = `<input type="number" value="${escapeHtml(l.loanAmount || '')}" onchange="adminUpdateInterested('${escapeHtml(l.id)}','loanAmount',this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);width:90px;font-family:var(--mono)" placeholder="Amount">`;
-    const dlBtn = l.hasDocZip
-      ? `<a href="/api/admin/download-doc-zip/${escapeHtml(l.id)}" download style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:4px 10px;border-radius:6px;background:#2563eb;color:#fff;text-decoration:none;font-weight:600;border:none;cursor:pointer">&#128229; ZIP</a>`
-      : `<span style="font-size:11px;color:var(--muted)">No file</span>`;
+    const dlBtn = l.shareToken
+      ? `<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+           <a href="/share/${escapeHtml(l.shareToken)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:4px 10px;border-radius:6px;background:#2563eb;color:#fff;text-decoration:none;font-weight:600">&#128279; Open${l.docCount ? (' (' + l.docCount + ')') : ''}</a>
+           <button onclick="copyShareLink('${escapeHtml(l.shareToken)}')" style="font-size:12px;padding:4px 10px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text);cursor:pointer;font-weight:600">&#128203; Copy</button>
+         </div>`
+      : (l.hasDocZip
+          ? `<a href="/api/admin/download-doc-zip/${escapeHtml(l.id)}" download style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:4px 10px;border-radius:6px;background:#2563eb;color:#fff;text-decoration:none;font-weight:600;border:none;cursor:pointer">&#128229; ZIP</a>`
+          : `<span style="font-size:11px;color:var(--muted)">No file</span>`);
     return `<tr>
       <td><span class="phone-number">${escapeHtml(formatPhone(l.phone))}</span></td>
       <td>${escapeHtml(l.name) || '&#8212;'}</td>
@@ -1489,7 +1511,7 @@ function renderCompletedLeads(leads) {
       <td style="font-size:12px;font-family:var(--mono)">${completedAt}</td>
       <td>${dlBtn}</td>
       <td>${statusSelect}</td>
-      <td><button class="btn-del" onclick="adminRemoveInterested('${escapeHtml(l.id)}')" style="padding:4px 10px">Remove</button></td>
+      <td style="white-space:nowrap"><button onclick="editLeadForm('${escapeHtml(l.id)}','${escapeHtml(l.interestedByAgentId || '')}')" style="padding:4px 10px;font-size:12px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-weight:600;margin-right:4px">&#9997;&#65039; Edit</button><button class="btn-del" onclick="adminRemoveInterested('${escapeHtml(l.id)}')" style="padding:4px 10px">Remove</button></td>
     </tr>`;
   }).join('');
 }
