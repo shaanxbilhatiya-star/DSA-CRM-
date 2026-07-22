@@ -190,6 +190,16 @@
     var docs = (d && d.docs) || [];
     var shareToken = d && d.shareToken;
     var wrap = document.querySelector('.wrap') || document.body;
+
+    // ── SMART FORM SWITCH BUTTON ──────────────────────────────────────────────
+    var p = new URLSearchParams(location.search);
+    var numberId = p.get('numberId');
+    var agentId = p.get('agentId');
+    if (numberId && agentId) {
+      insertFormSwitcher(wrap, numberId, agentId, d);
+    }
+
+    // ── EDIT BANNER ───────────────────────────────────────────────────────────
     var banner = document.createElement('div');
     banner.id = 'editModeBanner';
     banner.style.cssText = 'background:linear-gradient(135deg,#ecfdf5,#d1fae5);border:1px solid #6ee7b7;border-radius:12px;padding:14px 18px;margin-bottom:16px;color:#065f46;font-size:13.5px;line-height:1.6';
@@ -201,13 +211,125 @@
       'Your saved details have been loaded below. Change anything you like and press ' +
       '<strong>Update File</strong> to save. Re-uploading documents is optional \u2014 ' +
       'leave a document empty to keep the one already on file.' + docList;
-    wrap.insertBefore(banner, wrap.firstChild);
+    wrap.insertBefore(banner, wrap.children[1] || wrap.firstChild);
 
     // ── Show existing documents on each upload field ──────────────────────────
     if (docs.length && shareToken) {
       markExistingDocs(docs, shareToken);
     }
   }
+
+  // ── FORM SWITCHER ─────────────────────────────────────────────────────────────
+  var FORM_OPTIONS = [
+    { value: 'BL_Business',  label: 'BL \u2014 Business Loan' },
+    { value: 'LAP_Business', label: 'LAP \u2014 Loan Against Property (Business)' },
+    { value: 'LAP_Salaried', label: 'LAP \u2014 Loan Against Property (Salaried)' },
+    { value: 'PL_Business',  label: 'PL \u2014 Personal Loan (Business)' },
+    { value: 'PL_Salaried',  label: 'PL \u2014 Personal Loan (Salaried / Job)' }
+  ];
+
+  function insertFormSwitcher(wrap, numberId, agentId, leadData) {
+    var currentForm = FORM_TYPE;
+    var switcher = document.createElement('div');
+    switcher.id = 'formSwitcher';
+    switcher.style.cssText = 'background:#fff;border:1.5px solid #e0e7ff;border-radius:14px;padding:14px 18px;margin-bottom:14px;box-shadow:0 2px 12px rgba(99,102,241,.08)';
+    var currentLabel = '';
+    FORM_OPTIONS.forEach(function (o) { if (o.value === currentForm) currentLabel = o.label; });
+    var html = '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">';
+    html += '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">\uD83D\uDD04</span>';
+    html += '<div><div style="font-size:11px;font-weight:700;color:#6366f1;text-transform:uppercase;letter-spacing:.4px">Current Form</div>';
+    html += '<div style="font-size:14px;font-weight:600;color:#1e1b4b">' + escapeHtml(currentLabel || currentForm) + '</div></div></div>';
+    html += '<button type="button" id="switchFormBtn" style="padding:8px 16px;background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 2px 8px rgba(99,102,241,.3)">\uD83D\uDD00 Switch Form Type</button></div>';
+    html += '<div id="switchPanel" style="display:none;margin-top:14px;padding-top:14px;border-top:1px dashed #c7d2fe">';
+    html += '<div style="font-size:12px;font-weight:600;color:#4338ca;margin-bottom:8px">\uD83D\uDCA1 Switch to a different loan type \u2014 your data & documents carry over automatically</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px" id="switchOptions">';
+    FORM_OPTIONS.forEach(function (o) {
+      if (o.value === currentForm) return;
+      html += '<button type="button" class="switch-opt-btn" data-form="' + o.value + '" style="padding:9px 14px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:9px;font-size:12.5px;font-weight:600;color:#334155;cursor:pointer;font-family:inherit">' + escapeHtml(o.label) + '</button>';
+    });
+    html += '</div>';
+    html += '<div id="switchConfirm" style="display:none;margin-top:12px;padding:12px;background:#fef3c7;border:1px solid #fbbf24;border-radius:9px">';
+    html += '<div style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:8px" id="switchConfirmMsg"></div>';
+    html += '<div style="display:flex;gap:8px"><button type="button" id="switchGoBtn" style="padding:8px 18px;background:#16a34a;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">\u2705 Yes, switch now</button>';
+    html += '<button type="button" id="switchCancelBtn" style="padding:8px 14px;background:#fff;color:#64748b;border:1px solid #d1d5db;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cancel</button></div></div></div>';
+    switcher.innerHTML = html;
+    wrap.insertBefore(switcher, wrap.firstChild);
+
+    var selectedTarget = null;
+    document.getElementById('switchFormBtn').addEventListener('click', function () {
+      var panel = document.getElementById('switchPanel');
+      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    });
+    document.querySelectorAll('.switch-opt-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        selectedTarget = btn.getAttribute('data-form');
+        var targetLabel = '';
+        FORM_OPTIONS.forEach(function (o) { if (o.value === selectedTarget) targetLabel = o.label; });
+        document.getElementById('switchConfirmMsg').textContent = 'Switch from "' + (currentLabel || currentForm) + '" to "' + targetLabel + '"? All matching fields & documents will carry over.';
+        document.getElementById('switchConfirm').style.display = 'block';
+        document.querySelectorAll('.switch-opt-btn').forEach(function (b) {
+          b.style.borderColor = b === btn ? '#16a34a' : '#e2e8f0';
+          b.style.background = b === btn ? '#f0fdf4' : '#f8fafc';
+          b.style.color = b === btn ? '#16a34a' : '#334155';
+        });
+      });
+    });
+    document.getElementById('switchCancelBtn').addEventListener('click', function () {
+      document.getElementById('switchConfirm').style.display = 'none';
+      selectedTarget = null;
+      document.querySelectorAll('.switch-opt-btn').forEach(function (b) { b.style.borderColor = '#e2e8f0'; b.style.background = '#f8fafc'; b.style.color = '#334155'; });
+    });
+    document.getElementById('switchGoBtn').addEventListener('click', function () {
+      if (!selectedTarget) return;
+      performFormSwitch(selectedTarget, numberId, agentId);
+    });
+  }
+
+  function performFormSwitch(targetForm, numberId, agentId) {
+    var snapshot = window.collectFormSnapshot ? window.collectFormSnapshot() : {};
+    try {
+      sessionStorage.setItem('__formSwitch_snapshot', JSON.stringify(snapshot));
+      sessionStorage.setItem('__formSwitch_from', FORM_TYPE);
+    } catch (e) {}
+    fetch('/api/agent/switch-form-type/' + encodeURIComponent(numberId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ numberId: numberId, agentId: agentId, loanType: targetForm })
+    }).catch(function () {});
+    location.href = '/forms/PLJOB-main/' + targetForm + '.html?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId);
+  }
+
+  // On load: check if we arrived via a form switch and apply carried-over data
+  window.addEventListener('load', function () {
+    try {
+      var switchSnapshot = sessionStorage.getItem('__formSwitch_snapshot');
+      var switchFrom = sessionStorage.getItem('__formSwitch_from');
+      if (switchSnapshot) {
+        sessionStorage.removeItem('__formSwitch_snapshot');
+        sessionStorage.removeItem('__formSwitch_from');
+        var data = JSON.parse(switchSnapshot);
+        setTimeout(function () {
+          if (data && typeof data === 'object') {
+            Object.keys(data).forEach(function (key) {
+              var val = data[key];
+              if (!val || (typeof val === 'string' && !val.trim())) return;
+              var el = document.getElementById(key);
+              if (!el || el.type === 'file') return;
+              if (el.value && el.value.trim()) return;
+              if (el.type === 'checkbox') el.checked = !!val;
+              else el.value = val;
+              fire(el);
+            });
+          }
+          var toast = document.createElement('div');
+          toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;font-size:14px;font-weight:600;border-radius:12px;padding:12px 24px;z-index:9999;box-shadow:0 8px 30px rgba(99,102,241,.35)';
+          toast.textContent = '\u2705 Switched from ' + (switchFrom || 'previous form') + ' \u2014 data carried over!';
+          document.body.appendChild(toast);
+          setTimeout(function () { toast.remove(); }, 3500);
+        }, 600);
+      }
+    } catch (e) {}
+  });
 
   // ── DOC LABEL → UPLOAD INPUT ID MAPPING ─────────────────────────────────────
   // Maps document filenames/labels (as stored in the ZIP) to the upload input IDs
