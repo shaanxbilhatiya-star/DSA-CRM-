@@ -1727,7 +1727,7 @@ function renderInterestedTable(leads) {
       <td><span class="timer-badge ${timerClass}" data-timer-for="${escapeHtml(l.id)}">${timerText}</span></td>
       <td>
         <div class="action-cell">
-          <button class="btn-sm blue"  onclick="openLoanForm('${escapeHtml(l.id)}')">📄 Form</button>
+          <button class="btn-sm blue"  onclick="openLoanForm('${escapeHtml(l.id)}','${escapeHtml(l.loanType||'')}')">📄 Form</button>
           <button class="btn-sm red"   onclick="removeInterestedLead('${escapeHtml(l.id)}')">🗑</button>
         </div>
       </td>
@@ -1808,8 +1808,8 @@ function renderCompletedTable(leads) {
     }
     const docCount = l.docCount ? (' (' + l.docCount + ')') : '';
     const shareCell = l.shareToken
-      ? `<a href="/share/${escapeHtml(l.shareToken)}" target="_blank" rel="noopener" class="btn-sm blue" style="text-decoration:none">🔗 Open${docCount}</a> <button class="btn-sm" onclick="copyShareLink('${escapeHtml(l.shareToken)}')">📋</button> <button class="btn-sm" onclick="openLoanForm('${escapeHtml(l.id)}')">✏️</button>`
-      : `<button class="btn-sm" onclick="openLoanForm('${escapeHtml(l.id)}')">✏️ Edit</button>`;
+      ? `<a href="/share/${escapeHtml(l.shareToken)}" target="_blank" rel="noopener" class="btn-sm blue" style="text-decoration:none">🔗 Open${docCount}</a> <button class="btn-sm" onclick="copyShareLink('${escapeHtml(l.shareToken)}')">📋</button> <button class="btn-sm" onclick="openLoanForm('${escapeHtml(l.id)}','${escapeHtml(l.formType||'')}')">✏️</button>`
+      : `<button class="btn-sm" onclick="openLoanForm('${escapeHtml(l.id)}','${escapeHtml(l.formType||'')}')">✏️ Edit</button>`;
     return `<tr>
       <td><span class="phone-mono">${escapeHtml(formatPhone(l.phone))}</span></td>
       <td style="font-weight:600">${escapeHtml(l.name) || '—'}</td>
@@ -1823,8 +1823,15 @@ function renderCompletedTable(leads) {
 }
 
 // ── Interested lead actions ───────────────────────────────────────────────────
-function openLoanForm(numberId) {
-  window.open('/forms/PLJOB-main/index.html?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId), '_blank');
+function loanFormFile(formType) {
+  const known = ['BL_Business','LAP_Business','LAP_Salaried','PL_Business','PL_Salaried'];
+  const t = String(formType || '').trim();
+  return known.indexOf(t) >= 0 ? (t + '.html') : 'index.html';
+}
+function openLoanForm(numberId, formType) {
+  // Open the exact loan form that was used (so it prefills for editing); fall back
+  // to the launcher only when we don't know the loan type.
+  window.open('/forms/PLJOB-main/' + loanFormFile(formType) + '?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId), '_blank');
 }
 function copyShareLink(token) {
   const url = location.origin + '/share/' + token;

@@ -1462,9 +1462,12 @@ function copyShareLink(token) {
     navigator.clipboard.writeText(url).then(toast).catch(function(){ window.prompt('Copy this link:', url); });
   } else { window.prompt('Copy this link:', url); }
 }
-function editLeadForm(numberId, agentId) {
+function editLeadForm(numberId, agentId, formType) {
   if (!agentId) { alert('This lead has no assigned agent, so it cannot be edited from here.'); return; }
-  window.open('/forms/PLJOB-main/index.html?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId), '_blank');
+  const known = ['BL_Business','LAP_Business','LAP_Salaried','PL_Business','PL_Salaried'];
+  const t = String(formType || '').trim();
+  const file = known.indexOf(t) >= 0 ? (t + '.html') : 'index.html';
+  window.open('/forms/PLJOB-main/' + file + '?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId), '_blank');
 }
 
 function renderCompletedLeads(leads) {
@@ -1511,7 +1514,7 @@ function renderCompletedLeads(leads) {
       <td style="font-size:12px;font-family:var(--mono)">${completedAt}</td>
       <td>${dlBtn}</td>
       <td>${statusSelect}</td>
-      <td style="white-space:nowrap"><button onclick="editLeadForm('${escapeHtml(l.id)}','${escapeHtml(l.interestedByAgentId || '')}')" style="padding:4px 10px;font-size:12px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-weight:600;margin-right:4px">&#9997;&#65039; Edit</button><button class="btn-del" onclick="adminRemoveInterested('${escapeHtml(l.id)}')" style="padding:4px 10px">Remove</button></td>
+      <td style="white-space:nowrap"><button onclick="editLeadForm('${escapeHtml(l.id)}','${escapeHtml(l.interestedByAgentId || '')}','${escapeHtml(l.formType||'')}')" style="padding:4px 10px;font-size:12px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-weight:600;margin-right:4px">&#9997;&#65039; Edit</button><button class="btn-del" onclick="adminRemoveInterested('${escapeHtml(l.id)}')" style="padding:4px 10px">Remove</button></td>
     </tr>`;
   }).join('');
 }
