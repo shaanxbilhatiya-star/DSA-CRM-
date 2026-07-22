@@ -29,6 +29,8 @@
       if (el.type === 'checkbox') { data[el.id] = !!el.checked; return; }
       data[el.id] = el.value;
     });
+    // Embed prefill status so the server can also verify this was a safe submission
+    data['__prefillStatus'] = window.__leadPrefillStatus || 'not_needed';
     return data;
   };
 
@@ -68,18 +70,39 @@
     return String(s).replace(/["\\\]]/g, '\\$&');
   }
 
+  // ── PREFILL STATUS TRACKING ────────────────────────────────────────────────
+  // Track whether this form was opened for an existing lead (edit mode) and
+  // whether the prefill fetch succeeded. If prefill fails, saving would send
+  // empty data that could overwrite the good existing data on the server.
+  // window.__leadPrefillStatus:
+  //   'not_needed'  → new lead (no numberId), safe to save
+  //   'pending'     → prefill fetch in progress
+  //   'success'     → prefill loaded correctly, safe to save/update
+  //   'failed'      → prefill fetch failed, BLOCK save to prevent data loss
+  window.__leadPrefillStatus = 'not_needed';
+
   // On load: if this form is opened for an existing saved lead, prefill it and
   // switch to "Update" mode.
   window.addEventListener('load', function () {
     var p = new URLSearchParams(location.search);
     var numberId = p.get('numberId');
     if (!numberId) return;
+
+    window.__leadPrefillStatus = 'pending';
+
     // Let each form finish its own init first (salary toggles, obligation rows…).
     setTimeout(function () {
       fetch('/api/lead-form/' + encodeURIComponent(numberId))
-        .then(function (r) { return r.json(); })
+        .then(function (r) {
+          if (!r.ok) throw new Error('Server returned ' + r.status);
+          return r.json();
+        })
         .then(function (d) {
-          if (!d || !d.exists) return;
+          if (!d || !d.exists) {
+            // Lead doesn't exist on server — treat as new submission (safe to save)
+            window.__leadPrefillStatus = 'success';
+            return;
+          }
 
           var snapshot = {};
           // Copy all received data into a working snapshot.
@@ -110,10 +133,36 @@
             prefillFromInfoFields(d.infoFields);
           }
 
+          // Prefill succeeded — mark as safe to save/update.
+          window.__leadPrefillStatus = 'success';
 
           markUpdateMode(d);
         })
-        .catch(function () {});
+        .catch(function (err) {
+          // Prefill FAILED — mark as unsafe. Show a warning banner.
+          window.__leadPrefillStatus = 'failed';
+          console.error('Lead prefill failed:', err);
+
+          var wrap = document.querySelector('.wrap') || document.body;
+          var warning = document.createElement('div');
+          warning.id = 'prefillFailedBanner';
+          warning.style.cssText = 'background:linear-gradient(135deg,#fef2f2,#fee2e2);border:2px solid #f87171;border-radius:12px;padding:16px 20px;margin-bottom:16px;color:#991b1b;font-size:14px;line-height:1.6;text-align:center';
+          warning.innerHTML =
+            '<strong>\u26A0\uFE0F Data Load Failed</strong><br>' +
+            'Could not load the existing lead data. Saving now would overwrite the customer\'s information with empty fields.<br>' +
+            '<strong>Please reload the page or check your connection before making changes.</strong><br>' +
+            '<button type="button" onclick="location.reload()" style="margin-top:10px;padding:8px 20px;background:#dc2626;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">\uD83D\uDD04 Reload Page</button>';
+          wrap.insertBefore(warning, wrap.children[1] || wrap.firstChild);
+
+          // Disable the submit button to prevent accidental data loss
+          var btn = document.getElementById('submitBtn');
+          if (btn) {
+            btn.disabled = true;
+            btn.title = 'Cannot save — existing data failed to load. Reload the page first.';
+            btn.style.opacity = '0.5';
+            btn.style.cursor = 'not-allowed';
+          }
+        });
     }, 400);
   });
 

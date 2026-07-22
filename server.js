@@ -1024,17 +1024,66 @@ app.post('/api/agent/upload-doc-zip/:numberId', docUpload.single('docZip'), (req
     // persist the values when the agent actually entered something — this way
     // "just add one missing document" to an older lead never blanks out the
     // details that were already saved.
+    //
+    // FIX: The old check `Object.values(parsed).some(v => v.trim() !== '')` was
+    // too weak — default dropdown values (e.g. "Married") make it pass even when
+    // ALL meaningful fields (name, phone, DOB, amount, etc.) are empty. This
+    // caused data loss when a form's prefill failed silently and the agent hit
+    // save. The new check requires at least one KEY IDENTITY FIELD (name, mobile,
+    // DOB, company, income, address, etc.) to be non-empty. This applies to all
+    // loan categories: PL, BL, and LAP (Salaried + Business).
     let hasRealData = false;
     try {
       if (req.body.formData) {
         const parsed = JSON.parse(req.body.formData);
-        hasRealData = Object.values(parsed).some(v => (typeof v === 'string' ? v.trim() !== '' : !!v));
-        if (hasRealData || !num.form) {
-          num.form = {
-            type: req.body.formType || (num.form && num.form.type) || num.loanType || '',
-            data: parsed,
-            updatedAt: new Date().toISOString()
-          };
+
+        // SAFETY: If the client signals that prefill failed (data couldn't be
+        // loaded before save), treat this as "no real data" regardless of what
+        // the fields contain. This is a last-resort safeguard — the client
+        // already disables the button, but if it's bypassed we still protect.
+        const prefillStatus = parsed['__prefillStatus'];
+        if (prefillStatus === 'failed' && num.form) {
+          // Prefill failed and we have existing data — refuse to overwrite.
+          // Still allow the ZIP upload (documents) to go through.
+          hasRealData = false;
+        } else {
+          // Key identity fields that a real submission must have at least one of.
+          // These are the core fields across ALL five loan form types.
+          const KEY_FIELDS = [
+            'f_name', 'f_mobile', 'f_dob', 'f_father', 'f_mother',
+            'f_addr', 'f_pin', 'f_addr_aadh', 'f_pin_aadh',
+            'f_company', 'f_income', 'f_lamount', 'f_cibil',
+            'f_biz_name', 'f_biz_addr', 'f_net_income',
+            'f_email', 'f_alt_mobile', 'f_exp',
+            'f_ref1name', 'f_ref1mob', 'f_ref2name', 'f_ref2mob',
+            'f_prop_addr', 'f_prop_value', 'f_owner1_name'
+          ];
+
+          hasRealData = KEY_FIELDS.some(k => {
+            const v = parsed[k];
+            return typeof v === 'string' && v.trim() !== '';
+          });
+
+          if (hasRealData) {
+            // New submission has real meaningful data → safe to store.
+            // Remove internal tracking keys before persisting.
+            delete parsed['__prefillStatus'];
+            num.form = {
+              type: req.body.formType || (num.form && num.form.type) || num.loanType || '',
+              data: parsed,
+              updatedAt: new Date().toISOString()
+            };
+          } else if (!num.form) {
+            // No existing data at all — store whatever we got (first submission,
+            // even if partially empty, is better than nothing).
+            delete parsed['__prefillStatus'];
+            num.form = {
+              type: req.body.formType || num.loanType || '',
+              data: parsed,
+              updatedAt: new Date().toISOString()
+            };
+          }
+          // else: new data is empty/trivial AND we already have saved data → keep existing
         }
       }
     } catch (e) { /* ignore malformed formData */ }
@@ -1054,8 +1103,24 @@ app.post('/api/agent/upload-doc-zip/:numberId', docUpload.single('docZip'), (req
 
     // The legacy-lead editor sends the edited applicant info as plain text (it has
     // no structured form fields). When present, it is authoritative for the page.
+    // FIX: Only overwrite existing infoText if the new text actually has meaningful
+    // content — not just section headers and empty field lines (e.g. "Full name : ").
+    // This prevents a failed-prefill edit from blanking out good stored info.
     if (typeof req.body.infoText === 'string' && req.body.infoText.trim()) {
-      num.shareInfoText = req.body.infoText;
+      const newText = req.body.infoText.trim();
+      // Check if the info text has real content: at least one "Label : Value" line
+      // where Value is something other than empty/dash/N/A.
+      const lines = newText.split('\n');
+      const hasRealContent = lines.some(line => {
+        const m = line.match(/:\s+(.+)$/);
+        if (!m) return false;
+        const val = m[1].trim();
+        return val && val !== '\u2014' && val !== '-' && val !== 'N/A' && val !== 'None' && val.length > 1;
+      });
+      if (hasRealContent || !num.shareInfoText) {
+        num.shareInfoText = newText;
+      }
+      // else: new text has no real values but we already have saved info → keep existing
     }
 
     saveState(appState);
