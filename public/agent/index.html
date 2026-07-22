@@ -850,10 +850,11 @@
               <th>Completed At</th>
               <th>Elapsed</th>
               <th>Status</th>
+              <th>Documents</th>
             </tr>
           </thead>
           <tbody id="completedTable">
-            <tr><td colspan="6" class="empty">No completed leads yet</td></tr>
+            <tr><td colspan="7" class="empty">No completed leads yet</td></tr>
           </tbody>
         </table>
       </div>
@@ -1788,7 +1789,7 @@ function renderCompletedTable(leads) {
   const tbody = document.getElementById('completedTable');
   document.getElementById('completedCountBadge').textContent = (leads||[]).length + ' lead' + ((leads||[]).length !== 1 ? 's' : '');
   if (!leads || leads.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">No completed leads yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">No completed leads yet</td></tr>';
     return;
   }
   tbody.innerHTML = leads.map(l => {
@@ -1805,6 +1806,10 @@ function renderCompletedTable(leads) {
       const elapsedHrs = Math.floor((elapsedMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
       elapsedStr = elapsedDays + 'd ' + elapsedHrs + 'h';
     }
+    const docCount = l.docCount ? (' (' + l.docCount + ')') : '';
+    const shareCell = l.shareToken
+      ? `<a href="/share/${escapeHtml(l.shareToken)}" target="_blank" rel="noopener" class="btn-sm blue" style="text-decoration:none">🔗 Open${docCount}</a> <button class="btn-sm" onclick="copyShareLink('${escapeHtml(l.shareToken)}')">📋</button> <button class="btn-sm" onclick="openLoanForm('${escapeHtml(l.id)}')">✏️</button>`
+      : `<button class="btn-sm" onclick="openLoanForm('${escapeHtml(l.id)}')">✏️ Edit</button>`;
     return `<tr>
       <td><span class="phone-mono">${escapeHtml(formatPhone(l.phone))}</span></td>
       <td style="font-weight:600">${escapeHtml(l.name) || '—'}</td>
@@ -1812,6 +1817,7 @@ function renderCompletedTable(leads) {
       <td style="font-size:12px;font-family:var(--mono)">${completedDate}</td>
       <td style="font-family:var(--mono);font-size:12px;font-weight:700;color:var(--warn)">${elapsedStr}</td>
       <td>${statusBadge}</td>
+      <td style="white-space:nowrap">${shareCell}</td>
     </tr>`;
   }).join('');
 }
@@ -1819,6 +1825,18 @@ function renderCompletedTable(leads) {
 // ── Interested lead actions ───────────────────────────────────────────────────
 function openLoanForm(numberId) {
   window.open('/forms/PLJOB-main/index.html?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId), '_blank');
+}
+function copyShareLink(token) {
+  const url = location.origin + '/share/' + token;
+  function toast() {
+    var t = document.createElement('div');
+    t.textContent = '\uD83D\uDD17 Link copied!';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#16a34a;color:#fff;padding:10px 20px;border-radius:30px;font-size:13px;z-index:99999;box-shadow:0 4px 20px rgba(0,0,0,.25)';
+    document.body.appendChild(t); setTimeout(function(){ t.remove(); }, 2200);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(toast).catch(function(){ window.prompt('Copy this link:', url); });
+  } else { window.prompt('Copy this link:', url); }
 }
 // ── Doc ZIP upload state ─────────────────────────────────────────────────────
 let docZipTargetNumberId = null;

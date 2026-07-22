@@ -13,6 +13,7 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const zlib = require('zlib');
 
 const app = express();
 const server = http.createServer(app);
@@ -77,8 +78,115 @@ const BACKUPS_DIR        = path.join(DATA_ROOT, 'backups');
 // admin can always pull back the exact original file later.
 const NUMBER_SHEETS_DIR  = path.join(UPLOADS_DIR, 'number_sheets');
 
+// Exploded (per-document) files for the shareable lead pages live here. Each lead
+// gets its own sub-folder keyed by an unguessable share token.
+const SHARES_DIR         = path.join(LEAD_DOCS_DIR, 'shares');
+
 // Ensure directories exist
-[path.dirname(DATA_FILE), UPLOADS_DIR, LEAD_DOCS_DIR, AGENT_PHOTOS_DIR, SCRIPTS_DIR, BACKUPS_DIR, NUMBER_SHEETS_DIR].forEach(ensureDir);
+[path.dirname(DATA_FILE), UPLOADS_DIR, LEAD_DOCS_DIR, SHARES_DIR, AGENT_PHOTOS_DIR, SCRIPTS_DIR, BACKUPS_DIR, NUMBER_SHEETS_DIR].forEach(ensureDir);
+
+// ─── Minimal, dependency-free ZIP reader ──────────────────────────────────────
+// The network is locked down (no npm installs), so we parse ZIP archives with
+// only Node's built-in zlib. We read the Central Directory (authoritative sizes)
+// then inflate each entry. Handles the STORED (0) and DEFLATE (8) methods that
+// JSZip — the library the loan forms use client-side — produces. Good enough for
+// our own archives and for migrating the historical ones.
+function readZipEntries(buf) {
+  const EOCD_SIG = 0x06054b50, CEN_SIG = 0x02014b50, LOC_SIG = 0x04034b50;
+  let eocd = -1;
+  const minPos = Math.max(0, buf.length - 22 - 65536);
+  for (let i = buf.length - 22; i >= minPos; i--) {
+    if (buf.readUInt32LE(i) === EOCD_SIG) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('Not a ZIP file (no End Of Central Directory record)');
+  const cdCount = buf.readUInt16LE(eocd + 10);
+  const cdOffset = buf.readUInt32LE(eocd + 16);
+  const entries = [];
+  let p = cdOffset;
+  for (let n = 0; n < cdCount; n++) {
+    if (p + 46 > buf.length || buf.readUInt32LE(p) !== CEN_SIG) break;
+    const method    = buf.readUInt16LE(p + 10);
+    const compSize  = buf.readUInt32LE(p + 20);
+    const uncompSize= buf.readUInt32LE(p + 24);
+    const nameLen   = buf.readUInt16LE(p + 28);
+    const extraLen  = buf.readUInt16LE(p + 30);
+    const commentLen= buf.readUInt16LE(p + 32);
+    const localOff  = buf.readUInt32LE(p + 42);
+    const name      = buf.toString('utf8', p + 46, p + 46 + nameLen);
+    let data = null;
+    if (localOff + 30 <= buf.length && buf.readUInt32LE(localOff) === LOC_SIG) {
+      const lNameLen  = buf.readUInt16LE(localOff + 26);
+      const lExtraLen = buf.readUInt16LE(localOff + 28);
+      const dataStart = localOff + 30 + lNameLen + lExtraLen;
+      const comp = buf.slice(dataStart, dataStart + compSize);
+      try {
+        if (method === 0) data = comp;                       // stored
+        else if (method === 8) data = zlib.inflateRawSync(comp); // deflate
+      } catch (e) { data = null; }
+    }
+    if (!name.endsWith('/')) entries.push({ name, data, size: uncompSize });
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  return entries;
+}
+
+function sanitizeFileName(s) {
+  return String(s || '').replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 120) || 'file';
+}
+
+// Turn a lead's uploaded ZIP into a shareable page: pull out Applicant_Info.txt as
+// readable text and each Documents/* file as an individually downloadable file.
+// Idempotent unless {force:true}. Falls back to exposing the raw ZIP as a single
+// download if the archive can't be parsed, so no data is ever lost.
+function explodeZipForLead(num, opts) {
+  opts = opts || {};
+  if (!num) return false;
+  if (num.shareToken && !opts.force) return true;
+  if (!num.docZipPath || !fs.existsSync(num.docZipPath)) return false;
+
+  const token = num.shareToken || uuidv4();
+  const destDir = path.join(SHARES_DIR, token);
+  try { if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true }); } catch {}
+  ensureDir(destDir);
+
+  let entries = null;
+  try { entries = readZipEntries(fs.readFileSync(num.docZipPath)); }
+  catch (e) { entries = null; }
+
+  const docs = [];
+  let infoText = '';
+  if (entries) {
+    let idx = 0;
+    for (const e of entries) {
+      if (!e.data) continue;
+      const base = e.name.split('/').pop();
+      if (base === 'Applicant_Info.txt') { infoText = e.data.toString('utf8'); continue; }
+      const safe = sanitizeFileName(base);
+      const outName = idx + '__' + safe;
+      const outPath = path.join(destDir, outName);
+      try { fs.writeFileSync(outPath, e.data); } catch { continue; }
+      const label = safe.replace(/\.[^.]+$/, '').replace(/_/g, ' ').trim() || safe;
+      docs.push({ id: String(idx), label, filename: safe, path: outPath, size: e.data.length });
+      idx++;
+    }
+  }
+
+  // Fallback — couldn't parse or archive had nothing extractable: keep the ZIP itself.
+  if (!entries || (docs.length === 0 && !infoText)) {
+    const safe = sanitizeFileName(num.docZipName || 'documents.zip');
+    const outPath = path.join(destDir, '0__' + safe);
+    try {
+      fs.copyFileSync(num.docZipPath, outPath);
+      docs.push({ id: '0', label: 'All Documents (ZIP)', filename: safe, path: outPath, size: fs.statSync(outPath).size });
+    } catch {}
+  }
+
+  num.shareToken = token;
+  num.shareInfoText = infoText || num.shareInfoText || '';
+  num.shareDocs = docs;
+  num.shareUpdatedAt = new Date().toISOString();
+  return true;
+}
 
 function copyRecursiveSync(src, dest) {
   const stat = fs.statSync(src);
@@ -282,6 +390,22 @@ for (const id in appState.agents) {
   }
   a.active = false;
 }
+
+// ─── Migrate legacy lead ZIPs to the new shareable-page format ────────────────
+// Older leads stored only a downloadable ZIP. Explode each one into an
+// individual-document share page (once) so the new UI and shared banker links
+// work with historical data. Safe/idempotent: only touches leads that have a
+// ZIP but no share token yet.
+try {
+  let migrated = 0;
+  for (const num of appState.numbers) {
+    if (num.docZipPath && !num.shareToken) {
+      try { if (explodeZipForLead(num)) migrated++; } catch (e) { /* skip this one */ }
+    }
+  }
+  if (migrated) console.log('\uD83D\uDD17 Migrated ' + migrated + ' legacy lead ZIP(s) to shareable pages');
+} catch (e) { console.error('Lead ZIP migration skipped:', e.message); }
+
 saveState(appState);
 backupStateFile(); // guarantee at least one snapshot exists per boot, even same-day restarts
 
@@ -838,12 +962,28 @@ app.post('/api/agent/upload-doc-zip/:numberId', docUpload.single('docZip'), (req
     num.docZipName = req.file.originalname || 'documents.zip';
     num.docZipUploadedAt = new Date().toISOString();
     num.documentationComplete = true;
-    num.documentationCompletedAt = new Date().toISOString();
+    num.documentationCompletedAt = num.documentationCompletedAt || new Date().toISOString();
     num.adminStatus = num.adminStatus || 'In Process';
+
+    // Store the structured form field values so the form can be re-opened and
+    // edited later (prefilled), and record which loan form was used.
+    try {
+      if (req.body.formData) {
+        num.form = {
+          type: req.body.formType || num.loanType || '',
+          data: JSON.parse(req.body.formData),
+          updatedAt: new Date().toISOString()
+        };
+      }
+    } catch (e) { /* ignore malformed formData */ }
+
+    // Explode the ZIP into an individual-document shareable page (replaces the
+    // old "download a ZIP" flow). force:true so re-submissions refresh the page.
+    try { explodeZipForLead(num, { force: true }); } catch (e) { console.error('explode failed:', e.message); }
 
     saveState(appState);
     broadcastAdminStats();
-    res.json({ success: true, docZipName: num.docZipName, documentationCompletedAt: num.documentationCompletedAt });
+    res.json({ success: true, docZipName: num.docZipName, documentationCompletedAt: num.documentationCompletedAt, shareToken: num.shareToken || null });
   } catch (e) {
     if (req.file) { try { fs.unlinkSync(req.file.path); } catch {} }
     res.status(500).json({ error: e.message });
@@ -860,6 +1000,139 @@ app.get('/api/admin/download-doc-zip/:numberId', (req, res) => {
   }
   const downloadName = num.docZipName || 'documents.zip';
   res.download(num.docZipPath, downloadName);
+});
+
+// ─── Lead form prefill — lets a loan form re-open a saved submission ──────────
+// Returns the previously saved field values (so the form can prefill and show an
+// "Update" button) plus the list of documents already on file.
+app.get('/api/lead-form/:numberId', (req, res) => {
+  const num = appState.numbers.find(n => n.id === req.params.numberId);
+  if (!num) return res.json({ exists: false });
+  res.json({
+    exists: !!(num.form || num.shareToken || num.docZipPath),
+    formType: num.form ? num.form.type : (num.loanType || ''),
+    data: (num.form && num.form.data) ? num.form.data : null,
+    docs: (num.shareDocs || []).map(d => ({ id: d.id, label: d.label, filename: d.filename })),
+    shareToken: num.shareToken || null,
+    leadName: num.leadName || num.name || '',
+    phone: num.phone
+  });
+});
+
+// ─── Public shareable lead page (replaces the ZIP download) ───────────────────
+// Unique, unguessable URL per lead. Shows all the applicant text info and lets a
+// banker download individual documents. No auth by design — the token is the key.
+function fileIconFor(name) {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  if (['jpg','jpeg','png','gif','webp','bmp'].includes(ext)) return '\uD83D\uDDBC\uFE0F';
+  if (ext === 'pdf') return '\uD83D\uDCC4';
+  if (['zip','rar','7z'].includes(ext)) return '\uD83D\uDDDC\uFE0F';
+  if (['doc','docx'].includes(ext)) return '\uD83D\uDCDD';
+  if (['xls','xlsx','csv'].includes(ext)) return '\uD83D\uDCCA';
+  return '\uD83D\uDCCE';
+}
+function humanSize(bytes) {
+  bytes = Number(bytes) || 0;
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+app.get('/share/:token', (req, res) => {
+  const esc = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const num = appState.numbers.find(n => n.shareToken === req.params.token);
+  if (!num) {
+    return res.status(404).send('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Not found</title></head><body style="font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;text-align:center;padding:24px"><div><div style="font-size:56px">\uD83D\uDD0D</div><h1 style="font-weight:700">Link not found</h1><p style="color:#94a3b8">This document link is invalid or has been removed.</p></div></body></html>');
+  }
+  const token = num.shareToken;
+  const docs = num.shareDocs || [];
+  const name = num.leadName || num.name || 'Applicant';
+  const loanType = (num.form && num.form.type) || num.loanType || '';
+  const completedAt = num.documentationCompletedAt ? new Date(num.documentationCompletedAt).toLocaleString('en-IN') : '';
+
+  const docCards = docs.length ? docs.map(d => `
+      <div class="doc">
+        <div class="doc-ic">${fileIconFor(d.filename)}</div>
+        <div class="doc-meta">
+          <div class="doc-name">${esc(d.label)}</div>
+          <div class="doc-sub">${esc(d.filename)} \u00b7 ${humanSize(d.size)}</div>
+        </div>
+        <div class="doc-actions">
+          <a class="btn ghost" href="/share/${esc(token)}/doc/${esc(d.id)}" target="_blank" rel="noopener">View</a>
+          <a class="btn solid" href="/share/${esc(token)}/doc/${esc(d.id)}?dl=1">Download</a>
+        </div>
+      </div>`).join('') : '<p class="empty">No documents were attached to this lead.</p>';
+
+  const infoBlock = num.shareInfoText
+    ? `<pre class="info">${esc(num.shareInfoText)}</pre>`
+    : '<p class="empty">No additional information was recorded.</p>';
+
+  const html = `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>${esc(name)} — Loan Documents</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#eef2ff,#f0f9ff 55%,#faf5ff);color:#0f172a;min-height:100vh;padding:24px 14px 60px}
+  .wrap{max-width:760px;margin:0 auto}
+  .card{background:#fff;border:1px solid rgba(15,23,42,.06);border-radius:16px;box-shadow:0 8px 30px rgba(37,99,235,.08);padding:22px 24px;margin-bottom:18px}
+  .head{background:linear-gradient(135deg,#1e40af,#2563eb 60%,#3b82f6);color:#fff;border:none}
+  .head h1{font-size:24px;font-weight:700;letter-spacing:-.3px}
+  .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .pill{background:rgba(255,255,255,.16);color:#eff6ff;font-size:12px;font-weight:600;border-radius:20px;padding:5px 12px}
+  h2{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#2563eb;margin-bottom:14px;padding-bottom:8px;border-bottom:1.5px solid #dbeafe}
+  .info{white-space:pre-wrap;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.6;color:#1e293b;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;overflow-x:auto}
+  .doc{display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:10px;transition:box-shadow .15s,border-color .15s}
+  .doc:hover{border-color:#bfdbfe;box-shadow:0 2px 10px rgba(37,99,235,.08)}
+  .doc-ic{font-size:26px;flex-shrink:0}
+  .doc-meta{flex:1;min-width:0}
+  .doc-name{font-weight:600;font-size:14px;color:#0f172a;text-transform:capitalize}
+  .doc-sub{font-size:12px;color:#64748b;margin-top:2px;word-break:break-all}
+  .doc-actions{display:flex;gap:8px;flex-shrink:0}
+  .btn{font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:8px;text-decoration:none;cursor:pointer;white-space:nowrap}
+  .btn.solid{background:#2563eb;color:#fff}
+  .btn.ghost{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe}
+  .empty{color:#64748b;font-size:14px;padding:8px 0}
+  .foot{text-align:center;color:#94a3b8;font-size:12px;margin-top:8px}
+  @media(max-width:520px){.doc{flex-wrap:wrap}.doc-actions{width:100%}.btn{flex:1;text-align:center}}
+</style>
+</head><body>
+<div class="wrap">
+  <div class="card head">
+    <h1>${esc(name)}</h1>
+    <div class="pills">
+      ${loanType ? `<span class="pill">${esc(loanType)}</span>` : ''}
+      ${num.phone ? `<span class="pill">\uD83D\uDCDE ${esc(num.phone)}</span>` : ''}
+      <span class="pill">${docs.length} document${docs.length === 1 ? '' : 's'}</span>
+      ${completedAt ? `<span class="pill">${esc(completedAt)}</span>` : ''}
+    </div>
+  </div>
+  <div class="card">
+    <h2>Documents</h2>
+    ${docCards}
+  </div>
+  <div class="card">
+    <h2>Applicant Information</h2>
+    ${infoBlock}
+  </div>
+  <p class="foot">Secure document link \u00b7 Ruralift CRM</p>
+</div>
+</body></html>`;
+  res.send(html);
+});
+
+// Download / view an individual document from a shareable lead page.
+app.get('/share/:token/doc/:docId', (req, res) => {
+  const num = appState.numbers.find(n => n.shareToken === req.params.token);
+  if (!num) return res.status(404).send('Not found');
+  const doc = (num.shareDocs || []).find(d => d.id === req.params.docId);
+  if (!doc || !doc.path || !fs.existsSync(doc.path)) return res.status(404).send('Document not found');
+  if (req.query.dl) return res.download(doc.path, doc.filename);
+  res.sendFile(doc.path, (err) => { if (err && !res.headersSent) res.status(404).send('Document not found'); });
 });
 
 app.get('/api/admin/stats', (req, res) => res.json(getAdminStats()));
@@ -1239,7 +1512,9 @@ app.get('/api/admin/completed', (req, res) => {
       documentationCompletedAt: n.documentationCompletedAt || null,
       adminStatus: n.adminStatus || '',
       hasDocZip: !!(n.docZipPath && fs.existsSync(n.docZipPath)),
-      docZipName: n.docZipName || null
+      docZipName: n.docZipName || null,
+      shareToken: n.shareToken || null,
+      docCount: (n.shareDocs || []).length
     };
   });
   res.json(completed);
@@ -1257,7 +1532,9 @@ app.get('/api/agent/completed/:agentId', (req, res) => {
     documentationCompletedAt: n.documentationCompletedAt || null,
     adminStatus: n.adminStatus || '',
     hasDocZip: !!(n.docZipPath && fs.existsSync(n.docZipPath)),
-    docZipName: n.docZipName || null
+    docZipName: n.docZipName || null,
+    shareToken: n.shareToken || null,
+    docCount: (n.shareDocs || []).length
   }));
   res.json(completed);
 });

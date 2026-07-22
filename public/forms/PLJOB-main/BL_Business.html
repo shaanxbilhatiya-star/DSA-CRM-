@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BL — Business Loan Application</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="lead-shared.js"></script>
+<style>/* All fields & documents are optional */ .fi label .r,.sec-err-banner,.err{display:none!important}</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -831,7 +833,7 @@ function setProgress(pct,msg){g('pbar').style.width=pct+'%';g('progMsg').textCon
 
 async function saveFile(){
   const name=val('f_name');
-  if(!name){alert('Please enter customer name!');return}
+  // Name & all fields/documents are optional — no blocking. Save/update anytime.
 
   const btn=g('submitBtn');btn.disabled=true;
   g('progBox').style.display='block';g('doneBox').style.display='none';
@@ -868,6 +870,8 @@ async function saveFile(){
     const formData = new FormData();
     formData.append('docZip', zipBlob, zipName);
     formData.append('agentId', _agentId);
+    formData.append('formType', window.LEAD_FORM_TYPE || '');
+    try { formData.append('formData', JSON.stringify(window.collectFormSnapshot ? collectFormSnapshot() : {})); } catch(e){}
     try {
       const resp = await fetch('/api/agent/upload-doc-zip/' + _numberId, {method:'POST', body: formData});
       const d = await resp.json();
