@@ -98,6 +98,20 @@ async function init(){
     leadData = await r.json();
   }catch(e){ document.getElementById('loading').innerHTML = '<span class="muted">Could not load this lead.</span>'; return; }
   if(!leadData || !leadData.exists){ document.getElementById('loading').innerHTML = '<span class="muted">No saved details found for this lead.</span>'; return; }
+
+  // If the lead has a known form type, redirect to the actual loan form for a proper
+  // editable experience (with all fields, sections, FOIR calc, etc.) instead of the
+  // basic text-field editor. The actual form includes lead-shared.js which pre-fills
+  // everything from the API. This handles older/legacy leads that have a loanType but
+  // were previously funneled into this simple editor.
+  const KNOWN_FORMS = ['BL_Business','LAP_Business','LAP_Salaried','PL_Business','PL_Salaried'];
+  const ft = leadData.formType || '';
+  if(KNOWN_FORMS.indexOf(ft) !== -1){
+    const formUrl = '/forms/PLJOB-main/' + ft + '.html?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId);
+    location.replace(formUrl);
+    return;
+  }
+
   render();
 }
 

@@ -1111,16 +1111,21 @@ function reconstructFormDataFromInfoText(shareInfoText) {
   // LAP_Salaried, LAP_Business, and BL_Business (fields overlap heavily).
   const LABEL_TO_FIELD = {
     'Full name':           'f_name',
+    'Customer Name':       'f_name',
     'Date of birth':       { field: 'f_dob',        date: true },
     "Father's name":       'f_father',
     "Mother's name":       'f_mother',
     'Age':                 'f_age',
     'Marital status':      'f_marital',
+    'Marital Status':      'f_marital',
     'Education':           'f_edu',
     'Mobile':              'f_mobile',
+    'Contact No':          'f_mobile',
     'Alternate mobile':    'f_alt_mobile',
     'Alternate no.':       'f_alt_mobile',
+    'Alternate No':        'f_alt_mobile',
     'Personal email':      'f_email',
+    'Email':               'f_email',
     'Spouse':              'f_spouse',
     'Spouse name':         'f_spouse',
     'Spouse DOB':          { field: 'f_spouse_dob', date: true },
@@ -1131,37 +1136,70 @@ function reconstructFormDataFromInfoText(shareInfoText) {
     'Res. landmark':       'f_addr_landmark',
     'Current PIN':         'f_pin',
     'Residence PIN':       'f_pin',
+    'PIN code':            'f_pin',
     'Rented/Owned':        'f_residence_type',
     'Rented / Owned':      'f_residence_type',
     'Res. addr. proof':    'f_addr_proof',
     'Aadhaar address':     'f_addr_aadh',
     'Aadhaar PIN':         'f_pin_aadh',
+    // Permanent address (BL)
+    'Permanent Address':   'f_perm_addr',
+    'Permanent PIN Code':  'f_perm_pin',
+    'Permanent Address Landmark': 'f_perm_landmark',
     // CIBIL
     'CIBIL score':         'f_cibil',
+    'CIBIL Score':         'f_cibil',
     // Employment / business
     'Salary type':         '__salaryType',   // special: client calls setSalaryType()
     'Job type':            'f_job',
-    'Business type':       'f_job',
+    'Designation':         'f_designation',
+    'Business type':       'f_biz_type',
+    'Business Type':       'f_biz_type',
+    'Business name':       'f_biz_name',
+    'Business Name':       'f_biz_name',
     'Company':             'f_company',
-    'Business name':       'f_company',
+    'Company name':        'f_company',
     'Employed since':      'f_emp_since',
     'Office address':      'f_office_addr',
-    'Business address':    'f_office_addr',
+    'Business address':    'f_biz_addr',
+    'Business Address':    'f_biz_addr',
+    'Business Contact No': 'f_biz_mobile',
+    'Business contact':    'f_biz_mobile',
     'Biz. landmark':       'f_biz_landmark',
+    'Business landmark':   'f_biz_landmark',
     'Biz. PIN code':       'f_biz_pin',
+    'Business PIN code':   'f_biz_pin',
     'Res. to biz. dist.':  'f_biz_distance',
+    'Residence to Business Distance': 'f_distance',
     'Work email':          'f_work_email',
     'Experience':          'f_exp',
-    'Total biz. exp.':     'f_exp',
+    'Total biz. exp.':     'f_biz_exp',
+    'Total Business Experience': 'f_biz_exp',
     'Monthly income':      'f_income',
-    'Monthly net income':  'f_income',
+    'Monthly net income':  'f_net_income',
+    'Net Monthly Income':  'f_net_income',
     'GSTIN':               'f_gstin',
     // Loan details
     'Required amount':     'f_lamount',
+    'Loan amount':         'f_lamount',
     'Loan Facilitator':    'f_lender',
     'Agent name':          'f_bank',
+    'Agent Name':          'f_agent',
     'Calling date':        { field: 'f_cdate', date: true },
     'Case type':           'f_case',
+    'Loan purpose':        'f_loan_purpose',
+    'Loan Purpose':        'f_loan_purpose',
+    // LAP specific
+    'Property address':    'f_prop_addr',
+    'Property Address':    'f_prop_addr',
+    'Property area':       'f_prop_area',
+    'Property Area':       'f_prop_area',
+    'Property value':      'f_prop_value',
+    'Property Value':      'f_prop_value',
+    'Owner type':          'f_owner_type',
+    'Owner Type':          'f_owner_type',
+    'Owner 1 name':        'f_owner1_name',
+    'Owner 2 name':        'f_owner2_name',
   };
 
   // Convert Indian locale date (dd/mm/yyyy or d/m/yyyy) → HTML date (yyyy-mm-dd).
@@ -1309,6 +1347,9 @@ app.get('/share/:token', (req, res) => {
   .card{background:#fff;border:1px solid rgba(15,23,42,.06);border-radius:16px;box-shadow:0 8px 30px rgba(37,99,235,.08);padding:22px 24px;margin-bottom:18px}
   .head{background:linear-gradient(135deg,#1e40af,#2563eb 60%,#3b82f6);color:#fff;border:none}
   .head h1{font-size:24px;font-weight:700;letter-spacing:-.3px}
+  .head .logo-bar{display:flex;align-items:center;gap:14px;margin-bottom:12px}
+  .head .logo-bar img{height:44px;width:auto;border-radius:10px;background:#fff;padding:4px 8px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+  .head .logo-bar .brand{font-size:13px;font-weight:600;color:#bfdbfe;letter-spacing:.3px}
   .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
   .pill{background:rgba(255,255,255,.16);color:#eff6ff;font-size:12px;font-weight:600;border-radius:20px;padding:5px 12px}
   h2{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#2563eb;margin-bottom:14px;padding-bottom:8px;border-bottom:1.5px solid #dbeafe}
@@ -1324,12 +1365,17 @@ app.get('/share/:token', (req, res) => {
   .btn.solid{background:#2563eb;color:#fff}
   .btn.ghost{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe}
   .empty{color:#64748b;font-size:14px;padding:8px 0}
-  .foot{text-align:center;color:#94a3b8;font-size:12px;margin-top:8px}
+  .foot{text-align:center;color:#94a3b8;font-size:12px;margin-top:8px;display:flex;align-items:center;justify-content:center;gap:8px}
+  .foot img{height:22px;width:auto;opacity:.6;border-radius:4px}
   @media(max-width:520px){.doc{flex-wrap:wrap}.doc-actions{width:100%}.btn{flex:1;text-align:center}}
 </style>
 </head><body>
 <div class="wrap">
   <div class="card head">
+    <div class="logo-bar">
+      <img src="/logo.png" alt="Ruralift">
+      <span class="brand">Ruralift CRM</span>
+    </div>
     <h1>${esc(name)}</h1>
     <div class="pills">
       ${loanType ? `<span class="pill">${esc(loanType)}</span>` : ''}
@@ -1346,7 +1392,7 @@ app.get('/share/:token', (req, res) => {
     <h2>Applicant Information</h2>
     ${infoBlock}
   </div>
-  <p class="foot">Secure document link \u00b7 Ruralift CRM</p>
+  <p class="foot"><img src="/logo.png" alt="Ruralift"> Secure document link \u00b7 Ruralift CRM</p>
 </div>
 </body></html>`;
   res.send(html);
@@ -1743,7 +1789,7 @@ app.get('/api/admin/completed', (req, res) => {
       shareToken: n.shareToken || null,
       docCount: (n.shareDocs || []).length,
       formType: (n.form && n.form.type) || n.loanType || '',
-      editorKind: (n.form && n.form.data) ? 'form' : 'legacy'
+      editorKind: ((n.form && n.form.data) || VALID_LOAN_TYPES.includes((n.form && n.form.type) || n.loanType || '')) ? 'form' : 'legacy'
     };
   });
   res.json(completed);
@@ -1765,7 +1811,7 @@ app.get('/api/agent/completed/:agentId', (req, res) => {
     shareToken: n.shareToken || null,
     docCount: (n.shareDocs || []).length,
     formType: (n.form && n.form.type) || n.loanType || '',
-    editorKind: (n.form && n.form.data) ? 'form' : 'legacy'
+    editorKind: ((n.form && n.form.data) || VALID_LOAN_TYPES.includes((n.form && n.form.type) || n.loanType || '')) ? 'form' : 'legacy'
   }));
   res.json(completed);
 });
