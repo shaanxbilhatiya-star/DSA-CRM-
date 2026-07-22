@@ -259,6 +259,22 @@ if (!appState.recordings) {
 }
 appState = checkDailyReset(appState);
 
+// Purge orphaned agent runtime records — a removed user (deleted EID) can otherwise
+// linger in appState.agents and show up as a ghost row in admin stats and rankings
+// even though admin removed them. Every legitimate agent is created only after its
+// EID is validated against allowedEids, so any agent whose EID is no longer in the
+// registry is stale and safe to drop. Guard against an empty registry to avoid
+// wiping everything if allowedEids failed to load for some reason.
+if (Object.keys(appState.allowedEids).length > 0) {
+  for (const id of Object.keys(appState.agents)) {
+    const m = id.match(/^emp_(.+)$/);
+    const eid = m ? m[1] : null;
+    if (!eid || !appState.allowedEids[eid]) {
+      delete appState.agents[id];
+    }
+  }
+}
+
 for (const id in appState.agents) {
   const a = appState.agents[id];
   if (a.active && !a.onBreak) {
@@ -1973,14 +1989,17 @@ app.get('/api/rankings', (req, res) => {
     else if (entry.disposition === 'switch_off') agentScores[aid].switchOff++;
   });
 
-  // Filter out agents that have been removed (no longer in agents or allowedEids)
+  // Only keep agents that are still in the allowed-EID registry. `allowedEids`
+  // is the authoritative list of current employees, so any agent whose EID is no
+  // longer present has been removed by admin and must NOT appear in the rankings.
+  // Note: we intentionally do NOT trust `appState.agents` here — a removed user's
+  // runtime record can linger there and would otherwise show up as a ghost row.
+  // The `.+` capture (instead of `\d+`) also covers non-numeric employee IDs.
   for (const aid of Object.keys(agentScores)) {
-    const eidMatch = aid.match(/^emp_(\d+)$/);
-    if (eidMatch) {
-      const eidVal = eidMatch[1];
-      if (!appState.agents[aid] && !appState.allowedEids[eidVal]) {
-        delete agentScores[aid];
-      }
+    const eidMatch = aid.match(/^emp_(.+)$/);
+    const eidVal = eidMatch ? eidMatch[1] : null;
+    if (!eidVal || !appState.allowedEids[eidVal]) {
+      delete agentScores[aid];
     }
   }
 
@@ -1993,7 +2012,7 @@ app.get('/api/rankings', (req, res) => {
     }
     score = Math.round(score * 100) / 100;
     // Get profile photo
-    const eidMatch = a.agentId.match(/^emp_(\d+)$/);
+    const eidMatch = a.agentId.match(/^emp_(.+)$/);
     let profilePhoto = null;
     if (eidMatch) {
       const eidVal = appState.allowedEids[eidMatch[1]];
