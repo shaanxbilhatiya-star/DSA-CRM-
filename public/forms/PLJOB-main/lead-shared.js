@@ -80,12 +80,82 @@
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (!d || !d.exists) return;
-          if (d.data) window.applyFormSnapshot(d.data);
+          if (d.data) {
+            // New lead: exact structured field values captured on save.
+            window.applyFormSnapshot(d.data);
+          } else if (d.infoFields && d.infoFields.length) {
+            // Older/legacy lead: no structured fields were ever saved, but we DO
+            // have the applicant info text. Prefill the form by matching each saved
+            // "label : value" to the closest field on this form.
+            prefillFromInfoFields(d.infoFields);
+          }
           markUpdateMode(d);
         })
         .catch(function () {});
     }, 400);
   });
+
+  // Normalise a label for fuzzy comparison: lowercase, drop bracketed notes and
+  // punctuation, collapse whitespace. e.g. "Mobile number *" -> "mobile number".
+  function normLabel(s) {
+    return String(s || '')
+      .replace(/\(.*?\)/g, ' ')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  }
+
+  function setFieldValue(el, value) {
+    try {
+      if (el.tagName === 'SELECT') {
+        var want = normLabel(value);
+        var opt = Array.prototype.find.call(el.options, function (o) {
+          return normLabel(o.textContent) === want || normLabel(o.value) === want;
+        });
+        el.value = opt ? opt.value : value;
+      } else if (el.type === 'checkbox') {
+        el.checked = /^(yes|true|1|on|checked)$/i.test(String(value).trim());
+      } else {
+        el.value = value;
+      }
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    } catch (e) {}
+  }
+
+  // Prefill this form's fields from a legacy lead's parsed "label : value" list by
+  // matching each saved label to the closest field label on the form.
+  function prefillFromInfoFields(fields) {
+    var entries = [];
+    document.querySelectorAll('.fi').forEach(function (fi) {
+      var labelEl = fi.querySelector('label');
+      var input = fi.querySelector('input, select, textarea');
+      if (!labelEl || !input || input.type === 'file') return;
+      entries.push({ n: normLabel(labelEl.textContent), el: input });
+    });
+    var used = [];
+    function take(el) { used.push(el); }
+    function free(el) { return used.indexOf(el) === -1; }
+
+    // Pass 1 — exact normalised label match.
+    fields.forEach(function (f) {
+      if (f.heading || !f.value) return;
+      var fn = normLabel(f.label);
+      if (!fn) return;
+      var hit = entries.find(function (e) { return free(e.el) && e.n === fn; });
+      if (hit) { setFieldValue(hit.el, f.value); take(hit.el); }
+    });
+    // Pass 2 — one label is contained in the other (e.g. "Mobile" vs "Mobile number").
+    fields.forEach(function (f) {
+      if (f.heading || !f.value) return;
+      var fn = normLabel(f.label);
+      if (fn.length < 3) return;
+      var hit = entries.find(function (e) {
+        return free(e.el) && e.n.length >= 3 && (e.n.indexOf(fn) !== -1 || fn.indexOf(e.n) !== -1);
+      });
+      if (hit) { setFieldValue(hit.el, f.value); take(hit.el); }
+    });
+  }
 
   function markUpdateMode(d) {
     var btn = document.getElementById('submitBtn');
