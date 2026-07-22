@@ -153,6 +153,7 @@ function createFreshState(preserveAllowedEids) {
     agents: {},
     uploadedFiles: [],
     dialedLog: [],
+    recordings: [],
     lastReset: getTodayStr(),
     allowedEids: eids
   };
@@ -251,6 +252,10 @@ if (!appState.allowedEids) {
 }
 if (!appState.dndNumbers) {
   appState.dndNumbers = [];
+}
+// Migration: older state.json files predate the call-recording feature.
+if (!appState.recordings) {
+  appState.recordings = [];
 }
 appState = checkDailyReset(appState);
 

@@ -2288,10 +2288,15 @@ async function populateAdminRecAgentFilter() {
     // Keep "All Agents" option
     while (sel.options.length > 1) sel.remove(1);
 
-    // Add agent options
+    // Add agent options. Filter by agent NAME (recordings store agentName), not
+    // the internal id — the /api/recordings endpoint matches against
+    // agentName/agentEmail, so using the id here returned zero results.
+    const seenRecAgentNames = new Set();
     agents.sort((a, b) => a.name.localeCompare(b.name)).forEach(ag => {
+      if (!ag.name || seenRecAgentNames.has(ag.name)) return;
+      seenRecAgentNames.add(ag.name);
       const opt = document.createElement('option');
-      opt.value = ag.id;
+      opt.value = ag.name;
       opt.textContent = ag.name;
       sel.appendChild(opt);
     });
