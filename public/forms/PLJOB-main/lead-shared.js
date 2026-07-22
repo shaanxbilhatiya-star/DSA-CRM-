@@ -188,14 +188,13 @@
         .replace(/Save\s*File/i, 'Update File');
     }
     var docs = (d && d.docs) || [];
+    var shareToken = d && d.shareToken;
     var wrap = document.querySelector('.wrap') || document.body;
     var banner = document.createElement('div');
     banner.id = 'editModeBanner';
     banner.style.cssText = 'background:linear-gradient(135deg,#ecfdf5,#d1fae5);border:1px solid #6ee7b7;border-radius:12px;padding:14px 18px;margin-bottom:16px;color:#065f46;font-size:13.5px;line-height:1.6';
     var docList = docs.length
-      ? '<div style="margin-top:6px;font-size:12.5px;color:#047857">On file: ' +
-          docs.map(function (x) { return escapeHtml(x.label || x.filename); }).join(', ') +
-        '</div>'
+      ? '<div style="margin-top:6px;font-size:12.5px;color:#047857">\uD83D\uDCCE ' + docs.length + ' document(s) on file</div>'
       : '';
     banner.innerHTML =
       '<strong>&#128260; Editing an existing submission.</strong> ' +
@@ -203,6 +202,226 @@
       '<strong>Update File</strong> to save. Re-uploading documents is optional \u2014 ' +
       'leave a document empty to keep the one already on file.' + docList;
     wrap.insertBefore(banner, wrap.firstChild);
+
+    // ── Show existing documents on each upload field ──────────────────────────
+    if (docs.length && shareToken) {
+      markExistingDocs(docs, shareToken);
+    }
+  }
+
+  // ── DOC LABEL → UPLOAD INPUT ID MAPPING ─────────────────────────────────────
+  // Maps document filenames/labels (as stored in the ZIP) to the upload input IDs
+  // used across all 5 loan form types.
+  var DOC_TO_INPUT = {
+    // ── Common KYC (all forms) ──
+    'aadhaar card':           'up_aadhaar',
+    'aadhaar':                'up_aadhaar',
+    'pan card':               'up_pan',
+    'pan':                    'up_pan',
+    'passport photo':         'up_photo',
+    'passport size photo':    'up_photo',
+    'photo':                  'up_photo',
+    // ── Address / Utility ──
+    'electricity bill':       'up_elec',
+    'elec bill':              'up_elec',
+    // ── CIBIL ──
+    'cibil report':           'up_cibil',
+    'cibil':                  'up_cibil',
+    // ── Income docs (PL_Salaried, LAP_Salaried) ──
+    'salary slip':            'up_salary',
+    'salary slips':           'up_salary',
+    'pay slip':               'up_salary',
+    'form 16':                'up_form16',
+    'form16':                 'up_form16',
+    // ── Bank / Financial ──
+    'bank statement':         'up_bank',
+    'bank stmt':              'up_bank',
+    'cancelled cheque':       'up_cheque',
+    'cheque':                 'up_cheque',
+    'soa statement':          'up_soa',
+    'soa':                    'up_soa',
+    'soa statement always':   'up_soa_always',
+    // ── Business docs (BL_Business, PL_Business, LAP_Business) ──
+    'gst certificate':        'up_gst',
+    'gst':                    'up_gst',
+    'udhyam certificate':     'up_udhyam',
+    'udhyam':                 'up_udhyam',
+    'udyam certificate':      'up_udhyam',
+    'udyam':                  'up_udhyam',
+    'gumastha shop act':      'up_gumastha',
+    'gumastha':               'up_gumastha',
+    'shop act':               'up_gumastha',
+    'itr 3years':             'up_itr',
+    'itr':                    'up_itr',
+    'itr 3 years':            'up_itr',
+    'business address proof': 'up_biz_addr_proof',
+    'biz addr proof':         'up_biz_addr_proof',
+    'shop video':             'up_shop_video',
+    'business vintage proof': 'up_vintage',
+    'vintage proof':          'up_vintage',
+    'trade license':          'up_trade',
+    'trade':                  'up_trade',
+    // ── PL_Salaried specific ──
+    'appointment letter id':  'up_appt',
+    'appointment letter':     'up_appt',
+    'employee id':            'up_appt',
+    // ── BL_Business specific ──
+    'permanent address proof':'up_perm_proof',
+    'perm addr proof':        'up_perm_proof',
+    // ── LAP Property docs (LAP_Business + LAP_Salaried) ──
+    'property video':         'up_prop_video',
+    'registry':               'up_registry',
+    'patta':                  'up_patta',
+    'khasra agri':            'up_khasra_agri',
+    'khasra':                 'up_khasra',
+    'rin pustika':            'up_rin',
+    'rin':                    'up_rin',
+    'khatauni':               'up_khatauni',
+    'b1 agri':                'up_b1_agri',
+    'b1':                     'up_b1',
+    'registry shop':          'up_registry_shop',
+    'diversion shop':         'up_div_shop',
+    'khasra shop':            'up_khasra_shop',
+    'shop naksha':            'up_shop_naksha',
+    'patta village':          'up_patta_v',
+    'khasra village':         'up_khasra_v',
+    'noc':                    'up_noc',
+    'village misc':           'up_village_misc',
+    'naksha':                 'up_naksha',
+    'diversion':              'up_diversion',
+    'khasra b1':              'up_khasra_b1',
+    'tax receipt':            'up_tax_etc',
+    'tax':                    'up_tax_etc',
+    'registry plot':          'up_registry_plot',
+    'diversion plot':         'up_div_plot',
+    'plot misc':              'up_plot_misc',
+    'agri misc':              'up_agri_misc',
+    'shop misc':              'up_shop_misc',
+    // ── LAP Owner docs ──
+    'owner1 aadhaar':         'up_owner1_aadhaar',
+    'owner 1 aadhaar':        'up_owner1_aadhaar',
+    'owner1 pan':             'up_owner1_pan',
+    'owner 1 pan':            'up_owner1_pan',
+    'owner2 aadhaar':         'up_owner2_aadhaar',
+    'owner 2 aadhaar':        'up_owner2_aadhaar',
+    'owner2 pan':             'up_owner2_pan',
+    'owner 2 pan':            'up_owner2_pan',
+    'owner other aadhaar':    'up_owner_other_aadhaar',
+    'owner other pan':        'up_owner_other_pan',
+    // LAP additional
+    'khasra plot':            'up_khasra_plot',
+    'b1 plot':                'up_b1_plot',
+    'namantaran':             'up_namantaran',
+    'ptax':                   'up_ptax',
+    'property tax':           'up_ptax',
+  };
+
+  function normDocLabel(s) {
+    return String(s || '').toLowerCase()
+      .replace(/[_\-]+/g, ' ')
+      .replace(/\.[a-z]{2,5}$/, '')   // strip file extension
+      .replace(/\s*\d+$/, '')          // strip trailing number (e.g. "Bank Statement 1")
+      .replace(/[^a-z0-9 ]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function findUploadInput(docLabel, docFilename) {
+    var candidates = [normDocLabel(docLabel), normDocLabel(docFilename)];
+    for (var c = 0; c < candidates.length; c++) {
+      var norm = candidates[c];
+      if (!norm) continue;
+      if (DOC_TO_INPUT[norm]) return DOC_TO_INPUT[norm];
+      var keys = Object.keys(DOC_TO_INPUT);
+      for (var i = 0; i < keys.length; i++) {
+        if (norm.indexOf(keys[i]) !== -1 || keys[i].indexOf(norm) !== -1) {
+          return DOC_TO_INPUT[keys[i]];
+        }
+      }
+    }
+    return null;
+  }
+
+  function markExistingDocs(docs, shareToken) {
+    // Group docs by upload input (multiple files can map to same input)
+    var grouped = {};
+    docs.forEach(function (doc) {
+      var inputId = findUploadInput(doc.label, doc.filename);
+      if (!inputId) return;
+      if (!grouped[inputId]) grouped[inputId] = [];
+      grouped[inputId].push(doc);
+    });
+
+    Object.keys(grouped).forEach(function (inputId) {
+      var inputEl = document.getElementById(inputId);
+      if (!inputEl) return;
+
+      var ubEl = inputEl.closest('.ub');
+      if (!ubEl) return;
+
+      var docList = grouped[inputId];
+
+      // Mark the upload button as "already uploaded"
+      ubEl.classList.add('uploaded');
+
+      // Create a visual indicator showing the existing docs with view links
+      var indicator = document.createElement('div');
+      indicator.className = 'existing-doc-indicator';
+      indicator.style.cssText = 'margin-top:8px;padding:9px 12px;background:linear-gradient(135deg,#ecfdf5,#f0fdf4);border:1.5px solid #86efac;border-radius:9px;font-size:12.5px;color:#166534;line-height:1.5';
+
+      var html = '<div style="font-weight:700;margin-bottom:5px;display:flex;align-items:center;gap:5px">' +
+        '<span style="font-size:14px">\u2705</span> Already on file' +
+        (docList.length > 1 ? ' (' + docList.length + ' files)' : '') +
+        '</div>';
+
+      html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+      docList.forEach(function (doc) {
+        var viewUrl = '/share/' + encodeURIComponent(shareToken) + '/doc/' + encodeURIComponent(doc.id);
+        html += '<a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" ' +
+          'style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#fff;border:1px solid #bbf7d0;border-radius:6px;color:#15803d;text-decoration:none;font-size:11.5px;font-weight:600;transition:all .15s"' +
+          ' onmouseover="this.style.background=\'#dcfce7\';this.style.borderColor=\'#4ade80\'"' +
+          ' onmouseout="this.style.background=\'#fff\';this.style.borderColor=\'#bbf7d0\'">' +
+          '\uD83D\uDCC4 ' + escapeHtml(doc.label || doc.filename) +
+          '</a>';
+      });
+      html += '</div>';
+      html += '<div style="margin-top:5px;font-size:11px;color:#16a34a;font-style:italic">Re-upload only if you want to replace this document</div>';
+
+      indicator.innerHTML = html;
+      ubEl.parentNode.insertBefore(indicator, ubEl.nextSibling);
+
+      // Update the filename display if present
+      var fnEl = ubEl.parentNode.querySelector('.fn');
+      if (fnEl) {
+        fnEl.textContent = '\u2705 ' + docList.map(function (d) { return d.filename; }).join(', ') + ' (on file)';
+        fnEl.style.display = 'block';
+        fnEl.style.color = '#16a34a';
+      }
+
+      // Update document checklist if present
+      if (typeof window.updateChecklist === 'function') {
+        try { window.updateChecklist(inputId, true); } catch (e) {}
+      }
+    });
+
+    // Show unmatched docs in the banner
+    var unmatchedDocs = docs.filter(function (doc) {
+      return !findUploadInput(doc.label, doc.filename);
+    });
+    if (unmatchedDocs.length > 0) {
+      var bannerEl = document.getElementById('editModeBanner');
+      if (bannerEl) {
+        var extra = '<div style="margin-top:8px;padding:8px 12px;background:rgba(255,255,255,.6);border-radius:8px;font-size:12px">' +
+          '<strong>Other documents on file:</strong> ';
+        extra += unmatchedDocs.map(function (doc) {
+          var viewUrl = '/share/' + encodeURIComponent(shareToken) + '/doc/' + encodeURIComponent(doc.id);
+          return '<a href="' + escapeHtml(viewUrl) + '" target="_blank" style="color:#047857;text-decoration:underline">' +
+            escapeHtml(doc.label || doc.filename) + '</a>';
+        }).join(', ');
+        extra += '</div>';
+        bannerEl.innerHTML += extra;
+      }
+    }
   }
 
   function escapeHtml(s) {
