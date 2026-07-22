@@ -136,8 +136,15 @@ function sanitizeFileName(s) {
 
 // Turn a lead's uploaded ZIP into a shareable page: pull out Applicant_Info.txt as
 // readable text and each Documents/* file as an individually downloadable file.
-// Idempotent unless {force:true}. Falls back to exposing the raw ZIP as a single
-// download if the archive can't be parsed, so no data is ever lost.
+// Idempotent unless {force:true}.
+//
+// {merge:true} preserves documents already on file and only adds/replaces the ones
+// present in the new ZIP (matched by label). This is what makes "edit an existing
+// submission and add the missing document" work without wiping the earlier files —
+// the re-submitted form only contains whatever the agent re-selected.
+//
+// Falls back to exposing the raw ZIP as a single download if the archive can't be
+// parsed, so no data is ever lost.
 function explodeZipForLead(num, opts) {
   opts = opts || {};
   if (!num) return false;
@@ -146,43 +153,69 @@ function explodeZipForLead(num, opts) {
 
   const token = num.shareToken || uuidv4();
   const destDir = path.join(SHARES_DIR, token);
-  try { if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true }); } catch {}
+
+  const existing = (opts.merge && Array.isArray(num.shareDocs))
+    ? num.shareDocs.filter(d => d && d.path && fs.existsSync(d.path))
+    : [];
+
+  if (!opts.merge) {
+    // Fresh build — start from an empty folder.
+    try { if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true }); } catch {}
+  }
   ensureDir(destDir);
 
   let entries = null;
   try { entries = readZipEntries(fs.readFileSync(num.docZipPath)); }
   catch (e) { entries = null; }
 
-  const docs = [];
+  // Parse the archive into { label, filename, data } records (skip the info text).
   let infoText = '';
+  const parsed = [];
   if (entries) {
-    let idx = 0;
     for (const e of entries) {
       if (!e.data) continue;
       const base = e.name.split('/').pop();
       if (base === 'Applicant_Info.txt') { infoText = e.data.toString('utf8'); continue; }
       const safe = sanitizeFileName(base);
-      const outName = idx + '__' + safe;
-      const outPath = path.join(destDir, outName);
-      try { fs.writeFileSync(outPath, e.data); } catch { continue; }
       const label = safe.replace(/\.[^.]+$/, '').replace(/_/g, ' ').trim() || safe;
-      docs.push({ id: String(idx), label, filename: safe, path: outPath, size: e.data.length });
-      idx++;
+      parsed.push({ label, filename: safe, data: e.data });
     }
   }
 
-  // Fallback — couldn't parse or archive had nothing extractable: keep the ZIP itself.
-  if (!entries || (docs.length === 0 && !infoText)) {
+  // Start the document map from what's already on file (merge) or empty (fresh).
+  const byKey = new Map();
+  let maxId = -1;
+  for (const d of existing) {
+    byKey.set((d.label || d.filename || '').toLowerCase(), d);
+    const n = parseInt(d.id, 10); if (!isNaN(n)) maxId = Math.max(maxId, n);
+  }
+  // Overlay the newly uploaded documents (replace same-label, add new ones).
+  for (const nd of parsed) {
+    const key = nd.label.toLowerCase();
+    const prev = byKey.get(key);
+    if (prev && prev.path) { try { fs.unlinkSync(prev.path); } catch {} }
+    const id = prev ? prev.id : String(++maxId);
+    const outPath = path.join(destDir, id + '__' + nd.filename);
+    try { fs.writeFileSync(outPath, nd.data); } catch { continue; }
+    byKey.set(key, { id, label: nd.label, filename: nd.filename, path: outPath, size: nd.data.length });
+  }
+
+  let docs = Array.from(byKey.values());
+
+  // Fallback — couldn't parse the archive and we have nothing else: keep the ZIP itself.
+  if (docs.length === 0 && !infoText) {
     const safe = sanitizeFileName(num.docZipName || 'documents.zip');
     const outPath = path.join(destDir, '0__' + safe);
     try {
       fs.copyFileSync(num.docZipPath, outPath);
-      docs.push({ id: '0', label: 'All Documents (ZIP)', filename: safe, path: outPath, size: fs.statSync(outPath).size });
+      docs = [{ id: '0', label: 'All Documents (ZIP)', filename: safe, path: outPath, size: fs.statSync(outPath).size }];
     } catch {}
   }
 
   num.shareToken = token;
-  num.shareInfoText = infoText || num.shareInfoText || '';
+  num.shareInfoText = (opts.keepInfo && num.shareInfoText)
+    ? num.shareInfoText
+    : (infoText || num.shareInfoText || '');
   num.shareDocs = docs;
   num.shareUpdatedAt = new Date().toISOString();
   return true;
@@ -966,20 +999,37 @@ app.post('/api/agent/upload-doc-zip/:numberId', docUpload.single('docZip'), (req
     num.adminStatus = num.adminStatus || 'In Process';
 
     // Store the structured form field values so the form can be re-opened and
-    // edited later (prefilled), and record which loan form was used.
+    // edited later (prefilled), and record which loan form was used. We only
+    // persist the values when the agent actually entered something — this way
+    // "just add one missing document" to an older lead never blanks out the
+    // details that were already saved.
+    let hasRealData = false;
     try {
       if (req.body.formData) {
-        num.form = {
-          type: req.body.formType || num.loanType || '',
-          data: JSON.parse(req.body.formData),
-          updatedAt: new Date().toISOString()
-        };
+        const parsed = JSON.parse(req.body.formData);
+        hasRealData = Object.values(parsed).some(v => (typeof v === 'string' ? v.trim() !== '' : !!v));
+        if (hasRealData || !num.form) {
+          num.form = {
+            type: req.body.formType || (num.form && num.form.type) || num.loanType || '',
+            data: parsed,
+            updatedAt: new Date().toISOString()
+          };
+        }
       }
     } catch (e) { /* ignore malformed formData */ }
 
-    // Explode the ZIP into an individual-document shareable page (replaces the
-    // old "download a ZIP" flow). force:true so re-submissions refresh the page.
-    try { explodeZipForLead(num, { force: true }); } catch (e) { console.error('explode failed:', e.message); }
+    // Explode the ZIP into an individual-document shareable page (replaces the old
+    // "download a ZIP" flow). force:true so re-submissions refresh the page; merge
+    // when the lead already has documents so an edit that only re-uploads one file
+    // keeps the previously uploaded documents. keepInfo preserves the saved text
+    // info when this submission carried no real field data (add-a-doc-only edits).
+    try {
+      explodeZipForLead(num, {
+        force: true,
+        merge: !!(num.shareDocs && num.shareDocs.length),
+        keepInfo: !hasRealData
+      });
+    } catch (e) { console.error('explode failed:', e.message); }
 
     saveState(appState);
     broadcastAdminStats();
@@ -1514,7 +1564,8 @@ app.get('/api/admin/completed', (req, res) => {
       hasDocZip: !!(n.docZipPath && fs.existsSync(n.docZipPath)),
       docZipName: n.docZipName || null,
       shareToken: n.shareToken || null,
-      docCount: (n.shareDocs || []).length
+      docCount: (n.shareDocs || []).length,
+      formType: (n.form && n.form.type) || n.loanType || ''
     };
   });
   res.json(completed);
@@ -1534,7 +1585,8 @@ app.get('/api/agent/completed/:agentId', (req, res) => {
     hasDocZip: !!(n.docZipPath && fs.existsSync(n.docZipPath)),
     docZipName: n.docZipName || null,
     shareToken: n.shareToken || null,
-    docCount: (n.shareDocs || []).length
+    docCount: (n.shareDocs || []).length,
+    formType: (n.form && n.form.type) || n.loanType || ''
   }));
   res.json(completed);
 });
