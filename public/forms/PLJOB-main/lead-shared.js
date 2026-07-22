@@ -188,12 +188,13 @@
         .replace(/Save\s*File/i, 'Update File');
     }
     var docs = (d && d.docs) || [];
+    var shareToken = d && d.shareToken;
     var wrap = document.querySelector('.wrap') || document.body;
     var banner = document.createElement('div');
     banner.id = 'editModeBanner';
     banner.style.cssText = 'background:linear-gradient(135deg,#ecfdf5,#d1fae5);border:1px solid #6ee7b7;border-radius:12px;padding:14px 18px;margin-bottom:16px;color:#065f46;font-size:13.5px;line-height:1.6';
     var docList = docs.length
-      ? '<div style="margin-top:6px;font-size:12.5px;color:#047857">On file: ' +
+      ? '<div style="margin-top:6px;font-size:12.5px;color:#047857">\uD83D\uDCCE On file: ' +
           docs.map(function (x) { return escapeHtml(x.label || x.filename); }).join(', ') +
         '</div>'
       : '';
@@ -203,6 +204,177 @@
       '<strong>Update File</strong> to save. Re-uploading documents is optional \u2014 ' +
       'leave a document empty to keep the one already on file.' + docList;
     wrap.insertBefore(banner, wrap.firstChild);
+
+    // ── Show existing documents on upload fields ──────────────────────────────
+    // Match each on-file document to its upload input by fuzzy-matching the
+    // document label/filename to the upload button's text. This makes the form
+    // visually show "already uploaded" with a View link for each doc.
+    if (docs.length && shareToken) {
+      markExistingDocs(docs, shareToken);
+    }
+  }
+
+  // ── DOC LABEL → UPLOAD INPUT MAPPING ─────────────────────────────────────────
+  // Maps document filenames/labels (as stored in the ZIP) to the upload input IDs
+  // used in the loan forms. Covers all 5 form types.
+  var DOC_TO_INPUT = {
+    'aadhaar card':        'up_aadhaar',
+    'aadhaar':             'up_aadhaar',
+    'pan card':            'up_pan',
+    'pan':                 'up_pan',
+    'passport photo':      'up_photo',
+    'passport size photo': 'up_photo',
+    'photo':               'up_photo',
+    'electricity bill':    'up_elec',
+    'elec bill':           'up_elec',
+    'cibil report':        'up_cibil',
+    'cibil':               'up_cibil',
+    'salary slip':         'up_salary',
+    'salary slips':        'up_salary',
+    'pay slip':            'up_salary',
+    'bank statement':      'up_bank',
+    'bank stmt':           'up_bank',
+    'cancelled cheque':    'up_cheque',
+    'cheque':              'up_cheque',
+    'udhyam certificate':  'up_udhyam',
+    'udhyam':              'up_udhyam',
+    'udyam certificate':   'up_udhyam',
+    'udyam':               'up_udhyam',
+    'itr 3years':          'up_itr',
+    'itr':                 'up_itr',
+    'itr 3 years':         'up_itr',
+    'business address proof': 'up_biz_addr_proof',
+    'biz addr proof':      'up_biz_addr_proof',
+    'soa statement':       'up_soa',
+    'soa':                 'up_soa',
+    'soa statement always':'up_soa_always',
+    'form 16':             'up_form16',
+    'form16':              'up_form16',
+    'appointment letter id':'up_appt',
+    'appointment letter':  'up_appt',
+    'employee id':         'up_appt',
+    'shop video':          'up_shop_video',
+    'permanent address proof': 'up_perm_proof',
+    'perm addr proof':     'up_perm_proof',
+    // LAP specific
+    'property paper':      'up_prop_paper',
+    'property papers':     'up_prop_paper',
+    'valuation report':    'up_valuation',
+    'map plan':            'up_map',
+    'chain deed':          'up_chain',
+  };
+
+  function normDocLabel(s) {
+    return String(s || '').toLowerCase()
+      .replace(/[_\-]+/g, ' ')
+      .replace(/\.[a-z]{2,5}$/, '')   // strip file extension
+      .replace(/\s*\d+$/, '')          // strip trailing number (e.g. "Bank Statement 1" → "Bank Statement")
+      .replace(/[^a-z0-9 ]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function findUploadInput(docLabel, docFilename) {
+    // Try matching by label first, then filename
+    var candidates = [normDocLabel(docLabel), normDocLabel(docFilename)];
+    for (var c = 0; c < candidates.length; c++) {
+      var norm = candidates[c];
+      if (!norm) continue;
+      // Direct match
+      if (DOC_TO_INPUT[norm]) return DOC_TO_INPUT[norm];
+      // Partial match: check if any key is contained in the norm or vice versa
+      var keys = Object.keys(DOC_TO_INPUT);
+      for (var i = 0; i < keys.length; i++) {
+        if (norm.indexOf(keys[i]) !== -1 || keys[i].indexOf(norm) !== -1) {
+          return DOC_TO_INPUT[keys[i]];
+        }
+      }
+    }
+    return null;
+  }
+
+  function markExistingDocs(docs, shareToken) {
+    // Group docs by upload input (multiple docs can map to same input, e.g. multiple bank statements)
+    var grouped = {};
+    docs.forEach(function (doc) {
+      var inputId = findUploadInput(doc.label, doc.filename);
+      if (!inputId) return;
+      if (!grouped[inputId]) grouped[inputId] = [];
+      grouped[inputId].push(doc);
+    });
+
+    Object.keys(grouped).forEach(function (inputId) {
+      var inputEl = document.getElementById(inputId);
+      if (!inputEl) return;
+
+      var ubEl = inputEl.closest('.ub');
+      if (!ubEl) return;
+
+      var docList = grouped[inputId];
+
+      // Mark the upload button as "already uploaded"
+      ubEl.classList.add('uploaded');
+
+      // Create a visual indicator showing the existing docs with view links
+      var indicator = document.createElement('div');
+      indicator.className = 'existing-doc-indicator';
+      indicator.style.cssText = 'margin-top:8px;padding:8px 12px;background:linear-gradient(135deg,#ecfdf5,#f0fdf4);border:1px solid #86efac;border-radius:8px;font-size:12.5px;color:#166534;line-height:1.6';
+
+      var html = '<div style="font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:5px">' +
+        '<span style="font-size:14px">\u2705</span> Already on file' +
+        (docList.length > 1 ? ' (' + docList.length + ' files)' : '') +
+        '</div>';
+
+      html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+      docList.forEach(function (doc) {
+        var viewUrl = '/share/' + encodeURIComponent(shareToken) + '/doc/' + encodeURIComponent(doc.id);
+        html += '<a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" ' +
+          'style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#fff;border:1px solid #bbf7d0;border-radius:6px;color:#15803d;text-decoration:none;font-size:11.5px;font-weight:600;transition:all .15s"' +
+          ' onmouseover="this.style.background=\'#dcfce7\';this.style.borderColor=\'#4ade80\'"' +
+          ' onmouseout="this.style.background=\'#fff\';this.style.borderColor=\'#bbf7d0\'">' +
+          '\uD83D\uDCC4 ' + escapeHtml(doc.label || doc.filename) +
+          '</a>';
+      });
+      html += '</div>';
+      html += '<div style="margin-top:4px;font-size:11px;color:#4ade80;font-style:italic">Re-upload only if you want to replace</div>';
+
+      indicator.innerHTML = html;
+
+      // Insert after the upload button
+      ubEl.parentNode.insertBefore(indicator, ubEl.nextSibling);
+
+      // Also update the filename display if present
+      var fnEl = ubEl.parentNode.querySelector('.fn');
+      if (fnEl) {
+        fnEl.textContent = '\u2705 ' + docList.map(function (d) { return d.filename; }).join(', ') + ' (on file)';
+        fnEl.style.display = 'block';
+        fnEl.style.color = '#16a34a';
+      }
+
+      // Update checklist if exists
+      if (typeof window.updateChecklist === 'function') {
+        try { window.updateChecklist(inputId, true); } catch (e) {}
+      }
+    });
+
+    // Also mark any docs that didn't match an upload field — show them in the banner
+    var unmatchedDocs = docs.filter(function (doc) {
+      return !findUploadInput(doc.label, doc.filename);
+    });
+    if (unmatchedDocs.length > 0) {
+      var bannerEl = document.getElementById('editModeBanner');
+      if (bannerEl) {
+        var extra = '<div style="margin-top:8px;padding:8px 12px;background:rgba(255,255,255,.6);border-radius:8px;font-size:12px">' +
+          '<strong>Other documents on file:</strong> ';
+        extra += unmatchedDocs.map(function (doc) {
+          var viewUrl = '/share/' + encodeURIComponent(shareToken) + '/doc/' + encodeURIComponent(doc.id);
+          return '<a href="' + escapeHtml(viewUrl) + '" target="_blank" style="color:#047857;text-decoration:underline">' +
+            escapeHtml(doc.label || doc.filename) + '</a>';
+        }).join(', ');
+        extra += '</div>';
+        bannerEl.innerHTML += extra;
+      }
+    }
   }
 
   function escapeHtml(s) {
