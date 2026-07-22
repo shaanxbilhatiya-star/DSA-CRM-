@@ -905,6 +905,7 @@
   </div>
   <div class="header-right">
     <span class="today-badge" id="liveClock" style="min-width:96px;text-align:center">--:--:--</span>
+    <button class="action-btn" id="btnManualRecordingUpload" onclick="manualRecordingUpload()" style="width:auto;padding:8px 14px;font-size:12px;background:#fff3cd;color:#856404;border:1.5px solid #ffc107">🎙️ Upload Recordings</button>
     <button id="btnLogout" onclick="logoutAgent()" style="display:none;background:none;border:1px solid var(--border-strong);color:var(--muted);padding:5px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans)">Logout</button>
     <span class="badge">AGENT</span>
   </div>
@@ -2140,6 +2141,12 @@ function nextNumber() {
 }
 
 function showNumber(numberId, phone, name, totalDialedToday, resumed) {
+  // Don't allow showing numbers during restriction time
+  if (dialingRestricted) {
+    showToast('⏰ Dialing is restricted. Please upload recordings and logout.', 'error');
+    return;
+  }
+
   currentNumberId  = numberId;
   dialerWasActive  = true;
   dialerWasOnBreak = false;
@@ -4267,6 +4274,8 @@ async function loadScript() {
 loadScript();
 
 function showScriptPopup() {
+  // Don't show script popup during restriction time
+  if (dialingRestricted) return;
   if (!scriptContent) return;
   var el = document.getElementById('scriptContent');
   el.textContent = scriptContent;
@@ -4461,6 +4470,342 @@ function tickLiveClock() {
 }
 tickLiveClock();
 setInterval(tickLiveClock, 1000);
+
+
+// ── 5:45 PM IST Restriction & Recording Upload ────────────────────────────────
+let selectedRecordingFiles = [];
+let dialingRestricted = false;
+
+function checkTimeRestriction() {
+  const now = new Date();
+  const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const hours = istTime.getHours();
+  const minutes = istTime.getMinutes();
+
+  // Restrict dialing from 5:45 PM (17:45) until 2:00 AM (02:00) next day
+  const isRestricted = (hours === 17 && minutes >= 45) || hours >= 18 || hours < 2;
+
+  if (isRestricted && !dialingRestricted) {
+    dialingRestricted = true;
+    restrictDialingShowRecordingUpload();
+  } else if (!isRestricted && dialingRestricted) {
+    // Auto-resume at 2:00 AM IST
+    dialingRestricted = false;
+    resumeDialingAfterRestriction();
+  }
+}
+
+function restrictDialingShowRecordingUpload() {
+  // Stop all dialing activities immediately
+  if (currentNumberId) {
+    socket.emit('agent-disposition', { agentId, numberId: currentNumberId, disposition: 'system_paused' });
+    currentNumberId = null;
+  }
+
+  // Close script popup if open
+  const scriptModal = document.getElementById('scriptPopupModal');
+  if (scriptModal) {
+    scriptModal.classList.remove('active');
+    scriptPopupShown = false;
+  }
+
+  // COMPLETELY HIDE the entire dialer panel (📞 Current Lead section)
+  const dialerPanel = document.querySelector('.panel.dialer-panel');
+  if (dialerPanel) dialerPanel.style.display = 'none';
+
+  // COMPLETELY HIDE the stats panel (📊 My Disposition Stats)
+  const statsPanel = document.querySelectorAll('.grid-2 > .panel')[1]; // Second panel in grid-2
+  if (statsPanel) statsPanel.style.display = 'none';
+
+  // Create standalone recording upload panel (replaces the entire grid-2)
+  const grid2 = document.querySelector('.grid-2');
+  if (grid2 && !document.getElementById('standaloneRecordingPanel')) {
+    const recordingPanel = document.createElement('div');
+    recordingPanel.id = 'standaloneRecordingPanel';
+    recordingPanel.className = 'panel';
+    recordingPanel.style.cssText = 'grid-column: 1 / -1; border: 2px solid var(--accent);';
+    recordingPanel.innerHTML = `
+      <div class="panel-header accent-h">
+        <h2>🎙️ Upload Call Recordings</h2>
+        <span style="font-size:11px;color:var(--muted)">Dialing Restricted: 5:45 PM - 2:00 AM IST</span>
+      </div>
+      <div class="panel-body" style="padding: 30px 20px; text-align: center;">
+        <div style="font-size: 48px; margin-bottom: 12px;">🎙️</div>
+        <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 8px; color: var(--accent);">
+          Upload Call Recordings
+        </h3>
+        <p style="font-size: 14px; color: var(--muted); margin-bottom: 20px; line-height: 1.6;">
+          कृपया आज की सभी कॉल रिकॉर्डिंग अपलोड करें। Multiple files select कर सकते हैं।
+        </p>
+
+        <div id="recordingDropZone" style="border: 2px dashed var(--border-strong); border-radius: 12px; padding: 40px 20px; margin-bottom: 20px; cursor: pointer; transition: all 0.2s; background: var(--surface2);"
+             onclick="document.getElementById('recordingFileInput').click()"
+             ondragover="event.preventDefault(); this.style.borderColor='var(--accent)'; this.style.background='var(--accent-glow)'"
+             ondragleave="this.style.borderColor='var(--border-strong)'; this.style.background='var(--surface2)'"
+             ondrop="handleRecordingDrop(event)">
+          <div style="font-size: 40px; margin-bottom: 10px;">🎵</div>
+          <div style="font-weight: 600; color: var(--text); margin-bottom: 6px;">Click or drag & drop audio files</div>
+          <div style="font-size: 12px; color: var(--muted);">All audio formats accepted · Multiple files · Max 50MB per file</div>
+        </div>
+
+        <input type="file" id="recordingFileInput" accept="audio/*,.mp3,.wav,.ogg,.webm,.aac,.m4a,.flac,.amr,.3gp" multiple style="display: none" onchange="handleRecordingSelect(event)">
+
+        <div id="recordingSelectedFiles" style="display: none; margin-bottom: 20px;">
+          <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px; text-align: left;">Selected Files:</div>
+          <div id="recordingFileList" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;"></div>
+        </div>
+
+        <div id="recordingUploadProgress" style="display: none; margin-bottom: 20px;">
+          <div style="font-size: 13px; color: var(--muted); margin-bottom: 8px;" id="recordingProgressText">Uploading...</div>
+          <div style="background: var(--surface2); border-radius: 100px; height: 10px; overflow: hidden;">
+            <div id="recordingProgressBar" style="height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; border-radius: 100px;"></div>
+          </div>
+        </div>
+
+        <button id="btnUploadRecordings" onclick="submitRecordings()" class="action-btn" style="background: var(--accent); color: #fff; width: 100%; max-width: 400px;">
+          📤 Upload Recordings
+        </button>
+
+        <div style="margin-top: 16px; padding: 14px; background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 8px; font-size: 13px; color: var(--text);">
+          ⚠️ <strong>Note:</strong> Dialing will automatically resume at 2:00 AM IST. Recordings will be auto-deleted after 7 days.
+        </div>
+
+        <div style="margin-top: 12px; padding: 12px; background: var(--green-bg); border: 1px solid var(--green-border); border-radius: 8px; font-size: 12px; color: var(--green);">
+          ✅ After uploading, you can logout. The system will be ready for dialing tomorrow at 2:00 AM IST.
+        </div>
+      </div>
+    `;
+    grid2.appendChild(recordingPanel);
+  }
+
+  showToast('⏰ Dialing restricted (5:45 PM - 2:00 AM IST). Please upload today\'s recordings and logout.', 'warn');
+}
+
+function resumeDialingAfterRestriction() {
+  // Remove standalone recording panel
+  const recordingPanel = document.getElementById('standaloneRecordingPanel');
+  if (recordingPanel) recordingPanel.remove();
+
+  // Restore dialer panel
+  const dialerPanel = document.querySelector('.panel.dialer-panel');
+  if (dialerPanel) dialerPanel.style.display = '';
+
+  // Restore stats panel
+  const statsPanel = document.querySelectorAll('.grid-2 > .panel')[1];
+  if (statsPanel) statsPanel.style.display = '';
+
+  selectedRecordingFiles = [];
+  showToast('✅ Dialing has resumed. You can start calling again.', 'success');
+}
+
+function handleRecordingDrop(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.currentTarget.style.borderColor = 'var(--border-strong)';
+  event.currentTarget.style.background = 'var(--surface2)';
+  const files = Array.from(event.dataTransfer.files);
+  addRecordingFiles(files);
+}
+
+function handleRecordingSelect(event) {
+  const files = Array.from(event.target.files);
+  addRecordingFiles(files);
+}
+
+function addRecordingFiles(files) {
+  const audioFiles = files.filter(f => {
+    const isAudioMime = f.type.startsWith('audio/');
+    const hasAudioExt = /\.(mp3|wav|ogg|webm|aac|m4a|flac|amr|3gp|opus|wma|aiff|caf|pcm)$/i.test(f.name);
+    return isAudioMime || hasAudioExt;
+  });
+
+  if (audioFiles.length !== files.length) {
+    showToast('Some files were skipped (not audio format)', 'warn');
+  }
+
+  audioFiles.forEach(f => {
+    if (f.size > 50 * 1024 * 1024) {
+      showToast(`${f.name} exceeds 50MB limit, skipped`, 'error');
+      return;
+    }
+    selectedRecordingFiles.push(f);
+  });
+
+  renderRecordingFileList();
+}
+
+function renderRecordingFileList() {
+  const container = document.getElementById('recordingSelectedFiles');
+  const list = document.getElementById('recordingFileList');
+  if (!container || !list) return;
+
+  if (selectedRecordingFiles.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'block';
+  list.innerHTML = selectedRecordingFiles.map((f, idx) => {
+    const sizeMB = (f.size / (1024 * 1024)).toFixed(1);
+    return `
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--surface2); border-radius: 8px; font-size: 13px;">
+        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px;">🎵 ${escapeHtml(f.name)}</span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span style="color: var(--muted); font-size: 11px;">${sizeMB} MB</span>
+          <button onclick="removeRecordingFile(${idx})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;padding:0 4px;">✕</button>
+        </span>
+      </div>
+    `;
+  }).join('');
+}
+
+function removeRecordingFile(idx) {
+  selectedRecordingFiles.splice(idx, 1);
+  renderRecordingFileList();
+}
+
+async function submitRecordings() {
+  if (selectedRecordingFiles.length === 0) {
+    showToast('Please select at least one recording file', 'error');
+    return;
+  }
+
+  const btnUpload = document.getElementById('btnUploadRecordings');
+  const progressContainer = document.getElementById('recordingUploadProgress');
+  const progressBar = document.getElementById('recordingProgressBar');
+  const progressText = document.getElementById('recordingProgressText');
+
+  btnUpload.disabled = true;
+  btnUpload.textContent = 'Uploading...';
+  if (progressContainer) progressContainer.style.display = 'block';
+
+  const formData = new FormData();
+  selectedRecordingFiles.forEach(f => formData.append('recordings', f));
+  formData.append('agentName', agentName || '');
+  formData.append('agentEmail', empId || '');
+
+  try {
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        if (progressBar) progressBar.style.width = pct + '%';
+        if (progressText) progressText.textContent = `Uploading... ${pct}%`;
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status === 200) {
+        const response = JSON.parse(xhr.responseText);
+        showToast(`✅ ${response.recordings.length} recording(s) uploaded successfully!`, 'success');
+        selectedRecordingFiles = [];
+        renderRecordingFileList();
+        const fileInput = document.getElementById('recordingFileInput');
+        if (fileInput) fileInput.value = '';
+        if (progressContainer) progressContainer.style.display = 'none';
+        btnUpload.disabled = false;
+        btnUpload.textContent = '📤 Upload Recordings';
+      } else {
+        throw new Error('Upload failed with status ' + xhr.status);
+      }
+    });
+
+    xhr.addEventListener('error', () => {
+      showToast('Failed to upload recordings. Please try again.', 'error');
+      btnUpload.disabled = false;
+      btnUpload.textContent = '📤 Upload Recordings';
+      if (progressContainer) progressContainer.style.display = 'none';
+    });
+
+    xhr.open('POST', '/api/recordings/upload');
+    xhr.send(formData);
+  } catch (error) {
+    showToast('Failed to upload recordings. Please try again.', 'error');
+    btnUpload.disabled = false;
+    btnUpload.textContent = '📤 Upload Recordings';
+    if (progressContainer) progressContainer.style.display = 'none';
+  }
+}
+
+// Manual upload button trigger (can be called before 5:45 PM)
+function manualRecordingUpload() {
+  if (dialingRestricted) {
+    // Already showing upload interface
+    return;
+  }
+
+  if (document.getElementById('manualRecordingModal')) {
+    // Already open
+    return;
+  }
+
+  // Show modal-style upload (same markup as the restricted-window panel)
+  const modal = document.createElement('div');
+  modal.id = 'manualRecordingModal';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+  `;
+
+  modal.innerHTML = `
+    <div style="background: white; border-radius: 16px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; padding: 30px; text-align: center;">
+      <div style="font-size: 48px; margin-bottom: 12px;">🎙️</div>
+      <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 8px; color: var(--accent);">
+        Upload Call Recordings
+      </h3>
+      <p style="font-size: 14px; color: var(--muted); margin-bottom: 20px; line-height: 1.6;">
+        कृपया आज की सभी कॉल रिकॉर्डिंग अपलोड करें। Multiple files select कर सकते हैं।
+      </p>
+
+      <div id="recordingDropZone" style="border: 2px dashed var(--border-strong); border-radius: 12px; padding: 40px 20px; margin-bottom: 20px; cursor: pointer; transition: all 0.2s; background: var(--surface2);"
+           onclick="document.getElementById('recordingFileInput').click()"
+           ondragover="event.preventDefault(); this.style.borderColor='var(--accent)'; this.style.background='var(--accent-glow)'"
+           ondragleave="this.style.borderColor='var(--border-strong)'; this.style.background='var(--surface2)'"
+           ondrop="handleRecordingDrop(event)">
+        <div style="font-size: 40px; margin-bottom: 10px;">🎵</div>
+        <div style="font-weight: 600; color: var(--text); margin-bottom: 6px;">Click or drag & drop audio files</div>
+        <div style="font-size: 12px; color: var(--muted);">All audio formats accepted · Multiple files · Max 50MB per file</div>
+      </div>
+
+      <input type="file" id="recordingFileInput" accept="audio/*,.mp3,.wav,.ogg,.webm,.aac,.m4a,.flac,.amr,.3gp" multiple style="display: none" onchange="handleRecordingSelect(event)">
+
+      <div id="recordingSelectedFiles" style="display: none; margin-bottom: 20px;">
+        <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px; text-align: left;">Selected Files:</div>
+        <div id="recordingFileList" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;"></div>
+      </div>
+
+      <div id="recordingUploadProgress" style="display: none; margin-bottom: 20px;">
+        <div style="font-size: 13px; color: var(--muted); margin-bottom: 8px;" id="recordingProgressText">Uploading...</div>
+        <div style="background: var(--surface2); border-radius: 100px; height: 10px; overflow: hidden;">
+          <div id="recordingProgressBar" style="height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; border-radius: 100px;"></div>
+        </div>
+      </div>
+
+      <button id="btnUploadRecordings" onclick="submitRecordings()" class="action-btn" style="background: var(--accent); color: #fff; width: 100%; max-width: 400px;">
+        📤 Upload Recordings
+      </button>
+
+      <button onclick="document.getElementById('manualRecordingModal').remove()" style="margin-top: 16px; width: 100%; padding: 12px; border: 1px solid var(--border); background: white; border-radius: 8px; cursor: pointer; font-weight: 600;">
+        Close
+      </button>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+// Check time restriction every minute
+setInterval(checkTimeRestriction, 60000);
+checkTimeRestriction(); // Initial check
 
 </script>
 
