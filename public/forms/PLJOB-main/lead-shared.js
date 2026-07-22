@@ -80,15 +80,37 @@
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (!d || !d.exists) return;
-          if (d.data) {
-            // New lead: exact structured field values captured on save.
-            window.applyFormSnapshot(d.data);
-          } else if (d.infoFields && d.infoFields.length) {
-            // Older/legacy lead: no structured fields were ever saved, but we DO
-            // have the applicant info text. Prefill the form by matching each saved
-            // "label : value" to the closest field on this form.
+
+          var snapshot = {};
+          // Copy all received data into a working snapshot.
+          if (d.data && typeof d.data === 'object') {
+            Object.keys(d.data).forEach(function (k) { snapshot[k] = d.data[k]; });
+          }
+
+          // __salaryType is a special key the server injects when it reconstructs
+          // data from older Applicant_Info.txt files. It is NOT a real form field
+          // but a trigger for the PL_Salaried salary-type toggle button.
+          if (snapshot['__salaryType']) {
+            if (typeof window.setSalaryType === 'function') {
+              try { window.setSalaryType(snapshot['__salaryType']); } catch (e) {}
+            }
+            delete snapshot['__salaryType'];
+          }
+
+          // Apply the server-reconstructed snapshot first (explicit field IDs,
+          // correct date formats, references split, etc.).
+          if (Object.keys(snapshot).length > 0) {
+            window.applyFormSnapshot(snapshot);
+          }
+
+          // Second pass: run the DOM fuzzy label matcher on any infoFields the
+          // server returned. This fills in fields the explicit map didn't cover
+          // (e.g. form-specific fields added after the mapping was written).
+          if (d.infoFields && d.infoFields.length) {
             prefillFromInfoFields(d.infoFields);
           }
+
+
           markUpdateMode(d);
         })
         .catch(function () {});

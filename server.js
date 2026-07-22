@@ -1082,16 +1082,161 @@ app.get('/api/admin/download-doc-zip/:numberId', (req, res) => {
 // ─── Lead form prefill — lets a loan form re-open a saved submission ──────────
 // Returns the previously saved field values (so the form can prefill and show an
 // "Update" button) plus the list of documents already on file.
+
+/**
+ * Reconstruct a form field snapshot from the plain-text Applicant_Info.txt that
+ * was embedded in every uploaded ZIP. Older leads were submitted before the JSON
+ * snapshot (num.form.data) feature existed, so this is our only source of truth
+ * for pre-filling the form when editing those leads.
+ *
+ * The text format is:   "Label          : Value\n"
+ * We parse each such line and map the known labels to their HTML input IDs.
+ * Date values stored as dd/mm/yyyy are converted to yyyy-mm-dd for <input type="date">.
+ */
+function reconstructFormDataFromInfoText(shareInfoText) {
+  if (!shareInfoText || typeof shareInfoText !== 'string') return null;
+
+  // Parse every "Label (2+ spaces) : Value" line into a plain object.
+  const parsed = {};
+  for (const line of shareInfoText.split('\n')) {
+    const m = line.match(/^([A-Za-z][^:]{1,35}?)\s{2,}:\s(.+)$/);
+    if (!m) continue;
+    const key = m[1].trim();
+    const val = m[2].trim();
+    if (val && val !== '—' && val !== '-') parsed[key] = val;
+  }
+  if (Object.keys(parsed).length === 0) return null;
+
+  // Label-in-infoText → HTML field id. Covers PL_Salaried, PL_Business,
+  // LAP_Salaried, LAP_Business, and BL_Business (fields overlap heavily).
+  const LABEL_TO_FIELD = {
+    'Full name':           'f_name',
+    'Date of birth':       { field: 'f_dob',        date: true },
+    "Father's name":       'f_father',
+    "Mother's name":       'f_mother',
+    'Age':                 'f_age',
+    'Marital status':      'f_marital',
+    'Education':           'f_edu',
+    'Mobile':              'f_mobile',
+    'Alternate mobile':    'f_alt_mobile',
+    'Alternate no.':       'f_alt_mobile',
+    'Personal email':      'f_email',
+    'Spouse':              'f_spouse',
+    'Spouse name':         'f_spouse',
+    'Spouse DOB':          { field: 'f_spouse_dob', date: true },
+    // Address
+    'Current address':     'f_addr',
+    'Residence address':   'f_addr',
+    'Landmark':            'f_addr_landmark',
+    'Res. landmark':       'f_addr_landmark',
+    'Current PIN':         'f_pin',
+    'Residence PIN':       'f_pin',
+    'Rented/Owned':        'f_residence_type',
+    'Rented / Owned':      'f_residence_type',
+    'Res. addr. proof':    'f_addr_proof',
+    'Aadhaar address':     'f_addr_aadh',
+    'Aadhaar PIN':         'f_pin_aadh',
+    // CIBIL
+    'CIBIL score':         'f_cibil',
+    // Employment / business
+    'Salary type':         '__salaryType',   // special: client calls setSalaryType()
+    'Job type':            'f_job',
+    'Business type':       'f_job',
+    'Company':             'f_company',
+    'Business name':       'f_company',
+    'Employed since':      'f_emp_since',
+    'Office address':      'f_office_addr',
+    'Business address':    'f_office_addr',
+    'Biz. landmark':       'f_biz_landmark',
+    'Biz. PIN code':       'f_biz_pin',
+    'Res. to biz. dist.':  'f_biz_distance',
+    'Work email':          'f_work_email',
+    'Experience':          'f_exp',
+    'Total biz. exp.':     'f_exp',
+    'Monthly income':      'f_income',
+    'Monthly net income':  'f_income',
+    'GSTIN':               'f_gstin',
+    // Loan details
+    'Required amount':     'f_lamount',
+    'Loan Facilitator':    'f_lender',
+    'Agent name':          'f_bank',
+    'Calling date':        { field: 'f_cdate', date: true },
+    'Case type':           'f_case',
+  };
+
+  // Convert Indian locale date (dd/mm/yyyy or d/m/yyyy) → HTML date (yyyy-mm-dd).
+  function toHtmlDate(val) {
+    const m = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return val;
+    return m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+  }
+
+  const snapshot = {};
+
+  for (const [label, target] of Object.entries(LABEL_TO_FIELD)) {
+    const val = parsed[label];
+    if (val === undefined || val === '') continue;
+    const fieldId   = typeof target === 'string' ? target : target.field;
+    const needsDate = typeof target === 'object' && target.date;
+    snapshot[fieldId] = needsDate ? toHtmlDate(val) : val;
+  }
+
+  // Reference 1 & 2 are stored as "Name  |  Mobile" on one line.
+  const ref1 = parsed['Reference 1'];
+  if (ref1) {
+    const parts = ref1.split(/\s*\|\s*/);
+    if (parts[0] && parts[0] !== '—') snapshot['f_ref1name'] = parts[0].trim();
+    if (parts[1] && parts[1] !== '—') snapshot['f_ref1mob']  = parts[1].trim();
+  }
+  const ref2 = parsed['Reference 2'];
+  if (ref2) {
+    const parts = ref2.split(/\s*\|\s*/);
+    if (parts[0] && parts[0] !== '—') snapshot['f_ref2name'] = parts[0].trim();
+    if (parts[1] && parts[1] !== '—') snapshot['f_ref2mob']  = parts[1].trim();
+  }
+
+  // Notes section may be multi-line; capture everything between the NOTES header
+  // and the next section divider.
+  const notesM = shareInfoText.match(/\bNOTES\b\n-{10,}\n([\s\S]*?)(?:\n-{10,}|\n={10,}|$)/);
+  if (notesM) {
+    const notes = notesM[1].trim();
+    if (notes && notes !== 'None') snapshot['f_notes'] = notes;
+  }
+
+  return Object.keys(snapshot).length > 0 ? snapshot : null;
+}
+
 app.get('/api/lead-form/:numberId', (req, res) => {
   const num = appState.numbers.find(n => n.id === req.params.numberId);
   if (!num) return res.json({ exists: false });
-  const hasFormData = !!(num.form && num.form.data);
+
+  // Check whether the stored JSON snapshot has any real field data.
+  let formData = (num.form && num.form.data) ? num.form.data : null;
+  const hasRealStoredData = formData &&
+    Object.values(formData).some(v => (typeof v === 'string' ? v.trim() !== '' : !!v));
+
+  // ── Older leads: no JSON snapshot (or empty one) but Applicant_Info.txt ──
+  // Parse the human-readable text to reconstruct the field values so the form
+  // opens pre-filled instead of blank. reconstructFormDataFromInfoText() maps
+  // known label strings to their HTML field IDs and handles date conversion.
+  // parseInfoFields() also runs and its output is sent as infoFields so the
+  // client-side fuzzy label matcher can fill in any gaps we didn't cover.
+  if (!hasRealStoredData && num.shareInfoText) {
+    const reconstructed = reconstructFormDataFromInfoText(num.shareInfoText);
+    if (reconstructed) formData = reconstructed;
+  }
+
+  // Final fallback: at minimum inject the lead name + phone so the first two
+  // fields aren't blank even on very old leads that have neither JSON nor text.
+  if (!formData) formData = {};
+  if (!formData['f_name']   && (num.leadName || num.name)) formData['f_name']   = num.leadName || num.name;
+  if (!formData['f_mobile'] && num.phone)                  formData['f_mobile'] = num.phone;
+
   res.json({
     exists: !!(num.form || num.shareToken || num.docZipPath),
     formType: num.form ? num.form.type : (num.loanType || ''),
-    data: hasFormData ? num.form.data : null,
-    hasFormData,
-    infoText: num.shareInfoText || '',
+    data: Object.keys(formData).length > 0 ? formData : null,
+    // infoFields lets the client fuzzy-match any labels our explicit map missed
     infoFields: parseInfoFields(num.shareInfoText || ''),
     docs: (num.shareDocs || []).map(d => ({ id: d.id, label: d.label, filename: d.filename })),
     shareToken: num.shareToken || null,
