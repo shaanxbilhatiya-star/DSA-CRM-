@@ -1808,8 +1808,8 @@ function renderCompletedTable(leads) {
     }
     const docCount = l.docCount ? (' (' + l.docCount + ')') : '';
     const shareCell = l.shareToken
-      ? `<a href="/share/${escapeHtml(l.shareToken)}" target="_blank" rel="noopener" class="btn-sm blue" style="text-decoration:none">🔗 Open${docCount}</a> <button class="btn-sm" onclick="copyShareLink('${escapeHtml(l.shareToken)}')">📋</button> <button class="btn-sm" onclick="openLoanForm('${escapeHtml(l.id)}','${escapeHtml(l.formType||'')}')">✏️</button>`
-      : `<button class="btn-sm" onclick="openLoanForm('${escapeHtml(l.id)}','${escapeHtml(l.formType||'')}')">✏️ Edit</button>`;
+      ? `<a href="/share/${escapeHtml(l.shareToken)}" target="_blank" rel="noopener" class="btn-sm blue" style="text-decoration:none">🔗 Open${docCount}</a> <button class="btn-sm" onclick="copyShareLink('${escapeHtml(l.shareToken)}')">📋</button> <button class="btn-sm" onclick="openLoanForm('${escapeHtml(l.id)}','${escapeHtml(l.formType||'')}','${escapeHtml(l.editorKind||'')}')">✏️</button>`
+      : `<button class="btn-sm" onclick="openLoanForm('${escapeHtml(l.id)}','${escapeHtml(l.formType||'')}','${escapeHtml(l.editorKind||'')}')">✏️ Edit</button>`;
     return `<tr>
       <td><span class="phone-mono">${escapeHtml(formatPhone(l.phone))}</span></td>
       <td style="font-weight:600">${escapeHtml(l.name) || '—'}</td>
@@ -1828,10 +1828,13 @@ function loanFormFile(formType) {
   const t = String(formType || '').trim();
   return known.indexOf(t) >= 0 ? (t + '.html') : 'index.html';
 }
-function openLoanForm(numberId, formType) {
-  // Open the exact loan form that was used (so it prefills for editing); fall back
-  // to the launcher only when we don't know the loan type.
-  window.open('/forms/PLJOB-main/' + loanFormFile(formType) + '?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId), '_blank');
+function openLoanForm(numberId, formType, editorKind) {
+  // Newer leads open the exact loan form (prefilled). Older/legacy leads (no saved
+  // form fields) open the special editor that rebuilds their details + documents.
+  const base = (editorKind === 'legacy')
+    ? '/forms/PLJOB-main/edit-lead.html'
+    : '/forms/PLJOB-main/' + loanFormFile(formType);
+  window.open(base + '?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId), '_blank');
 }
 function copyShareLink(token) {
   const url = location.origin + '/share/' + token;

@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edit Lead — Documents & Details</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#eef2ff,#f0f9ff 55%,#faf5ff);color:#0f172a;min-height:100vh;padding:22px 14px 80px}
+  .wrap{max-width:760px;margin:0 auto}
+  .card{background:#fff;border:1px solid rgba(15,23,42,.06);border-radius:16px;box-shadow:0 8px 30px rgba(37,99,235,.08);padding:20px 22px;margin-bottom:16px}
+  .head{background:linear-gradient(135deg,#1e40af,#2563eb 60%,#3b82f6);color:#fff;border:none}
+  .head h1{font-size:22px;font-weight:700}
+  .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .pill{background:rgba(255,255,255,.16);color:#eff6ff;font-size:12px;font-weight:600;border-radius:20px;padding:5px 12px}
+  h2{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#2563eb;margin-bottom:14px;padding-bottom:8px;border-bottom:1.5px solid #dbeafe}
+  .banner{background:linear-gradient(135deg,#ecfdf5,#d1fae5);border:1px solid #6ee7b7;border-radius:12px;padding:13px 16px;margin-bottom:16px;color:#065f46;font-size:13.5px;line-height:1.6}
+  .fi{margin-bottom:12px}
+  .fi label{display:block;font-size:12.5px;font-weight:600;color:#475569;margin-bottom:5px}
+  .fi input[type=text],.fi textarea{width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:14px;color:#0f172a;background:#fff;outline:none;font-family:inherit}
+  .fi input:focus,.fi textarea:focus{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+  .sec-head{font-size:12px;font-weight:800;letter-spacing:.6px;color:#64748b;text-transform:uppercase;margin:18px 0 10px;padding-top:8px;border-top:1px dashed #e2e8f0}
+  .doc{display:flex;align-items:center;gap:12px;padding:11px 12px;border:1px solid #e5e7eb;border-radius:11px;margin-bottom:10px;flex-wrap:wrap}
+  .doc-ic{font-size:22px}
+  .doc-meta{flex:1;min-width:120px}
+  .doc-name{font-weight:600;font-size:14px;text-transform:capitalize}
+  .doc-sub{font-size:11.5px;color:#64748b;word-break:break-all}
+  .btn{font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:8px;text-decoration:none;cursor:pointer;border:none}
+  .btn.ghost{background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe}
+  .btn.solid{background:#2563eb;color:#fff}
+  .btn.add{background:#f1f5f9;color:#334155;border:1px dashed #cbd5e1;width:100%;padding:11px;margin-top:6px}
+  .filepick{font-size:12px}
+  .replace-tag{font-size:11px;color:#16a34a;font-weight:600;margin-left:6px}
+  .save-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #e2e8f0;padding:12px 16px;display:flex;justify-content:center;box-shadow:0 -4px 20px rgba(0,0,0,.06);z-index:50}
+  .save-bar .inner{width:100%;max-width:760px;display:flex;gap:10px;align-items:center}
+  .save-bar button{flex:1;padding:13px;font-size:15px;font-weight:700;border-radius:10px;border:none;background:#2563eb;color:#fff;cursor:pointer}
+  .save-bar button:disabled{opacity:.6;cursor:not-allowed}
+  .muted{color:#64748b;font-size:12.5px}
+  #status{font-size:13px;color:#2563eb;min-height:18px;margin-top:8px}
+  .newdoc-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+  .newdoc-row input[type=text]{flex:1;min-width:140px;padding:8px 11px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card head">
+    <h1 id="hdrName">Edit Lead</h1>
+    <div class="pills" id="hdrPills"></div>
+  </div>
+
+  <div id="loading" class="card"><span class="muted">Loading saved details…</span></div>
+
+  <div id="editor" style="display:none">
+    <div class="banner">
+      <strong>&#128260; Editing an existing lead.</strong> The details and documents we already have are loaded below.
+      Change anything you like, replace or add documents, then press <strong>Save Changes</strong>.
+      Documents you don't touch are kept as-is.
+    </div>
+
+    <div class="card">
+      <h2>Applicant Information</h2>
+      <div id="fields"></div>
+      <button class="btn add" type="button" onclick="addField()">+ Add another detail</button>
+    </div>
+
+    <div class="card">
+      <h2>Documents on File</h2>
+      <div id="docs"></div>
+      <div class="sec-head">Add new documents</div>
+      <div id="newDocs"></div>
+      <button class="btn add" type="button" onclick="addNewDocRow()">+ Add a document</button>
+    </div>
+  </div>
+</div>
+
+<div class="save-bar" id="saveBar" style="display:none">
+  <div class="inner">
+    <div style="flex:1"><div id="status"></div></div>
+    <button id="saveBtn" onclick="save()">💾 Save Changes</button>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const numberId = params.get('numberId');
+const agentId  = params.get('agentId');
+let leadData = null;
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function sanitize(s){ return String(s||'').replace(/[^a-zA-Z0-9._-]+/g,'_').replace(/^_+|_+$/g,'') || 'Document'; }
+function extOf(f){ const p=(f.name||'').split('.'); return p.length>1 ? '.'+p.pop().toLowerCase() : ''; }
+
+async function init(){
+  if(!numberId || !agentId){ document.getElementById('loading').innerHTML = '<span class="muted">Missing lead reference. Please open this from the CRM.</span>'; return; }
+  try{
+    const r = await fetch('/api/lead-form/' + encodeURIComponent(numberId));
+    leadData = await r.json();
+  }catch(e){ document.getElementById('loading').innerHTML = '<span class="muted">Could not load this lead.</span>'; return; }
+  if(!leadData || !leadData.exists){ document.getElementById('loading').innerHTML = '<span class="muted">No saved details found for this lead.</span>'; return; }
+  render();
+}
+
+function render(){
+  document.getElementById('hdrName').textContent = leadData.leadName || 'Edit Lead';
+  const pills = [];
+  if(leadData.formType) pills.push('<span class="pill">'+esc(leadData.formType)+'</span>');
+  if(leadData.phone) pills.push('<span class="pill">📞 '+esc(leadData.phone)+'</span>');
+  pills.push('<span class="pill">'+ (leadData.docs||[]).length +' document(s)</span>');
+  document.getElementById('hdrPills').innerHTML = pills.join('');
+
+  // Info fields
+  const fieldsEl = document.getElementById('fields');
+  const rows = (leadData.infoFields && leadData.infoFields.length)
+    ? leadData.infoFields
+    : [{heading:false,label:'Full name',value:leadData.leadName||''},{heading:false,label:'Mobile',value:leadData.phone||''}];
+  let html = '';
+  rows.forEach((row, i) => {
+    if(row.heading){ html += '<div class="sec-head">'+esc(row.label)+'</div>'; return; }
+    html += '<div class="fi"><label>'+esc(row.label)+'</label>'
+      + '<input type="text" data-flabel="'+esc(row.label)+'" value="'+esc(row.value||'')+'"></div>';
+  });
+  fieldsEl.innerHTML = html;
+
+  // Existing docs
+  const docsEl = document.getElementById('docs');
+  if(!(leadData.docs && leadData.docs.length)){
+    docsEl.innerHTML = '<p class="muted">No documents on file yet — add some below.</p>';
+  } else {
+    docsEl.innerHTML = leadData.docs.map((d,idx) => {
+      const viewUrl = leadData.shareToken ? ('/share/'+leadData.shareToken+'/doc/'+d.id) : '#';
+      return '<div class="doc">'
+        + '<div class="doc-ic">📎</div>'
+        + '<div class="doc-meta"><div class="doc-name">'+esc(d.label)+'</div><div class="doc-sub">'+esc(d.filename)+'</div></div>'
+        + (leadData.shareToken ? '<a class="btn ghost" href="'+viewUrl+'" target="_blank" rel="noopener">View</a>' : '')
+        + '<label class="btn ghost" style="cursor:pointer">Replace<input type="file" style="display:none" class="replaceInput" data-filename="'+esc(d.filename)+'" onchange="onReplacePick(this)"></label>'
+        + '<span class="replace-tag" style="display:none">✓ new file chosen</span>'
+        + '</div>';
+    }).join('');
+  }
+
+  // Start with one empty add-doc row
+  document.getElementById('newDocs').innerHTML = '';
+  addNewDocRow();
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('editor').style.display = 'block';
+  document.getElementById('saveBar').style.display = 'flex';
+}
+
+function addField(){
+  const div = document.createElement('div');
+  div.className = 'newdoc-row';
+  div.innerHTML = '<input type="text" placeholder="Detail name (e.g. PAN number)" class="customLabel">'
+    + '<input type="text" placeholder="Value" class="customValue" style="flex:1">';
+  document.getElementById('fields').appendChild(div);
+}
+
+function onReplacePick(input){
+  const tag = input.closest('.doc').querySelector('.replace-tag');
+  if(tag) tag.style.display = input.files.length ? 'inline' : 'none';
+}
+
+function addNewDocRow(){
+  const div = document.createElement('div');
+  div.className = 'newdoc-row';
+  div.innerHTML = '<input type="text" placeholder="Document name (e.g. Bank Statement)" class="ndLabel">'
+    + '<input type="file" class="ndFile filepick">';
+  document.getElementById('newDocs').appendChild(div);
+}
+
+function buildInfoText(){
+  const lines = [];
+  document.querySelectorAll('#fields .fi, #fields .sec-head, #fields .newdoc-row').forEach(el => {
+    if(el.classList.contains('sec-head')){ lines.push(''); lines.push(el.textContent); lines.push('-'.repeat(48)); return; }
+    if(el.classList.contains('fi')){
+      const inp = el.querySelector('input'); const label = inp.getAttribute('data-flabel') || (el.querySelector('label')?.textContent||'');
+      lines.push(label.padEnd(20) + ': ' + (inp.value||''));
+      return;
+    }
+    // custom added field row
+    const cl = el.querySelector('.customLabel'), cv = el.querySelector('.customValue');
+    if(cl && (cl.value||'').trim()) lines.push((cl.value.trim()).padEnd(20) + ': ' + (cv.value||''));
+  });
+  return lines.join('\n');
+}
+
+async function save(){
+  const btn = document.getElementById('saveBtn');
+  const status = document.getElementById('status');
+  btn.disabled = true; status.textContent = 'Preparing…';
+
+  const infoText = buildInfoText();
+  const zip = new JSZip();
+  zip.file('Applicant_Info.txt', infoText);
+  const docs = zip.folder('Documents');
+
+  // Replacements for existing docs — keep the same filename so it overwrites on merge
+  document.querySelectorAll('.replaceInput').forEach(inp => {
+    if(inp.files && inp.files.length){
+      docs.file(inp.getAttribute('data-filename'), inp.files[0]);
+    }
+  });
+  // New documents
+  document.querySelectorAll('#newDocs .newdoc-row').forEach(row => {
+    const label = (row.querySelector('.ndLabel')?.value||'').trim();
+    const file = row.querySelector('.ndFile')?.files?.[0];
+    if(file){
+      const name = (label ? sanitize(label) : sanitize(file.name.replace(/\.[^.]+$/,''))) + extOf(file);
+      docs.file(name, file);
+    }
+  });
+
+  status.textContent = 'Uploading…';
+  try{
+    const blob = await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
+    const fd = new FormData();
+    fd.append('docZip', blob, 'lead_update.zip');
+    fd.append('agentId', agentId);
+    fd.append('formType', leadData.formType || '');
+    fd.append('infoText', infoText);
+    const r = await fetch('/api/agent/upload-doc-zip/' + encodeURIComponent(numberId), { method:'POST', body: fd });
+    const d = await r.json();
+    if(d.success){
+      status.textContent = '✅ Saved!';
+      alert('Lead updated successfully! You can close this tab.');
+    } else {
+      status.textContent = '';
+      alert('Save failed: ' + (d.error || 'Unknown error'));
+      btn.disabled = false;
+    }
+  }catch(e){
+    status.textContent = '';
+    alert('Save error: ' + e.message);
+    btn.disabled = false;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
