@@ -221,6 +221,27 @@ function explodeZipForLead(num, opts) {
   return true;
 }
 
+// Parse a stored Applicant_Info.txt block into structured, editable rows so an
+// older lead (which only has this text, not the newer structured field data) can
+// still be re-opened in an editor with every detail prefilled. Divider lines are
+// dropped; label-less lines become section headings; "label : value" lines become
+// editable fields.
+function parseInfoFields(text) {
+  const rows = [];
+  (text || '').split('\n').forEach(line => {
+    const t = line.trim();
+    if (!t) return;
+    if (/^[=\-_*]{3,}$/.test(t)) return; // divider line
+    const idx = line.indexOf(':');
+    if (idx === -1) { rows.push({ heading: true, label: t }); return; }
+    const label = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
+    if (!label) return;
+    rows.push({ heading: false, label, value: (value === '\u2014' || value === 'None') ? '' : value });
+  });
+  return rows;
+}
+
 function copyRecursiveSync(src, dest) {
   const stat = fs.statSync(src);
   if (stat.isDirectory()) {
@@ -1031,6 +1052,12 @@ app.post('/api/agent/upload-doc-zip/:numberId', docUpload.single('docZip'), (req
       });
     } catch (e) { console.error('explode failed:', e.message); }
 
+    // The legacy-lead editor sends the edited applicant info as plain text (it has
+    // no structured form fields). When present, it is authoritative for the page.
+    if (typeof req.body.infoText === 'string' && req.body.infoText.trim()) {
+      num.shareInfoText = req.body.infoText;
+    }
+
     saveState(appState);
     broadcastAdminStats();
     res.json({ success: true, docZipName: num.docZipName, documentationCompletedAt: num.documentationCompletedAt, shareToken: num.shareToken || null });
@@ -1058,13 +1085,18 @@ app.get('/api/admin/download-doc-zip/:numberId', (req, res) => {
 app.get('/api/lead-form/:numberId', (req, res) => {
   const num = appState.numbers.find(n => n.id === req.params.numberId);
   if (!num) return res.json({ exists: false });
+  const hasFormData = !!(num.form && num.form.data);
   res.json({
     exists: !!(num.form || num.shareToken || num.docZipPath),
     formType: num.form ? num.form.type : (num.loanType || ''),
-    data: (num.form && num.form.data) ? num.form.data : null,
+    data: hasFormData ? num.form.data : null,
+    hasFormData,
+    infoText: num.shareInfoText || '',
+    infoFields: parseInfoFields(num.shareInfoText || ''),
     docs: (num.shareDocs || []).map(d => ({ id: d.id, label: d.label, filename: d.filename })),
     shareToken: num.shareToken || null,
     leadName: num.leadName || num.name || '',
+    loanType: num.loanType || '',
     phone: num.phone
   });
 });
@@ -1565,7 +1597,8 @@ app.get('/api/admin/completed', (req, res) => {
       docZipName: n.docZipName || null,
       shareToken: n.shareToken || null,
       docCount: (n.shareDocs || []).length,
-      formType: (n.form && n.form.type) || n.loanType || ''
+      formType: (n.form && n.form.type) || n.loanType || '',
+      editorKind: (n.form && n.form.data) ? 'form' : 'legacy'
     };
   });
   res.json(completed);
@@ -1586,7 +1619,8 @@ app.get('/api/agent/completed/:agentId', (req, res) => {
     docZipName: n.docZipName || null,
     shareToken: n.shareToken || null,
     docCount: (n.shareDocs || []).length,
-    formType: (n.form && n.form.type) || n.loanType || ''
+    formType: (n.form && n.form.type) || n.loanType || '',
+    editorKind: (n.form && n.form.data) ? 'form' : 'legacy'
   }));
   res.json(completed);
 });
