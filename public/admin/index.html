@@ -681,72 +681,6 @@ function adminLogout(){
     </div>
   </div>
 
-  <!-- Script Upload Panel -->
-  <div class="panel" style="margin-bottom:20px">
-    <div class="panel-header" style="background:rgba(37,99,235,.06)">
-      <h2 style="color:#2563eb">&#128221; Call Script Upload</h2>
-      <span style="font-size:12px;color:var(--muted)">Upload .txt file shown to agents on each new call</span>
-    </div>
-    <div class="panel-body">
-      <div class="upload-zone" id="scriptDropZone" style="padding:20px">
-        <input type="file" id="scriptFileInput" accept=".txt,text/plain">
-        <div class="upload-icon" style="font-size:24px">&#128196;</div>
-        <p style="font-size:13px"><strong>Click or drag</strong> a TXT file here</p>
-        <p style="margin-top:4px;font-size:11px;color:var(--muted)">Only .txt files accepted - Max 2MB</p>
-      </div>
-      <div id="scriptUploadStatus" style="margin-top:8px;font-size:13px;color:var(--muted);display:none"></div>
-      <div id="currentScriptPreview" style="margin-top:12px;display:none;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;max-height:200px;overflow-y:auto;font-size:13px;white-space:pre-wrap;line-height:1.6;"></div>
-    </div>
-  </div>
-
-  <!-- Active Agents Panel (full width) -->
-  <div class="panel" style="margin-bottom:20px">
-    <div class="panel-header">
-      <h2>Active Agents</h2>
-      <span id="agentCount" style="font-size:12px;color:var(--muted)">0 agents</span>
-    </div>
-    <div class="panel-body" style="padding:0;overflow-x:auto">
-      <table class="agents-table" style="min-width:900px">
-        <thead>
-          <tr>
-            <th>Agent</th>
-            <th>Login</th>
-            <th>Status</th>
-            <th>Total No. Dialed</th>
-            <th>Net Dialing Time <span title="Net Dialing Time = 8h shift - Break - Meeting - Washroom - TL Mode (time available for actual calling)" style="cursor:help;opacity:.7">&#9432;</span></th>
-            <th>Break Used</th>
-            <th>&#128699; Washroom</th>
-            <th>&#128203; Meeting</th>
-            <th>&#128203; TL Mode</th>
-          </tr>
-        </thead>
-        <tbody id="agentTable">
-          <tr><td colspan="9" class="empty">No agents registered</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- EID Whitelist Management Panel -->
-  <div class="panel eid-panel">
-    <div class="panel-header">
-      <h2>&#128274; Allowed Agent EIDs</h2>
-      <span style="font-size:12px;color:var(--muted)">Only these Employee IDs can log into the Agent panel</span>
-    </div>
-    <div class="panel-body">
-      <div class="eid-list" id="eidList">
-        <div class="eid-empty">Loading...</div>
-      </div>
-      <div class="eid-add-form">
-        <input type="number" id="newEid" placeholder="Employee ID" min="1" autocomplete="off">
-        <input type="text"   id="newEidName" placeholder="Agent Name" autocomplete="off">
-        <input type="file"   id="newEidPhoto" accept="image/*" style="font-size:12px;max-width:180px;">
-        <button class="btn-add-eid" onclick="addEid()">+ Add Agent</button>
-        <div class="eid-err" id="eidErr"></div>
-      </div>
-    </div>
-  </div>
-
   <!-- RECORDINGS PANEL -->
   <div class="panel" style="margin-bottom:20px">
     <div class="panel-header" style="background:rgba(37,99,235,.06)">
@@ -813,6 +747,72 @@ function adminLogout(){
             <tr><td colspan="7" class="empty">Loading recordings...</td></tr>
           </tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script Upload Panel -->
+  <div class="panel" style="margin-bottom:20px">
+    <div class="panel-header" style="background:rgba(37,99,235,.06)">
+      <h2 style="color:#2563eb">&#128221; Call Script Upload</h2>
+      <span style="font-size:12px;color:var(--muted)">Upload .txt file shown to agents on each new call</span>
+    </div>
+    <div class="panel-body">
+      <div class="upload-zone" id="scriptDropZone" style="padding:20px">
+        <input type="file" id="scriptFileInput" accept=".txt,text/plain">
+        <div class="upload-icon" style="font-size:24px">&#128196;</div>
+        <p style="font-size:13px"><strong>Click or drag</strong> a TXT file here</p>
+        <p style="margin-top:4px;font-size:11px;color:var(--muted)">Only .txt files accepted - Max 2MB</p>
+      </div>
+      <div id="scriptUploadStatus" style="margin-top:8px;font-size:13px;color:var(--muted);display:none"></div>
+      <div id="currentScriptPreview" style="margin-top:12px;display:none;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 16px;max-height:200px;overflow-y:auto;font-size:13px;white-space:pre-wrap;line-height:1.6;"></div>
+    </div>
+  </div>
+
+  <!-- Active Agents Panel (full width) -->
+  <div class="panel" style="margin-bottom:20px">
+    <div class="panel-header">
+      <h2>Active Agents</h2>
+      <span id="agentCount" style="font-size:12px;color:var(--muted)">0 agents</span>
+    </div>
+    <div class="panel-body" style="padding:0;overflow-x:auto">
+      <table class="agents-table" style="min-width:900px">
+        <thead>
+          <tr>
+            <th>Agent</th>
+            <th>Login</th>
+            <th>Status</th>
+            <th>Total No. Dialed</th>
+            <th>Net Dialing Time <span title="Net Dialing Time = 8h shift - Break - Meeting - Washroom - TL Mode (time available for actual calling)" style="cursor:help;opacity:.7">&#9432;</span></th>
+            <th>Break Used</th>
+            <th>&#128699; Washroom</th>
+            <th>&#128203; Meeting</th>
+            <th>&#128203; TL Mode</th>
+          </tr>
+        </thead>
+        <tbody id="agentTable">
+          <tr><td colspan="9" class="empty">No agents registered</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- EID Whitelist Management Panel -->
+  <div class="panel eid-panel">
+    <div class="panel-header">
+      <h2>&#128274; Allowed Agent EIDs</h2>
+      <span style="font-size:12px;color:var(--muted)">Only these Employee IDs can log into the Agent panel</span>
+    </div>
+    <div class="panel-body">
+      <div class="eid-list" id="eidList">
+        <div class="eid-empty">Loading...</div>
+      </div>
+      <div class="eid-add-form">
+        <input type="number" id="newEid" placeholder="Employee ID" min="1" autocomplete="off">
+        <input type="text"   id="newEidName" placeholder="Agent Name" autocomplete="off">
+        <input type="file"   id="newEidPhoto" accept="image/*" style="font-size:12px;max-width:180px;">
+        <button class="btn-add-eid" onclick="addEid()">+ Add Agent</button>
+        <div class="eid-err" id="eidErr"></div>
       </div>
     </div>
   </div>
