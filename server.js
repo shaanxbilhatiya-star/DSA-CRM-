@@ -1284,6 +1284,29 @@ app.get('/api/lead-form/:numberId', (req, res) => {
   });
 });
 
+// ─── Switch form type (agent-facing) ──────────────────────────────────────────
+// Lightweight endpoint that lets an agent change the loan type of their lead
+// (e.g. PL_Salaried → LAP_Business) without needing admin privileges.
+app.post('/api/agent/switch-form-type/:numberId', (req, res) => {
+  const { numberId } = req.params;
+  const { agentId, loanType } = req.body;
+  if (!agentId || !numberId || !loanType) {
+    return res.status(400).json({ error: 'agentId, numberId, and loanType are required' });
+  }
+  if (!VALID_LOAN_TYPES.includes(loanType)) {
+    return res.status(400).json({ error: 'Invalid loan type. Must be one of: ' + VALID_LOAN_TYPES.join(', ') });
+  }
+  const num = appState.numbers.find(n => n.id === numberId);
+  if (!num) return res.status(404).json({ error: 'Lead not found' });
+  if (num.disposition !== 'interested') return res.status(400).json({ error: 'Lead is not marked as interested' });
+  if (num.interestedBy !== agentId) return res.status(403).json({ error: 'This lead is not assigned to you' });
+
+  num.loanType = loanType;
+  if (num.form) num.form.type = loanType;
+  saveState(appState);
+  res.json({ success: true, loanType });
+});
+
 // ─── Public shareable lead page (replaces the ZIP download) ───────────────────
 // Unique, unguessable URL per lead. Shows all the applicant text info and lets a
 // banker download individual documents. No auth by design — the token is the key.
