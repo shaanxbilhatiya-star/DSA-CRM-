@@ -2714,11 +2714,14 @@ function loanFormFile(formType) {
   return known.indexOf(t) >= 0 ? (t + '.html') : 'index.html';
 }
 function openLoanForm(numberId, formType, editorKind) {
-  // Newer leads open the exact loan form (prefilled). Older/legacy leads (no saved
-  // form fields) open the special editor that rebuilds their details + documents.
-  const base = (editorKind === 'legacy')
-    ? '/forms/PLJOB-main/edit-lead.html'
-    : '/forms/PLJOB-main/' + loanFormFile(formType);
+  // Always open the actual loan form when formType is known — it handles pre-fill
+  // for both new and legacy leads via lead-shared.js. Only fall back to the basic
+  // editor when the form type is completely unknown.
+  const known = ['BL_Business','LAP_Business','LAP_Salaried','PL_Business','PL_Salaried'];
+  const t = String(formType || '').trim();
+  const base = (known.indexOf(t) >= 0)
+    ? '/forms/PLJOB-main/' + t + '.html'
+    : (editorKind === 'legacy' ? '/forms/PLJOB-main/edit-lead.html' : '/forms/PLJOB-main/' + loanFormFile(formType));
   window.open(base + '?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId), '_blank');
 }
 // ── Doc ZIP upload state ─────────────────────────────────────────────────────
@@ -3757,9 +3760,9 @@ function editLeadForm(numberId, agentId, formType, editorKind) {
   if (!agentId) { alert('This lead has no assigned agent, so it cannot be edited from here.'); return; }
   const known = ['BL_Business','LAP_Business','LAP_Salaried','PL_Business','PL_Salaried'];
   const t = String(formType || '').trim();
-  const file = (editorKind === 'legacy')
-    ? 'edit-lead.html'
-    : (known.indexOf(t) >= 0 ? (t + '.html') : 'index.html');
+  // Always open the actual loan form when formType is known — it handles pre-fill
+  // for both new and legacy leads via lead-shared.js.
+  const file = (known.indexOf(t) >= 0) ? (t + '.html') : (editorKind === 'legacy' ? 'edit-lead.html' : 'index.html');
   window.open('/forms/PLJOB-main/' + file + '?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId), '_blank');
 }
 
