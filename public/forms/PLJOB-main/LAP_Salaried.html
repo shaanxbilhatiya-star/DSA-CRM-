@@ -1080,6 +1080,26 @@ async function addFiles(zip,inputId,prefix,password){
 
 function setProgress(pct,msg){g('pbar').style.width=pct+'%';g('progMsg').textContent=msg}
 
+function getObligationLines(){
+  const rows=Array.from(document.querySelectorAll('.ob-row'));
+  if(!rows.length) return ['  No existing obligations'];
+  const lines=[];
+  rows.forEach((r,i)=>{
+    const t=(r.querySelector('.ob-type')?.value||'').trim();
+    const b=(r.querySelector('.ob-bank')?.value||'').trim();
+    const e=parseFloat(r.querySelector('.ob-emi')?.value||0)||0;
+    if(!t && !b && !e) return;
+    lines.push(`  ${i+1}. ${t||'(unspecified)'} - ${b||'(unspecified)'} - EMI ₹${e.toLocaleString('en-IN')}`);
+  });
+  return lines.length?lines:['  No existing obligations'];
+}
+
+function docStatusLine(label,inputId){
+  const el=g(inputId);
+  const has=el && el.files && el.files.length>0;
+  return (has?'  ✓  ':'  ✕  ')+label;
+}
+
 async function saveFile(){
   const name=val('f_name');
   // Name & all fields/documents are optional — no blocking. Save/update anytime.
@@ -1087,7 +1107,29 @@ async function saveFile(){
   g('progBox').style.display='block';g('doneBox').style.display='none';
   setProgress(5,'Starting...');
 
-  const applicantName = name.replace(/\s+/g,'_');
+  // ── FOIR calculation ──
+  const income=parseFloat(val('f_income'))||0;
+  const emisArr=Array.from(document.querySelectorAll('.ob-emi')).map(e=>parseFloat(e.value)||0);
+  const totalEmi=emisArr.reduce((a,b)=>a+b,0);
+  const foir=income?((totalEmi/income)*100).toFixed(1)+'%':'N/A';
+  const foirStatus=income?(totalEmi/income>0.65?'ABOVE 65% LIMIT ⚠':'Within 65% limit ✓'):'N/A';
+
+  // ── Property owner + property type labels ──
+  const ownerTypeLabel={
+    '':'Not selected','no':'Applicant is the owner',
+    'father':'Father is the owner','mother':'Mother is the owner',
+    'both':'Both Father & Mother are owners','other':'Co-owner'
+  }[val('f_owner_type')]||val('f_owner_type');
+
+  const propTypeLabel={
+    house:'Pakka Ghar (Residential House)',
+    plot:'Sirf Zameen (Residential Plot)',
+    agri:'Kheti Ki Zameen (Agricultural Land)',
+    shop:'Dukaan (Commercial Property)',
+    village:'Gram Panchayat (Village Property)'
+  }[selectedProp]||(selectedProp||'Not selected');
+
+  const applicantName = (name||'Applicant').replace(/\s+/g,'_');
   const folderName = 'LAP_SAL_' + applicantName + '_' + new Date().toISOString().slice(0,10);
   const zip = new JSZip();
   const docs = zip.folder('Documents');
@@ -1100,6 +1142,7 @@ async function saveFile(){
   setProgress(40,'Unlocking & adding salary slips...'); await addFiles(docs,'up_salary','Salary_Slip',val('pw_salary'));
   setProgress(48,'Adding Form 16...');     await addFiles(docs,'up_form16','Form_16');
   setProgress(53,'Unlocking & adding bank stmt...');   await addFiles(docs,'up_bank','Bank_Statement',val('pw_bank'));
+  setProgress(56,'Adding appointment letter...'); await addFiles(docs,'up_appt','Appointment_Letter_ID');
   setProgress(58,'Adding SOA...');         await addFiles(docs,'up_soa','SOA_Statement');
   setProgress(60,'Adding SOA (always)...'); await addFiles(docs,'up_soa_always','SOA_Statement_Always');
   setProgress(63,'Adding property video...');  await addFiles(docs,'up_prop_video','Property_Video');
@@ -1123,7 +1166,129 @@ async function saveFile(){
   await addFiles(docs,'up_khasra_v','Khasra_Village');
   await addFiles(docs,'up_village_misc','Village_Misc');
 
-  zip.file('Applicant_Info.txt', 'LAP Salaried - ' + name + '\nGenerated: ' + new Date().toLocaleString('en-IN'));
+  const txt=[
+    '============================================================',
+    '   LAP - SALARIED LOAN APPLICATION',
+    '============================================================',
+    '',
+    'Date of entry      : ' + new Date().toLocaleDateString('en-IN'),
+    'Calling date       : ' + (val('f_cdate')||'—'),
+    'Case type          : LAP - Salaried',
+    'Salary type        : ' + (typeof salaryType!=='undefined'?salaryType:'—'),
+    'Agent name         : ' + (val('f_bank')||'—'),
+    'Loan Facilitator   : ' + (val('f_lender')||'Not specified'),
+    'Required amount    : ' + (val('f_lamount')||'—'),
+    '',
+    '------------------------------------------------------------',
+    'PERSONAL DETAILS',
+    '------------------------------------------------------------',
+    'Full name          : ' + (val('f_name')||'—'),
+    'Date of birth      : ' + (val('f_dob')||'—'),
+    "Father's name      : " + (val('f_father')||'—'),
+    "Mother's name      : " + (val('f_mother')||'—'),
+    'Age                : ' + (val('f_age')||'—'),
+    'Marital status     : ' + (val('f_marital')||'—'),
+    'Education          : ' + (val('f_edu')||'—'),
+    'Mobile             : ' + (val('f_mobile')||'—'),
+    'Alternate mobile   : ' + (val('f_alt_mobile')||'—'),
+    'Personal email     : ' + (val('f_email')||'—'),
+    'Spouse             : ' + (val('f_spouse')||'—'),
+    'Spouse DOB         : ' + (val('f_spouse_dob')||'—'),
+    '',
+    '------------------------------------------------------------',
+    'ADDRESS',
+    '------------------------------------------------------------',
+    'Residence address  : ' + (val('f_addr')||'—'),
+    'Landmark           : ' + (val('f_addr_landmark')||'—'),
+    'Current PIN        : ' + (val('f_pin')||'—'),
+    'Rented/Owned       : ' + (val('f_residence_type')||'—'),
+    'Address proof type : ' + (val('f_addr_proof')||'—'),
+    'Aadhaar address    : ' + (val('f_addr_aadh')||'—'),
+    'Aadhaar PIN        : ' + (val('f_pin_aadh')||'—'),
+    '',
+    '------------------------------------------------------------',
+    'CIBIL',
+    '------------------------------------------------------------',
+    'CIBIL score        : ' + (val('f_cibil')||'—'),
+    '',
+    '------------------------------------------------------------',
+    'PROPERTY OWNER KYC',
+    '------------------------------------------------------------',
+    'Owner type         : ' + ownerTypeLabel,
+    'Owner 1 name       : ' + (val('f_owner1_name')||'—'),
+    'Owner 2 name       : ' + (val('f_owner2_name')||'—'),
+    'Co-owner name      : ' + (val('f_owner_other_name')||'—'),
+    'Co-owner relation  : ' + (val('f_owner_other_rel')||'—'),
+    '',
+    '------------------------------------------------------------',
+    'PROPERTY DETAILS',
+    '------------------------------------------------------------',
+    'Property type      : ' + propTypeLabel,
+    'Property address   : ' + (val('f_prop_addr')||'—'),
+    'Property area      : ' + (val('f_prop_area')||'—'),
+    'Property value     : ' + (val('f_prop_value')||'—'),
+    '',
+    '------------------------------------------------------------',
+    'EMPLOYMENT & INCOME',
+    '------------------------------------------------------------',
+    'Employer / Company : ' + (val('f_company')||'—'),
+    'Designation        : ' + (val('f_designation')||'—'),
+    'Total experience   : ' + (val('f_exp')||'—'),
+    'Employed since     : ' + (val('f_emp_since')||'—'),
+    'Office address     : ' + (val('f_office_addr')||'—'),
+    'Monthly income     : ' + (val('f_income')||'—'),
+    'Salary slip PWD    : ' + (val('pw_salary')?'[PROVIDED — PDFs auto-unlocked in ZIP]':'None'),
+    'Bank stmt PWD      : ' + (val('pw_bank')?'[PROVIDED — PDFs auto-unlocked in ZIP]':'None'),
+    '',
+    '------------------------------------------------------------',
+    'REQUIRED AMOUNT BY CUSTOMER',
+    '------------------------------------------------------------',
+    'Required amount    : ' + (val('f_lamount')||'—'),
+    'Loan Facilitator   : ' + (val('f_lender')||'Not specified'),
+    '',
+    '------------------------------------------------------------',
+    'CURRENT OBLIGATIONS',
+    '------------------------------------------------------------',
+    ...getObligationLines(),
+    '',
+    '------------------------------------------------------------',
+    'FOIR ANALYSIS',
+    '------------------------------------------------------------',
+    'Monthly income     : ' + (income?income.toLocaleString('en-IN'):'—'),
+    'Total EMI/month    : ' + (totalEmi?totalEmi.toLocaleString('en-IN'):'0'),
+    'FOIR               : ' + foir,
+    'Status             : ' + foirStatus,
+    '',
+    '------------------------------------------------------------',
+    'REFERENCES',
+    '------------------------------------------------------------',
+    'Reference 1        : ' + (val('f_ref1name')||'—') + '  |  ' + (val('f_ref1mob')||'—'),
+    'Reference 2        : ' + (val('f_ref2name')||'—') + '  |  ' + (val('f_ref2mob')||'—'),
+    '',
+    '------------------------------------------------------------',
+    'NOTES',
+    '------------------------------------------------------------',
+    val('f_notes') || '  None',
+    '',
+    '------------------------------------------------------------',
+    'DOCUMENT STATUS',
+    '------------------------------------------------------------',
+    docStatusLine('Aadhaar Card',              'up_aadhaar'),
+    docStatusLine('PAN Card',                  'up_pan'),
+    docStatusLine('Passport Photo',            'up_photo'),
+    docStatusLine('Electricity Bill',          'up_elec'),
+    docStatusLine('CIBIL Report',              'up_cibil'),
+    docStatusLine('Salary Slips',              'up_salary'),
+    docStatusLine('Form 16',                   'up_form16'),
+    docStatusLine('Bank Statement',            'up_bank'),
+    docStatusLine('Appointment Letter/ID',     'up_appt'),
+    docStatusLine('Property Video',            'up_prop_video'),
+    '',
+    '============================================================',
+    'Generated on : ' + new Date().toLocaleString('en-IN'),
+    '============================================================',
+  ].join('\n');
+  zip.file('Applicant_Info.txt', txt);
   setProgress(82, 'Compressing ZIP...');
   const zipBlob = await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
   const zipName = folderName + '.zip';
