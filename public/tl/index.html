@@ -3228,14 +3228,21 @@ window._tlInitialized = false;
 function initTlMode() {
   if (window._tlInitialized) return;
   window._tlInitialized = true;
-  // Emit join-admin to get stats
+  // Ensure agentId is set from TL login so editLeadForm works in TL-only mode
+  if (!agentId && tlAgentId) {
+    agentId = tlAgentId;
+    agentName = tlAgentName;
+    empId = tlEmpIdVal;
+  }
+  // Emit join-admin to receive live stats-update events
   socket.emit('join-admin');
   // Hide sections TL should not see
   hideTlForbiddenSections();
-  // Start fetching data immediately
+  // Fetch all panel data immediately
   fetchTlData();
   // Retry after a short delay in case the first fetch was too early
   setTimeout(fetchTlData, 1500);
+  setTimeout(fetchTlData, 4000);
 }
 
 function hideTlForbiddenSections() {
@@ -3280,10 +3287,10 @@ function hideTlForbiddenSections() {
 function fetchTlData() {
   // Fetch initial admin stats to populate stat cards and active agents table
   fetch('/api/admin/stats').then(r => r.json()).then(d => { try { tlRenderStats(d); } catch(e) { console.error('tlRenderStats error:', e); } }).catch(e => console.error('Stats fetch failed:', e));
-  // Fetch all panel data
-  try { if (typeof fetchInterestedLeads === 'function') fetchInterestedLeads(); } catch(e) {}
-  try { if (typeof fetchFollowups === 'function') fetchFollowups(); } catch(e) {}
-  try { if (typeof fetchCompletedLeads === 'function') fetchCompletedLeads(); } catch(e) {}
+  // Fetch all panel data — call the TL-scoped versions directly
+  try { fetchInterestedLeads(); } catch(e) { console.error('fetchInterestedLeads failed:', e); }
+  try { fetchFollowups(); } catch(e) { console.error('fetchFollowups failed:', e); }
+  try { fetchCompletedLeads(); } catch(e) { console.error('fetchCompletedLeads failed:', e); }
   try { if (typeof fetchAdminDispoStats === 'function') fetchAdminDispoStats(); } catch(e) {}
   try { if (typeof fetchAdminLeaderboard === 'function') fetchAdminLeaderboard(); } catch(e) {}
   // Load DND numbers for TL mode
@@ -3610,6 +3617,8 @@ function tlShowToast(msg, type='success') {
 }
 
 setInterval(async () => {
+  // Only refresh TL panel data when TL mode is active
+  if (currentMode !== 'tl') return;
   try {
     const r = await fetch('/api/admin/stats');
     const d = await r.json();
@@ -3628,11 +3637,14 @@ let tlTransferNumberId = null;
 async function fetchInterestedLeads() {
   try {
     const r = await fetch('/api/admin/interested');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     const leads = await r.json();
     tlInterestedLeadsData = leads;
     renderInterestedLeads(leads);
   } catch (e) {
     console.error('Failed to fetch interested leads:', e);
+    const tbody = document.getElementById('tlInterestedTable');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="empty">Failed to load — retrying...</td></tr>';
   }
 }
 
@@ -3830,10 +3842,13 @@ async function adminUpdateLeadStatus(numberId, adminStatus) {
 async function fetchCompletedLeads() {
   try {
     const r = await fetch('/api/admin/completed');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     const leads = await r.json();
     renderCompletedLeads(leads);
   } catch (e) {
     console.error('Failed to fetch completed leads:', e);
+    const tbody = document.getElementById('tlCompletedTable');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="empty">Failed to load — retrying...</td></tr>';
   }
 }
 
@@ -3950,6 +3965,7 @@ async function fetchFollowups() {
       url = '/api/admin/followups-by-agent';
     }
     const r = await fetch(url);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     let followups = await r.json();
     // If by-agent, extract the selected agent's followups from the keyed object
     if (followupAgentFilterId && !Array.isArray(followups)) {
@@ -3971,6 +3987,8 @@ async function fetchFollowups() {
     renderFollowups(followups);
   } catch (e) {
     console.error('Failed to fetch followups:', e);
+    const tbody = document.getElementById('tlFollowupsTable');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="empty">Failed to load — retrying...</td></tr>';
   }
 }
 
@@ -4395,7 +4413,7 @@ async function fetchAdminLeaderboard() {
 }
 
 setTimeout(fetchAdminLeaderboard, 500);
-setInterval(fetchAdminLeaderboard, 5000);
+setInterval(() => { if (currentMode === 'tl') fetchAdminLeaderboard(); }, 5000);
 
 // ── Script Popup (Feature 5 - Agent Mode) ─────────────────────────────────────
 let scriptContent = null;
