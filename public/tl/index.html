@@ -879,7 +879,6 @@
   /* Hide admin sections TL should NOT see */
   #tlModeScreen .grid-2:has(.upload-zone) { display: none !important; }
   #tlModeScreen .eid-panel { display: none !important; }
-  #tlModeScreen .panel-body:has(.btn-danger) { display: none !important; }
   #tlModeScreen #breakSummary { display: none !important; }
 
   /* Toast shared */
@@ -3251,7 +3250,8 @@ function hideTlForbiddenSections() {
   // Hide break summary
   var breakSum = tlScreen.querySelector('#breakSummary');
   if (breakSum) breakSum.style.display = 'none';
-  // Hide the Clear All / Hard Reset buttons
+  // Hide ONLY the btn-row elements containing .btn-danger (Clear All / Hard Reset buttons)
+  // Do NOT hide entire panel-body elements as that breaks the agents table
   var btnRows = tlScreen.querySelectorAll('.btn-row');
   btnRows.forEach(function(br) {
     if (br.querySelector('.btn-danger')) br.style.display = 'none';

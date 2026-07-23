@@ -808,6 +808,15 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
     </div>
     <div class="fi" style="margin-top:1rem">
       <label>Shop Video <span class="r">*</span></label>
+      <div class="ub" id="ub-shop-video">
+        <input type="file" accept=".mp4,.mov,.avi,.mkv,.webm,.3gp,.jpg,.jpeg,.png" id="up_shop_video" onchange="mark(this,'shop-video-fn','ub-shop-video')" multiple>
+        <div class="ub-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg></div>
+        <div class="ul"><strong>Upload shop/business video</strong><span class="tag-must">MANDATORY</span><span class="tag">MP4 / MOV / 3GP / JPG</span></div>
+      </div>
+      <div class="fn" id="shop-video-fn"></div>
+      <div class="err" id="shop-video-err">⚠ Shop video is required</div>
+    </div>
+  </div>
 
   <!-- ⑥ REQUIRED AMOUNT -->
   <div class="sec" id="sec-reqamt">
@@ -819,7 +828,6 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
     <div class="fi"><label>Loan Facilitator</label><input type="text" id="f_lender" placeholder="e.g. Jagdish sir / HDFC Bank"></div>
   </div>
 
- 
     <!-- SOA — appears only when obligations are filled -->
     <div id="fi-soa" style="display:none;margin-top:14px;border-top:1px dashed #e5e7eb;padding-top:14px">
       <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">
@@ -833,7 +841,6 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
       </div>
       <div class="fn" id="soa-fn"></div>
     </div>
-  </div>
 
   <!-- ⑦S -->
 
@@ -1143,6 +1150,7 @@ async function saveFile(){
   setProgress(46,'Adding Gumastha...');    await addFiles(docs,'up_gumastha','Gumastha_Shop_Act');
   setProgress(50,'Unlocking & adding ITR...'); await addFiles(docs,'up_itr','ITR_3Years',val('pw_itr'));
   setProgress(58,'Unlocking & adding bank stmt...');   await addFiles(docs,'up_bank','Bank_Statement',val('pw_bank'));
+  setProgress(61,'Adding shop video...');   await addFiles(docs,'up_shop_video','Shop_Video');
   setProgress(62,'Adding SOA...');         await addFiles(docs,'up_soa','SOA_Statement');
   setProgress(64,'Adding SOA (always)...'); await addFiles(docs,'up_soa_always','SOA_Statement_Always');
   setProgress(67,'Adding property video...');  await addFiles(docs,'up_prop_video','Property_Video');

@@ -772,6 +772,14 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#ccfbf1 0%
     <!-- Appointment / ID Card -->
     <div class="fi" style="margin-top:1rem">
       <label>Appointment Letter / Employee ID <span class="opt">(if available)</span></label>
+      <div class="ub" id="ub-appt">
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png" id="up_appt" onchange="mark(this,'appt-fn','ub-appt')" multiple>
+        <div class="ub-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+        <div class="ul"><strong>Upload Appointment Letter / Employee ID</strong><span class="tag-opt">Optional</span><span class="tag">PDF / JPG / PNG</span></div>
+      </div>
+      <div class="fn" id="appt-fn"></div>
+    </div>
+  </div>
 
   <!-- ⑥ REQUIRED AMOUNT -->
   <div class="sec" id="sec-reqamt">
@@ -783,7 +791,6 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#ccfbf1 0%
     <div class="fi"><label>Loan Facilitator</label><input type="text" id="f_lender" placeholder="e.g. Jagdish sir / SBI Bank"></div>
   </div>
 
- 
     <!-- SOA — appears only when obligations are filled -->
     <div id="fi-soa" style="display:none;margin-top:14px;border-top:1px dashed #e5e7eb;padding-top:14px">
       <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">
@@ -797,7 +804,6 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#ccfbf1 0%
       </div>
       <div class="fn" id="soa-fn"></div>
     </div>
-  </div>
 
   <!-- ⑦S -->
 
