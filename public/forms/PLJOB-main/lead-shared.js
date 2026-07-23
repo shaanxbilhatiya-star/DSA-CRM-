@@ -548,15 +548,21 @@
       html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
       docList.forEach(function (doc) {
         var viewUrl = '/share/' + encodeURIComponent(shareToken) + '/doc/' + encodeURIComponent(doc.id);
-        html += '<a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" ' +
-          'style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#fff;border:1px solid #bbf7d0;border-radius:6px;color:#15803d;text-decoration:none;font-size:11.5px;font-weight:600;transition:all .15s"' +
-          ' onmouseover="this.style.background=\'#dcfce7\';this.style.borderColor=\'#4ade80\'"' +
-          ' onmouseout="this.style.background=\'#fff\';this.style.borderColor=\'#bbf7d0\'">' +
+        html += '<span style="display:inline-flex;align-items:center;gap:2px;background:#fff;border:1px solid #bbf7d0;border-radius:6px;padding:0;overflow:hidden">' +
+          '<a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" ' +
+          'style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;color:#15803d;text-decoration:none;font-size:11.5px;font-weight:600;transition:all .15s"' +
+          ' onmouseover="this.style.background=\'#dcfce7\'"' +
+          ' onmouseout="this.style.background=\'transparent\'">' +
           '\uD83D\uDCC4 ' + escapeHtml(doc.label || doc.filename) +
-          '</a>';
+          '</a>' +
+          '<button type="button" onclick="window.__removeDoc(\'' + escapeHtml(doc.id) + '\',this)" ' +
+          'style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;background:transparent;border:none;border-left:1px solid #bbf7d0;color:#dc2626;font-size:13px;cursor:pointer;transition:all .15s;padding:0" ' +
+          'onmouseover="this.style.background=\'#fef2f2\'" onmouseout="this.style.background=\'transparent\'" ' +
+          'title="Remove this document">\u2715</button>' +
+          '</span>';
       });
       html += '</div>';
-      html += '<div style="margin-top:5px;font-size:11px;color:#16a34a;font-style:italic">Re-upload only if you want to replace this document</div>';
+      html += '<div style="margin-top:5px;font-size:11px;color:#16a34a;font-style:italic">Re-upload to replace \u00b7 Click \u2715 to remove a document</div>';
 
       indicator.innerHTML = html;
       ubEl.parentNode.insertBefore(indicator, ubEl.nextSibling);
@@ -600,4 +606,72 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+
+  // ── Remove individual document from server ──────────────────────────────────
+  // Called by the ✕ button next to each "Already on file" document.
+  window.__removeDoc = function (docId, btnEl) {
+    var p = new URLSearchParams(location.search);
+    var numberId = p.get('numberId');
+    var agentId = p.get('agentId');
+    if (!numberId) { alert('Cannot remove: no lead ID'); return; }
+    if (!confirm('Remove this document permanently? This cannot be undone.')) return;
+
+    // Disable button during request
+    btnEl.disabled = true;
+    btnEl.style.opacity = '0.4';
+
+    fetch('/api/agent/doc/' + encodeURIComponent(numberId) + '/' + encodeURIComponent(docId), {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId: agentId || '' })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.error) {
+          alert('Failed to remove: ' + d.error);
+          btnEl.disabled = false;
+          btnEl.style.opacity = '1';
+          return;
+        }
+        // Remove the doc chip from the UI
+        var chip = btnEl.closest('span');
+        if (chip) {
+          var indicator = chip.closest('.existing-doc-indicator');
+          chip.remove();
+          // Update count in the indicator header
+          if (indicator) {
+            var remaining = indicator.querySelectorAll('span > a').length;
+            if (remaining === 0) {
+              // No docs left — remove the entire indicator and un-mark the upload button
+              var ubEl = indicator.previousElementSibling;
+              if (ubEl && ubEl.classList.contains('ub')) {
+                ubEl.classList.remove('uploaded');
+              }
+              // Clear the filename display
+              var fnEl = indicator.parentNode.querySelector('.fn');
+              if (fnEl) { fnEl.style.display = 'none'; fnEl.textContent = ''; }
+              indicator.remove();
+            } else {
+              // Update the header count
+              var header = indicator.querySelector('div');
+              if (header) {
+                header.innerHTML = '<span style="font-size:14px">\u2705</span> Already on file' +
+                  (remaining > 1 ? ' (' + remaining + ' files)' : '');
+              }
+            }
+          }
+        }
+        // Show a brief toast
+        var toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#dc2626;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.25)';
+        toast.textContent = '\uD83D\uDDD1\uFE0F Document removed';
+        document.body.appendChild(toast);
+        setTimeout(function () { toast.remove(); }, 2500);
+      })
+      .catch(function (e) {
+        alert('Network error: ' + e.message);
+        btnEl.disabled = false;
+        btnEl.style.opacity = '1';
+      });
+  };
 })();

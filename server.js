@@ -1706,6 +1706,27 @@ app.get('/share/:token/doc/:docId', (req, res) => {
   res.sendFile(doc.path, (err) => { if (err && !res.headersSent) res.status(404).send('Document not found'); });
 });
 
+// ─── Delete an individual document from a lead ────────────────────────────────
+// Used by the form editor to remove specific documents without re-uploading everything.
+app.delete('/api/agent/doc/:numberId/:docId', (req, res) => {
+  const { numberId, docId } = req.params;
+  const { agentId } = req.body || {};
+  const num = appState.numbers.find(n => n.id === numberId);
+  if (!num) return res.status(404).json({ error: 'Lead not found' });
+  if (!num.shareDocs || !num.shareDocs.length) return res.status(404).json({ error: 'No documents found' });
+  const docIdx = num.shareDocs.findIndex(d => d.id === docId);
+  if (docIdx === -1) return res.status(404).json({ error: 'Document not found' });
+  const doc = num.shareDocs[docIdx];
+  // Delete the physical file
+  if (doc.path && fs.existsSync(doc.path)) {
+    try { fs.unlinkSync(doc.path); } catch (e) { /* file already gone */ }
+  }
+  // Remove from the docs array
+  num.shareDocs.splice(docIdx, 1);
+  saveState(appState);
+  res.json({ success: true, remainingDocs: num.shareDocs.length });
+});
+
 app.get('/api/admin/stats', (req, res) => res.json(getAdminStats()));
 
 // ─── Disposition API Endpoints ────────────────────────────────────────────────
