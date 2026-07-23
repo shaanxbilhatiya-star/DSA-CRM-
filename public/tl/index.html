@@ -3232,15 +3232,17 @@ function initTlMode() {
   socket.emit('join-admin');
   // Hide sections TL should not see
   hideTlForbiddenSections();
-  // Start fetching data
+  // Start fetching data immediately
   fetchTlData();
+  // Retry after a short delay in case the first fetch was too early
+  setTimeout(fetchTlData, 1500);
 }
 
 function hideTlForbiddenSections() {
   var tlScreen = document.getElementById('tlModeScreen');
   if (!tlScreen) return;
   // Hide upload panel, file list, EID panel, clear/reset buttons, break summary, top stats cards (Total/Remaining)
-  // Find and hide the upload grid (contains upload zone)
+  // Find and hide the upload grid (contains upload zone) - ONLY grids, not panels
   var grids = tlScreen.querySelectorAll('.grid-2');
   grids.forEach(function(g) {
     if (g.querySelector('.upload-zone')) g.style.display = 'none';
@@ -3248,11 +3250,12 @@ function hideTlForbiddenSections() {
   // Hide EID panel
   var eidPanel = tlScreen.querySelector('.eid-panel');
   if (eidPanel) eidPanel.style.display = 'none';
-  // Hide the top two stat cards (Total Numbers / Remaining)
-  var topCards = tlScreen.querySelector('[style*="grid-template-columns: 1fr 1fr"]') || tlScreen.querySelector('[style*="grid-template-columns:1fr 1fr"]');
+  // Hide the top two stat cards (Total Numbers / Remaining) - target by ID to be safe
+  var topCards = tlScreen.querySelector('[style*="grid-template-columns:1fr 1fr"]');
+  if (!topCards) topCards = tlScreen.querySelector('[style*="grid-template-columns: 1fr 1fr"]');
   if (topCards && topCards.querySelector('#statTotal')) topCards.style.display = 'none';
   // Hide break summary
-  var breakSum = tlScreen.querySelector('#breakSummary');
+  var breakSum = document.getElementById('breakSummary');
   if (breakSum) breakSum.style.display = 'none';
   // Hide ONLY the btn-row elements containing .btn-danger (Clear All / Hard Reset buttons)
   // Do NOT hide entire panel-body elements as that breaks the agents table
@@ -3266,23 +3269,27 @@ function hideTlForbiddenSections() {
     var label = sc.querySelector('.stat-label');
     if (label && label.textContent.includes('Redialing Tomorrow')) sc.style.display = 'none';
   });
-  // Also hide the followup upload section
-  var followupUpload = tlScreen.querySelector('#followupDropZone');
+  // Hide the followup upload section (only the upload panel-body, not the table panel-body)
+  var followupUpload = document.getElementById('followupDropZone');
   if (followupUpload) {
     var parent = followupUpload.closest('.panel-body');
-    if (parent && parent.style) parent.style.display = 'none';
+    if (parent) parent.style.display = 'none';
   }
 }
 
 function fetchTlData() {
   // Fetch initial admin stats to populate stat cards and active agents table
-  fetch('/api/admin/stats').then(r => r.json()).then(d => tlRenderStats(d)).catch(() => {});
-  // These functions are defined in admin JS below
-  if (typeof fetchInterestedLeads === 'function') fetchInterestedLeads();
-  if (typeof fetchFollowups === 'function') fetchFollowups();
-  if (typeof fetchCompletedLeads === 'function') fetchCompletedLeads();
-  if (typeof fetchAdminDispoStats === 'function') fetchAdminDispoStats();
-  if (typeof fetchAdminLeaderboard === 'function') fetchAdminLeaderboard();
+  fetch('/api/admin/stats').then(r => r.json()).then(d => { try { tlRenderStats(d); } catch(e) { console.error('tlRenderStats error:', e); } }).catch(e => console.error('Stats fetch failed:', e));
+  // Fetch all panel data
+  try { if (typeof fetchInterestedLeads === 'function') fetchInterestedLeads(); } catch(e) {}
+  try { if (typeof fetchFollowups === 'function') fetchFollowups(); } catch(e) {}
+  try { if (typeof fetchCompletedLeads === 'function') fetchCompletedLeads(); } catch(e) {}
+  try { if (typeof fetchAdminDispoStats === 'function') fetchAdminDispoStats(); } catch(e) {}
+  try { if (typeof fetchAdminLeaderboard === 'function') fetchAdminLeaderboard(); } catch(e) {}
+  // Load DND numbers for TL mode
+  try { if (typeof loadTlDndNumbers === 'function') loadTlDndNumbers(); } catch(e) {}
+  // Load daily copy data
+  try { if (typeof loadTlDailyCopyData === 'function') loadTlDailyCopyData(); } catch(e) {}
 }
 
 
@@ -3342,11 +3349,11 @@ socket.on('reconnect_failed', () => showAdminBanner('disconnected', '❌ Could n
 
 socket.emit('join-admin');
 
-socket.on('stats-update', tlRenderStats);
+socket.on('stats-update', function(d) { try { tlRenderStats(d); } catch(e) { console.error('stats-update handler error:', e); } });
 socket.on('force-stop', () => tlShowToast('All agents stopped', 'warn'));
 socket.on('timer-update', () => {
   // Refresh stats when timer state changes
-  fetch('/api/admin/stats').then(r => r.json()).then(d => tlRenderStats(d)).catch(() => {});
+  fetch('/api/admin/stats').then(r => r.json()).then(d => { try { tlRenderStats(d); } catch(e) {} }).catch(() => {});
 });
 
 // Live break ticks — update admin break timers every second
@@ -3432,25 +3439,31 @@ window._tlModeStartTimes   = {};
 window._tlModeMsAtRender   = {};
 
 function tlRenderStats(data) {
+  if (!data) return;
   tlLastStats = data;
-  document.getElementById('statTotal').textContent = data.total;
-  document.getElementById('statRemaining').textContent = data.remaining;
-  document.getElementById('statInterested').textContent = data.interestedCount || 0;
-  document.getElementById('statOverdue').textContent = data.overdueInterestedCount || 0;
-  document.getElementById('statFollowups').textContent = data.followupCount || 0;
-  document.getElementById('statComingBack').textContent = data.comingBackTomorrow || 0;
-  document.getElementById('todayBadge').textContent = data.today;
+  // Safely set text content with null checks
+  var el;
+  el = document.getElementById('statTotal'); if (el) el.textContent = data.total || 0;
+  el = document.getElementById('statRemaining'); if (el) el.textContent = data.remaining || 0;
+  el = document.getElementById('statInterested'); if (el) el.textContent = data.interestedCount || 0;
+  el = document.getElementById('statOverdue'); if (el) el.textContent = data.overdueInterestedCount || 0;
+  el = document.getElementById('statFollowups'); if (el) el.textContent = data.followupCount || 0;
+  el = document.getElementById('statComingBack'); if (el) el.textContent = data.comingBackTomorrow || 0;
+  el = document.getElementById('todayBadge'); if (el) el.textContent = data.today || '';
 
   // Remaining < 500 red alert
-  const remainingCard = document.getElementById('statRemaining').closest('.stat-card');
-  if (data.remaining < 500) {
-    document.getElementById('statRemaining').style.color = '#F44336';
-    remainingCard.style.border = '1px solid #F44336';
-    remainingCard.style.boxShadow = '0 0 12px rgba(244,67,54,.2)';
-  } else {
-    document.getElementById('statRemaining').style.color = '';
-    remainingCard.style.border = '';
-    remainingCard.style.boxShadow = '';
+  var remainingEl = document.getElementById('statRemaining');
+  var remainingCard = remainingEl ? remainingEl.closest('.stat-card') : null;
+  if (remainingCard) {
+    if (data.remaining < 500) {
+      remainingEl.style.color = '#F44336';
+      remainingCard.style.border = '1px solid #F44336';
+      remainingCard.style.boxShadow = '0 0 12px rgba(244,67,54,.2)';
+    } else {
+      remainingEl.style.color = '';
+      remainingCard.style.border = '';
+      remainingCard.style.boxShadow = '';
+    }
   }
 
   // Agents
@@ -3597,13 +3610,15 @@ function tlShowToast(msg, type='success') {
 }
 
 setInterval(async () => {
-  const r = await fetch('/api/admin/stats');
-  const d = await r.json();
-  tlRenderStats(d);
-  fetchInterestedLeads();
-  fetchFollowups();
-  fetchCompletedLeads();
-  fetchAdminDispoStats();
+  try {
+    const r = await fetch('/api/admin/stats');
+    const d = await r.json();
+    tlRenderStats(d);
+  } catch(e) { /* silent */ }
+  try { fetchInterestedLeads(); } catch(e) {}
+  try { fetchFollowups(); } catch(e) {}
+  try { fetchCompletedLeads(); } catch(e) {}
+  try { fetchAdminDispoStats(); } catch(e) {}
 }, 5000);
 
 // ── Interested Leads ──────────────────────────────────────────────────────────
@@ -3624,6 +3639,7 @@ async function fetchInterestedLeads() {
 function renderInterestedLeads(leads) {
   const tbody = document.getElementById('tlInterestedTable');
   const badge = document.getElementById('tlInterestedCountBadge');
+  if (!tbody || !badge) return;
   const overdueBadge = document.getElementById('overdueCountBadge');
   badge.textContent = leads.length + ' lead' + (leads.length !== 1 ? 's' : '');
 
@@ -3846,6 +3862,7 @@ function editLeadForm(numberId, agentId, formType, editorKind) {
 function renderCompletedLeads(leads) {
   const tbody = document.getElementById('tlCompletedTable');
   const badge = document.getElementById('tlCompletedCountBadge');
+  if (!tbody || !badge) return;
   badge.textContent = leads.length + ' lead' + (leads.length !== 1 ? 's' : '');
   if (!leads || leads.length === 0) {
     tbody.innerHTML = '<tr><td colspan="9" class="empty">No completed leads yet</td></tr>';
@@ -3970,6 +3987,7 @@ function tlFormatTimeAmPm(timeStr) {
 function renderFollowups(followups) {
   const tbody = document.getElementById('tlFollowupsTable');
   const badge = document.getElementById('tlFollowupsCountBadge');
+  if (!tbody || !badge) return;
   badge.textContent = followups.length + ' followup' + (followups.length !== 1 ? 's' : '');
   if (!followups || followups.length === 0) {
     tbody.innerHTML = '<tr><td colspan="6" class="empty">No followups yet</td></tr>';
@@ -4564,18 +4582,18 @@ function renderTlDndList(dndNumbers) {
 async function tlAddDndNumber() {
   var input = document.getElementById('tlNewDndPhone');
   var phone = input.value.trim().replace(/\s+/g,'');
-  if (!phone || !/^\d{7,15}$/.test(phone)) { showTlToast('Enter a valid phone number','error'); return; }
+  if (!phone || !/^\d{7,15}$/.test(phone)) { tlShowToast('Enter a valid phone number','error'); return; }
   try {
     var r = await fetch('/api/admin/dnd', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({phone:phone, addedBy: agentId})
     });
     var d = await r.json();
-    if (d.error) { showTlToast(d.error,'error'); return; }
+    if (d.error) { tlShowToast(d.error,'error'); return; }
     input.value = '';
-    showTlToast('Added to DND: ' + phone, 'success');
+    tlShowToast('Added to DND: ' + phone, 'success');
     loadTlDndNumbers();
-  } catch(e) { showTlToast('Failed to add','error'); }
+  } catch(e) { tlShowToast('Failed to add','error'); }
 }
 
 async function tlRemoveDndNumber(phone) {
@@ -4583,8 +4601,8 @@ async function tlRemoveDndNumber(phone) {
   try {
     var r = await fetch('/api/admin/dnd/' + encodeURIComponent(phone), {method:'DELETE'});
     var d = await r.json();
-    if (d.error) { showTlToast(d.error,'error'); return; }
-    showTlToast('Removed from DND','success');
+    if (d.error) { tlShowToast(d.error,'error'); return; }
+    tlShowToast('Removed from DND','success');
     loadTlDndNumbers();
   } catch(e) { showTlToast('Failed','error'); }
 }

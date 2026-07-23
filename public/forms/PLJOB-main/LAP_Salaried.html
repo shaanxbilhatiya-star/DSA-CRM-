@@ -1305,7 +1305,10 @@ async function saveFile(){
       const d = await resp.json();
       if (d.success) {
         setProgress(100, 'Uploaded successfully!');
-        alert('Documents uploaded successfully! You can close this tab.');
+        g('progBox').style.display='none';
+        g('doneBox').style.display='block';
+        g('doneMsg').textContent='Documents uploaded successfully!';
+        g('doneSub').textContent='You can close this tab or continue editing.';
       } else {
         alert('Upload failed: ' + (d.error || 'Unknown error'));
       }
@@ -1322,11 +1325,25 @@ async function saveFile(){
       const writable = await handle.createWritable();
       await writable.write(zipBlob);
       await writable.close();
+      g('progBox').style.display='none';
+      g('doneBox').style.display='block';
+      g('doneMsg').textContent='ZIP saved to desktop!';
+      g('doneSub').textContent=zipName;
     } catch(e) {
-      if (e.name !== 'AbortError') saveAs(zipBlob, zipName);
+      if (e.name !== 'AbortError') {
+        saveAs(zipBlob, zipName);
+        g('progBox').style.display='none';
+        g('doneBox').style.display='block';
+        g('doneMsg').textContent='ZIP downloaded!';
+        g('doneSub').textContent=zipName;
+      }
     }
   } else {
     saveAs(zipBlob, zipName);
+    g('progBox').style.display='none';
+    g('doneBox').style.display='block';
+    g('doneMsg').textContent='ZIP downloaded!';
+    g('doneSub').textContent=zipName;
   }
   btn.disabled = false;
 }

@@ -213,9 +213,29 @@ function explodeZipForLead(num, opts) {
   }
 
   num.shareToken = token;
-  num.shareInfoText = (opts.keepInfo && num.shareInfoText)
-    ? num.shareInfoText
-    : (infoText || num.shareInfoText || '');
+  // Always prefer the fresh infoText from the new ZIP if it has real content (more
+  // than just headers/dividers). This fixes LAP and other forms where the share page
+  // was showing stale/short text because keepInfo=true preserved old minimal data
+  // even when the new submission had a full Applicant_Info.txt.
+  if (infoText && infoText.trim()) {
+    const infoLines = infoText.split('\n');
+    const hasRealInfoContent = infoLines.some(line => {
+      const m = line.match(/:\s+(.+)$/);
+      if (!m) return false;
+      const v = m[1].trim();
+      return v && v !== '\u2014' && v !== '-' && v !== 'N/A' && v !== 'None' && v.length > 1;
+    });
+    if (hasRealInfoContent) {
+      // New ZIP has meaningful info text — always use it (regardless of keepInfo)
+      num.shareInfoText = infoText;
+    } else if (!opts.keepInfo || !num.shareInfoText) {
+      // New text has no real values but keepInfo is off or no existing text — use whatever we got
+      num.shareInfoText = infoText || num.shareInfoText || '';
+    }
+    // else: keepInfo=true, new text has no real values, keep existing (protects against empty re-uploads)
+  } else if (!opts.keepInfo) {
+    num.shareInfoText = num.shareInfoText || '';
+  }
   num.shareDocs = docs;
   num.shareUpdatedAt = new Date().toISOString();
   return true;
