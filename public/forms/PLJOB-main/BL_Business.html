@@ -860,7 +860,150 @@ async function saveFile(){
   setProgress(78,'Adding SOA (always)...'); await addFiles(docs,'up_soa_always','SOA_Statement_Always');
   setProgress(80,'Adding shop video...');  await addFiles(docs,'up_shop_video','Shop_Video');
 
-  zip.file('Applicant_Info.txt', 'BL Business Loan - ' + name + '\nGenerated: ' + new Date().toLocaleString('en-IN'));
+  function getObligationLines(){
+    const rows=Array.from(document.querySelectorAll('.ob-row'));
+    if(!rows.length) return ['  No existing obligations'];
+    const lines=[];
+    rows.forEach((r,i)=>{
+      const t=(r.querySelector('.ob-type')?.value||'').trim();
+      const b=(r.querySelector('.ob-bank')?.value||'').trim();
+      const e=parseFloat(r.querySelector('.ob-emi')?.value||0)||0;
+      if(!t && !b && !e) return;
+      lines.push('  '+(i+1)+'. '+(t||'(unspecified)')+' - '+(b||'(unspecified)')+' - EMI \u20B9'+e.toLocaleString('en-IN'));
+    });
+    return lines.length?lines:['  No existing obligations'];
+  }
+
+  function docStatusLine(label,inputId){
+    const el=g(inputId);
+    const has=el && el.files && el.files.length>0;
+    return (has?'  \u2713  ':'  \u2717  ')+label;
+  }
+
+  // ── FOIR calculation for info text ──
+  const income=parseFloat(val('f_income'))||0;
+  const netIncome=parseFloat(val('f_net_income'))||0;
+  const useIncome=netIncome||income;
+  const emisArr=Array.from(document.querySelectorAll('.ob-emi')).map(e=>parseFloat(e.value)||0);
+  const totalEmi=emisArr.reduce((a,b)=>a+b,0);
+  const foir=useIncome?((totalEmi/useIncome)*100).toFixed(1)+'%':'N/A';
+  const foirStatus=useIncome?(totalEmi/useIncome>0.65?'ABOVE 65% LIMIT \u26A0':'Within 65% limit \u2713'):'N/A';
+
+  const txt=[
+    '============================================================',
+    '   BL - BUSINESS LOAN APPLICATION',
+    '============================================================',
+    '',
+    'Date of entry      : ' + new Date().toLocaleDateString('en-IN'),
+    'Calling date       : ' + (val('f_cdate')||'\u2014'),
+    'Case type          : BL - Business Loan',
+    'Agent name         : ' + (val('f_agent')||'\u2014'),
+    'Required amount    : ' + (val('f_lamount')||'\u2014'),
+    'Loan purpose       : ' + (val('f_loan_purpose')||'\u2014'),
+    '',
+    '------------------------------------------------------------',
+    'PERSONAL DETAILS',
+    '------------------------------------------------------------',
+    'Full name          : ' + (val('f_name')||'\u2014'),
+    'Date of birth      : ' + (val('f_dob')||'\u2014'),
+    'Age                : ' + (val('f_age')||'\u2014'),
+    'Marital status     : ' + (val('f_marital')||'\u2014'),
+    'Education          : ' + (val('f_edu')||'\u2014'),
+    'Contact No         : ' + (val('f_mobile')||'\u2014'),
+    'Alternate No       : ' + (val('f_alt_mobile')||'\u2014'),
+    'Email              : ' + (val('f_email')||'\u2014'),
+    "Father's name      : " + (val('f_father')||'\u2014'),
+    "Mother's name      : " + (val('f_mother')||'\u2014'),
+    'Spouse name        : ' + (val('f_spouse')||'\u2014'),
+    'Spouse DOB         : ' + (val('f_spouse_dob')||'\u2014'),
+    '',
+    '------------------------------------------------------------',
+    'ADDRESS',
+    '------------------------------------------------------------',
+    'Current address    : ' + (val('f_addr')||'\u2014'),
+    'Landmark           : ' + (val('f_addr_landmark')||'\u2014'),
+    'PIN code           : ' + (val('f_pin')||'\u2014'),
+    'Rented / Owned     : ' + (val('f_residence_type')||'\u2014'),
+    'Res. addr. proof   : ' + (val('f_addr_proof')||'\u2014'),
+    'Permanent Address  : ' + (val('f_perm_addr')||'\u2014'),
+    'Permanent PIN Code : ' + (val('f_perm_pin')||'\u2014'),
+    'Permanent Address Landmark : ' + (val('f_perm_landmark')||'\u2014'),
+    '',
+    '------------------------------------------------------------',
+    'CIBIL',
+    '------------------------------------------------------------',
+    'CIBIL Score        : ' + (val('f_cibil')||'\u2014'),
+    '',
+    '------------------------------------------------------------',
+    'BUSINESS DETAILS',
+    '------------------------------------------------------------',
+    'Business Name      : ' + (val('f_biz_name')||'\u2014'),
+    'Business Type      : ' + (val('f_biz_type')||'\u2014'),
+    'Total Business Experience : ' + (val('f_biz_exp')||'\u2014'),
+    'Business Address   : ' + (val('f_biz_addr')||'\u2014'),
+    'Business landmark  : ' + (val('f_biz_landmark')||'\u2014'),
+    'Business PIN code  : ' + (val('f_biz_pin')||'\u2014'),
+    'Business Contact No: ' + (val('f_biz_mobile')||'\u2014'),
+    'Residence to Business Distance : ' + (val('f_distance')||'\u2014'),
+    'Monthly income     : ' + (val('f_income')||'\u2014'),
+    'Net Monthly Income : ' + (val('f_net_income')||'\u2014'),
+    'GSTIN              : ' + (val('f_gstin')||'\u2014'),
+    'ITR password       : ' + (val('pw_itr')?'[PROVIDED]':'None'),
+    'Bank stmt password : ' + (val('pw_bank')?'[PROVIDED]':'None'),
+    '',
+    '------------------------------------------------------------',
+    'LOAN DETAILS',
+    '------------------------------------------------------------',
+    'Required amount    : ' + (val('f_lamount')||'\u2014'),
+    'Loan Purpose       : ' + (val('f_loan_purpose')||'\u2014'),
+    '',
+    '------------------------------------------------------------',
+    'CURRENT OBLIGATIONS',
+    '------------------------------------------------------------',
+    ...getObligationLines(),
+    '',
+    '------------------------------------------------------------',
+    'FOIR ANALYSIS',
+    '------------------------------------------------------------',
+    'Monthly income     : ' + (useIncome?useIncome.toLocaleString('en-IN'):'\u2014'),
+    'Total EMI/month    : ' + (totalEmi?totalEmi.toLocaleString('en-IN'):'0'),
+    'FOIR               : ' + foir,
+    'Status             : ' + foirStatus,
+    '',
+    '------------------------------------------------------------',
+    'REFERENCES',
+    '------------------------------------------------------------',
+    'Reference 1        : ' + (val('f_ref1name')||'\u2014') + '  |  ' + (val('f_ref1mob')||'\u2014'),
+    'Reference 2        : ' + (val('f_ref2name')||'\u2014') + '  |  ' + (val('f_ref2mob')||'\u2014'),
+    '',
+    '------------------------------------------------------------',
+    'NOTES',
+    '------------------------------------------------------------',
+    val('f_notes') || '  None',
+    '',
+    '------------------------------------------------------------',
+    'DOCUMENT STATUS',
+    '------------------------------------------------------------',
+    docStatusLine('Aadhaar Card',              'up_aadhaar'),
+    docStatusLine('PAN Card',                  'up_pan'),
+    docStatusLine('Passport Photo',            'up_photo'),
+    docStatusLine('Cancelled Cheque',          'up_cheque'),
+    docStatusLine('Electricity Bill',          'up_elec'),
+    docStatusLine('CIBIL Report',              'up_cibil'),
+    docStatusLine('GST Certificate',           'up_gst'),
+    docStatusLine('Udhyam Certificate',        'up_udhyam'),
+    docStatusLine('Gumastha / Shop Act',       'up_gumastha'),
+    docStatusLine('Business Address Proof',    'up_biz_addr_proof'),
+    docStatusLine('ITR (3 years)',             'up_itr'),
+    docStatusLine('Bank Statement',            'up_bank'),
+    docStatusLine('Shop Video',                'up_shop_video'),
+    '',
+    '============================================================',
+    'Generated on : ' + new Date().toLocaleString('en-IN'),
+    '============================================================',
+  ].join('\n');
+
+  zip.file('Applicant_Info.txt', txt);
   setProgress(82, 'Compressing ZIP...');
   const zipBlob = await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
   const zipName = folderName + '.zip';
