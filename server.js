@@ -439,6 +439,10 @@ if (!appState.dndNumbers) {
 if (!appState.recordings) {
   appState.recordings = [];
 }
+// Map of shortCode -> shareToken for URL shortening
+if (!appState.shortLinks) {
+  appState.shortLinks = {};
+}
 appState = checkDailyReset(appState);
 
 // Purge orphaned agent runtime records — a removed user (deleted EID) can otherwise
@@ -1421,6 +1425,41 @@ function humanSize(bytes) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
+
+// ─── URL Shortener ─────────────────────────────────────────────────────────────
+// POST /api/shorten  { token: '<shareToken>' }  → { code: 'abc123', url: '...' }
+app.post('/api/shorten', (req, res) => {
+  const token = (req.body && req.body.token) ? String(req.body.token).trim() : '';
+  if (!token) return res.status(400).json({ error: 'Missing token' });
+  const num = appState.numbers.find(n => n.shareToken === token);
+  if (!num) return res.status(404).json({ error: 'Token not found' });
+
+  // Reuse existing code for this token if already generated
+  if (!appState.shortLinks) appState.shortLinks = {};
+  const existing = Object.entries(appState.shortLinks).find(([, t]) => t === token);
+  if (existing) {
+    const shortUrl = req.protocol + '://' + req.get('host') + '/s/' + existing[0];
+    return res.json({ code: existing[0], url: shortUrl });
+  }
+
+  // Generate a new 6-char alphanumeric code (collision-safe)
+  const chars = 'abcdefghijkmnpqrstuvwxyz23456789';
+  let code;
+  do { code = Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join(''); }
+  while (appState.shortLinks[code]);
+
+  appState.shortLinks[code] = token;
+  saveState(appState);
+  const shortUrl = req.protocol + '://' + req.get('host') + '/s/' + code;
+  res.json({ code, url: shortUrl });
+});
+
+// GET /s/:code → redirect to full share URL
+app.get('/s/:code', (req, res) => {
+  const token = (appState.shortLinks || {})[req.params.code];
+  if (!token) return res.status(404).send('Link not found or expired.');
+  res.redirect(301, '/share/' + token);
+});
 
 app.get('/share/:token', (req, res) => {
   const esc = (s) => String(s == null ? '' : s)

@@ -1911,16 +1911,28 @@ function openLoanForm(numberId, formType, editorKind) {
   window.open(base + '?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId), '_blank');
 }
 function copyShareLink(token) {
-  const url = location.origin + '/share/' + token;
-  function toast() {
+  function showToastMsg(msg) {
     var t = document.createElement('div');
-    t.textContent = '\uD83D\uDD17 Link copied!';
+    t.textContent = msg;
     t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#16a34a;color:#fff;padding:10px 20px;border-radius:30px;font-size:13px;z-index:99999;box-shadow:0 4px 20px rgba(0,0,0,.25)';
-    document.body.appendChild(t); setTimeout(function(){ t.remove(); }, 2200);
+    document.body.appendChild(t); setTimeout(function(){ t.remove(); }, 2400);
   }
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(url).then(toast).catch(function(){ window.prompt('Copy this link:', url); });
-  } else { window.prompt('Copy this link:', url); }
+  function writeToClipboard(url, label) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(function(){ showToastMsg(label); }).catch(function(){ window.prompt('Copy this link:', url); });
+    } else { window.prompt('Copy this link:', url); }
+  }
+  fetch('/api/shorten', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: token })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.url) { writeToClipboard(d.url, '\u26A1 Short link copied!'); }
+    else { writeToClipboard(location.origin + '/share/' + token, '\uD83D\uDD17 Link copied!'); }
+  })
+  .catch(function(){ writeToClipboard(location.origin + '/share/' + token, '\uD83D\uDD17 Link copied!'); });
 }
 // ── Doc ZIP upload state ─────────────────────────────────────────────────────
 let docZipTargetNumberId = null;
