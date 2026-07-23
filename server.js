@@ -1601,97 +1601,286 @@ app.get('/share/:token', (req, res) => {
 <meta name="robots" content="noindex,nofollow">
 <title>${esc(name)} — Loan Documents</title>
 <style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#f5f3ff,#ede9fe 40%,#faf5ff 80%,#fdf4ff);color:#0f172a;min-height:100vh;padding:24px 14px 60px}
-  .wrap{max-width:760px;margin:0 auto}
-  .card{background:#fff;border:1px solid rgba(88,28,135,.06);border-radius:16px;box-shadow:0 8px 30px rgba(124,58,237,.08);padding:22px 24px;margin-bottom:18px}
-  .head{background:linear-gradient(135deg,#4c1d95,#6d28d9 50%,#7c3aed 100%);color:#fff;border:none;padding:24px 24px 20px}
-  .head h1{font-size:24px;font-weight:700;letter-spacing:-.3px}
-  .head .logo-bar{display:flex;align-items:center;gap:14px;margin-bottom:14px}
-  .head .logo-bar img{height:44px;width:auto;border-radius:10px;background:#fff;padding:4px 8px;box-shadow:0 2px 10px rgba(0,0,0,.15)}
-  .head .logo-bar .brand{font-size:13px;font-weight:600;color:#ddd6fe;letter-spacing:.3px}
-  .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
-  .pill{background:rgba(255,255,255,.15);color:#ede9fe;font-size:12px;font-weight:600;border-radius:20px;padding:5px 12px;backdrop-filter:blur(4px)}
-  h2{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#7c3aed;margin-bottom:14px;padding-bottom:8px;border-bottom:1.5px solid #ede9fe}
-  .info{white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word;font-family:'SFMono-Regular',ui-monospace,'Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.7;color:#1e293b;background:#faf5ff;border:1px solid #ede9fe;border-radius:12px;padding:18px;overflow-x:auto;max-width:100%}
-  .doc{display:flex;align-items:center;gap:14px;padding:13px 14px;border:1px solid #e9d5ff;border-radius:12px;margin-bottom:10px;transition:box-shadow .15s,border-color .15s}
-  .doc:hover{border-color:#c084fc;box-shadow:0 2px 12px rgba(124,58,237,.1)}
-  .doc-ic{font-size:26px;flex-shrink:0}
-  .doc-meta{flex:1;min-width:0}
-  .doc-name{font-weight:600;font-size:14px;color:#0f172a;text-transform:capitalize}
-  .doc-sub{font-size:12px;color:#64748b;margin-top:2px;word-break:break-all}
-  .doc-actions{display:flex;gap:8px;flex-shrink:0}
-  .btn{font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:8px;text-decoration:none;cursor:pointer;white-space:nowrap;transition:all .15s}
-  .btn.solid{background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;box-shadow:0 2px 6px rgba(124,58,237,.25)}
-  .btn.solid:hover{box-shadow:0 4px 12px rgba(124,58,237,.35);transform:translateY(-1px)}
-  .btn.ghost{background:#f5f3ff;color:#7c3aed;border:1px solid #ddd6fe}
-  .btn.ghost:hover{background:#ede9fe;border-color:#c084fc}
-  .empty{color:#64748b;font-size:14px;padding:8px 0}
-  .foot{text-align:center;color:#a78bfa;font-size:12px;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px}
-  .foot img{height:22px;width:auto;opacity:.7;border-radius:4px}
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-  /* ── Tablet (max-width: 768px) ── */
-  @media(max-width:768px){
-    body{padding:18px 12px 50px}
-    .card{padding:18px 18px;border-radius:14px}
-    .head{padding:20px 18px 16px}
-    .head h1{font-size:21px}
-    .info{font-size:11.5px;padding:14px;line-height:1.65}
-    .doc{gap:10px;padding:11px 12px}
-    .doc-name{font-size:13px}
-    .doc-sub{font-size:11px}
+  *{box-sizing:border-box;margin:0;padding:0}
+
+  /* ── Page background & bubbles ── */
+  body{
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    background:linear-gradient(145deg,#f5f3ff 0%,#ede9fe 35%,#faf5ff 70%,#fdf4ff 100%);
+    color:#0f172a;min-height:100vh;padding:0 0 60px;
+    position:relative;overflow-x:hidden;
   }
 
-  /* ── Phone (max-width: 520px) ── */
+  /* ── Floating bubbles ── */
+  .bubbles{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:hidden}
+  .bubble{
+    position:absolute;bottom:-120px;border-radius:50%;
+    background:radial-gradient(circle at 30% 30%,rgba(167,139,250,.22),rgba(124,58,237,.08));
+    border:1px solid rgba(167,139,250,.18);
+    backdrop-filter:blur(2px);
+    animation:rise linear infinite;
+  }
+  .bubble:nth-child(1){width:60px;height:60px;left:8%;animation-duration:14s;animation-delay:0s}
+  .bubble:nth-child(2){width:90px;height:90px;left:20%;animation-duration:18s;animation-delay:3s}
+  .bubble:nth-child(3){width:40px;height:40px;left:35%;animation-duration:12s;animation-delay:1s}
+  .bubble:nth-child(4){width:110px;height:110px;left:50%;animation-duration:22s;animation-delay:5s}
+  .bubble:nth-child(5){width:55px;height:55px;left:65%;animation-duration:15s;animation-delay:2s}
+  .bubble:nth-child(6){width:75px;height:75px;left:78%;animation-duration:19s;animation-delay:7s}
+  .bubble:nth-child(7){width:45px;height:45px;left:90%;animation-duration:11s;animation-delay:4s}
+  .bubble:nth-child(8){width:95px;height:95px;left:42%;animation-duration:24s;animation-delay:9s}
+  .bubble:nth-child(9){width:35px;height:35px;left:58%;animation-duration:13s;animation-delay:6s}
+  .bubble:nth-child(10){width:130px;height:130px;left:5%;animation-duration:26s;animation-delay:11s}
+  @keyframes rise{
+    0%{transform:translateY(0) scale(1);opacity:0}
+    10%{opacity:1}
+    90%{opacity:.6}
+    100%{transform:translateY(-110vh) scale(1.1);opacity:0}
+  }
+
+  /* ── Scrolling marquee banner ── */
+  .marquee-wrap{
+    width:100%;background:linear-gradient(90deg,#4c1d95,#6d28d9 50%,#7c3aed);
+    color:#ede9fe;font-size:13px;font-weight:500;letter-spacing:.2px;
+    overflow:hidden;white-space:nowrap;padding:9px 0;
+    border-bottom:1px solid rgba(255,255,255,.12);
+    position:relative;z-index:10;
+    box-shadow:0 2px 12px rgba(109,40,217,.3);
+  }
+  .marquee-track{
+    display:inline-block;
+    animation:marquee 32s linear infinite;
+    padding-left:100%;
+  }
+  .marquee-track span{padding-right:80px}
+  @keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-100%)}}
+
+  /* ── Layout ── */
+  .wrap{max-width:780px;margin:0 auto;padding:20px 14px 0;position:relative;z-index:1}
+
+  /* ── Cards ── */
+  .card{
+    background:rgba(255,255,255,.88);
+    backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);
+    border:1px solid rgba(167,139,250,.18);
+    border-radius:20px;
+    box-shadow:0 4px 24px rgba(124,58,237,.09),0 1px 4px rgba(0,0,0,.04);
+    padding:24px 26px;margin-bottom:18px;
+    transition:box-shadow .2s;
+  }
+  .card:hover{box-shadow:0 8px 32px rgba(124,58,237,.14),0 2px 6px rgba(0,0,0,.05)}
+
+  /* ── Header card ── */
+  .head{
+    background:linear-gradient(135deg,#3b0764 0%,#4c1d95 30%,#6d28d9 65%,#7c3aed 100%);
+    color:#fff;border:none;padding:0;overflow:hidden;position:relative;
+  }
+  .head-inner{padding:28px 28px 24px;position:relative;z-index:2}
+  .head::before{
+    content:'';position:absolute;top:-60px;right:-60px;width:220px;height:220px;
+    background:radial-gradient(circle,rgba(255,255,255,.08) 0%,transparent 70%);
+    border-radius:50%;z-index:1;
+  }
+  .head::after{
+    content:'';position:absolute;bottom:-40px;left:30%;width:160px;height:160px;
+    background:radial-gradient(circle,rgba(196,181,253,.1) 0%,transparent 70%);
+    border-radius:50%;z-index:1;
+  }
+  .logo-bar{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+  .logo-bar img{
+    height:46px;width:auto;border-radius:12px;
+    background:#fff;padding:5px 9px;
+    box-shadow:0 4px 14px rgba(0,0,0,.2);
+  }
+  .logo-bar .brand{
+    font-size:12px;font-weight:700;color:#c4b5fd;
+    letter-spacing:.8px;text-transform:uppercase;
+  }
+  .head h1{font-size:26px;font-weight:800;letter-spacing:-.5px;color:#fff;line-height:1.2}
+  .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .pill{
+    background:rgba(255,255,255,.14);color:#ede9fe;
+    font-size:11.5px;font-weight:600;border-radius:20px;
+    padding:5px 13px;backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,.15);letter-spacing:.1px;
+  }
+
+  /* ── Section headings ── */
+  h2{
+    font-size:11px;font-weight:700;text-transform:uppercase;
+    letter-spacing:1px;color:#7c3aed;margin-bottom:16px;
+    padding-bottom:10px;
+    border-bottom:2px solid;
+    border-image:linear-gradient(90deg,#7c3aed,#c084fc,transparent) 1;
+    display:flex;align-items:center;gap:8px;
+  }
+  h2::before{content:'';display:inline-block;width:4px;height:14px;background:linear-gradient(180deg,#7c3aed,#c084fc);border-radius:2px}
+
+  /* ── Info / pre block ── */
+  .info{
+    white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word;
+    font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;
+    font-size:12px;line-height:1.75;color:#1e293b;
+    background:linear-gradient(135deg,#faf5ff,#f5f3ff);
+    border:1px solid #e9d5ff;border-radius:14px;
+    padding:20px;overflow-x:auto;max-width:100%;
+  }
+
+  /* ── Document rows ── */
+  .doc{
+    display:flex;align-items:center;gap:14px;
+    padding:14px 16px;
+    border:1px solid #e9d5ff;border-radius:14px;
+    margin-bottom:10px;
+    background:rgba(250,245,255,.5);
+    transition:all .18s;
+    position:relative;overflow:hidden;
+  }
+  .doc::before{
+    content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+    background:linear-gradient(180deg,#7c3aed,#c084fc);
+    border-radius:2px 0 0 2px;opacity:0;transition:opacity .18s;
+  }
+  .doc:hover{border-color:#c084fc;box-shadow:0 4px 16px rgba(124,58,237,.12);transform:translateX(2px)}
+  .doc:hover::before{opacity:1}
+  .doc-ic{font-size:28px;flex-shrink:0;filter:drop-shadow(0 2px 4px rgba(0,0,0,.1))}
+  .doc-meta{flex:1;min-width:0}
+  .doc-name{font-weight:700;font-size:14px;color:#0f172a}
+  .doc-sub{font-size:11.5px;color:#64748b;margin-top:3px;word-break:break-all}
+  .doc-actions{display:flex;gap:8px;flex-shrink:0}
+
+  /* ── Buttons ── */
+  .btn{
+    font-size:12.5px;font-weight:600;padding:8px 16px;
+    border-radius:10px;text-decoration:none;cursor:pointer;
+    white-space:nowrap;transition:all .18s;letter-spacing:.1px;
+    display:inline-flex;align-items:center;gap:5px;
+  }
+  .btn.solid{
+    background:linear-gradient(135deg,#7c3aed,#6d28d9);
+    color:#fff;box-shadow:0 2px 8px rgba(124,58,237,.3);
+  }
+  .btn.solid:hover{box-shadow:0 5px 16px rgba(124,58,237,.4);transform:translateY(-1px)}
+  .btn.solid:active{transform:translateY(0);box-shadow:0 2px 8px rgba(124,58,237,.3)}
+  .btn.ghost{
+    background:linear-gradient(135deg,#faf5ff,#f3e8ff);
+    color:#7c3aed;border:1px solid #ddd6fe;
+    box-shadow:0 1px 4px rgba(124,58,237,.08);
+  }
+  .btn.ghost:hover{background:linear-gradient(135deg,#ede9fe,#e9d5ff);border-color:#c084fc;transform:translateY(-1px)}
+
+  /* ── Footer ── */
+  .empty{color:#64748b;font-size:14px;padding:8px 0}
+  .foot{
+    text-align:center;color:#9d7be5;font-size:12px;
+    margin-top:14px;display:flex;align-items:center;
+    justify-content:center;gap:8px;
+    padding:12px;border-radius:12px;
+    background:rgba(255,255,255,.6);backdrop-filter:blur(8px);
+    border:1px solid rgba(167,139,250,.15);
+  }
+  .foot img{height:22px;width:auto;opacity:.75;border-radius:4px}
+  .foot-dot{color:#c4b5fd}
+
+  /* ── Tablet ── */
+  @media(max-width:768px){
+    .wrap{padding:16px 12px 0}
+    .card{padding:18px 20px;border-radius:16px}
+    .head-inner{padding:22px 20px 18px}
+    .head h1{font-size:22px}
+    .info{font-size:11.5px;padding:15px;line-height:1.7}
+    .doc{gap:10px;padding:12px 14px}
+  }
+
+  /* ── Phone ── */
   @media(max-width:520px){
-    body{padding:12px 8px 40px}
-    .wrap{max-width:100%}
-    .card{padding:14px 13px;border-radius:12px;margin-bottom:12px}
-    .head{padding:16px 14px 14px;border-radius:12px}
-    .head h1{font-size:18px}
-    .head .logo-bar{gap:10px;margin-bottom:10px}
-    .head .logo-bar img{height:36px;padding:3px 6px}
-    .head .logo-bar .brand{font-size:11.5px}
+    .wrap{padding:12px 8px 0}
+    .card{padding:14px 14px;border-radius:14px;margin-bottom:12px}
+    .head-inner{padding:16px 15px 14px}
+    .head h1{font-size:19px}
+    .logo-bar img{height:38px}
+    .logo-bar .brand{font-size:10.5px}
     .pills{gap:6px;margin-top:10px}
-    .pill{font-size:11px;padding:4px 9px}
-    h2{font-size:12px;margin-bottom:10px}
-    .info{font-size:10.5px;padding:12px 10px;line-height:1.6;border-radius:9px;white-space:pre-wrap;word-break:break-word}
-    .doc{flex-wrap:wrap;gap:8px;padding:10px 11px}
-    .doc-ic{font-size:22px}
-    .doc-meta{min-width:calc(100% - 40px)}
+    .pill{font-size:10.5px;padding:4px 10px}
+    h2{font-size:10.5px;margin-bottom:10px}
+    .info{font-size:10.5px;padding:12px 10px;line-height:1.6;border-radius:10px;word-break:break-word}
+    .doc{flex-wrap:wrap;gap:8px;padding:10px 12px}
+    .doc-ic{font-size:24px}
+    .doc-meta{min-width:calc(100% - 44px)}
     .doc-name{font-size:13px}
     .doc-sub{font-size:10.5px}
     .doc-actions{width:100%;margin-top:4px}
-    .btn{flex:1;text-align:center;padding:9px 10px;font-size:12px}
-    .foot{font-size:11px;gap:6px}
+    .btn{flex:1;text-align:center;justify-content:center;padding:9px 10px;font-size:12px}
+    .foot{font-size:11px}
     .foot img{height:18px}
+    .marquee-wrap{font-size:12px}
   }
 </style>
-</head><body>
+</head>
+<body>
+
+<!-- Floating bubbles background -->
+<div class="bubbles" aria-hidden="true">
+  <div class="bubble"></div>
+  <div class="bubble"></div>
+  <div class="bubble"></div>
+  <div class="bubble"></div>
+  <div class="bubble"></div>
+  <div class="bubble"></div>
+  <div class="bubble"></div>
+  <div class="bubble"></div>
+  <div class="bubble"></div>
+  <div class="bubble"></div>
+</div>
+
+<!-- Scrolling marquee banner -->
+<div class="marquee-wrap" role="marquee" aria-label="Information banner">
+  <div class="marquee-track">
+    <span>\uD83C\uDFE6 \u0930\u0942\u0930\u093E\u0932\u093F\u092B\u094D\u091F (MSME: UDYAM-MP-29-0021193) \u092E\u0947\u0902 \u0906\u092A\u0915\u093E \u0938\u094D\u0935\u093E\u0917\u0924 \u0939\u0948\u0964 \uD83D\uDCCB \u0907\u0938 \u092A\u094B\u0930\u094D\u091F\u0932 \u092A\u0930 \u0917\u094D\u0930\u093E\u0939\u0915\u094B\u0902 \u0915\u0947 \u0918\u0923 \u0906\u0935\u0947\u0926\u0928, \u0906\u0935\u0936\u094D\u092F\u0915 \u0926\u0938\u094D\u0924\u093E\u0935\u0947\u091C\u093C \u090F\u0935\u0902 \u0905\u0928\u094D\u092F \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964 \uD83D\uDCE5 \u0915\u093F\u0938\u0940 \u092D\u0940 \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947 \u0932\u093F\u090F \uD83D\uDCDE \u0930\u0942\u0930\u093E\u0932\u093F\u092B\u094D\u091F \u091F\u0940\u092E \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964 \uD83D\uDE4F \u0927\u0928\u094D\u092F\u0935\u093E\u0926\u0964</span>
+    <span>\uD83C\uDFE6 \u0930\u0942\u0930\u093E\u0932\u093F\u092B\u094D\u091F (MSME: UDYAM-MP-29-0021193) \u092E\u0947\u0902 \u0906\u092A\u0915\u093E \u0938\u094D\u0935\u093E\u0917\u0924 \u0939\u0948\u0964 \uD83D\uDCCB \u0907\u0938 \u092A\u094B\u0930\u094D\u091F\u0932 \u092A\u0930 \u0917\u094D\u0930\u093E\u0939\u0915\u094B\u0902 \u0915\u0947 \u0918\u0923 \u0906\u0935\u0947\u0926\u0928, \u0906\u0935\u0936\u094D\u092F\u0915 \u0926\u0938\u094D\u0924\u093E\u0935\u0947\u091C\u093C \u090F\u0935\u0902 \u0905\u0928\u094D\u092F \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964 \uD83D\uDCE5 \u0915\u093F\u0938\u0940 \u092D\u0940 \u0938\u0939\u093E\u092F\u0924\u093E \u0915\u0947 \u0932\u093F\u090F \uD83D\uDCDE \u0930\u0942\u0930\u093E\u0932\u093F\u092B\u094D\u091F \u091F\u0940\u092E \u0938\u0947 \u0938\u0902\u092A\u0930\u094D\u0915 \u0915\u0930\u0947\u0902\u0964 \uD83D\uDE4F \u0927\u0928\u094D\u092F\u0935\u093E\u0926\u0964</span>
+  </div>
+</div>
+
 <div class="wrap">
+  <!-- Header card -->
   <div class="card head">
-    <div class="logo-bar">
-      <img src="/logo.png" alt="Ruralift">
-      <span class="brand">Ruralift CRM</span>
-    </div>
-    <h1>${esc(name)}</h1>
-    <div class="pills">
-      ${loanType ? `<span class="pill">${esc(loanType)}</span>` : ''}
-      ${num.phone ? `<span class="pill">\uD83D\uDCDE ${esc(num.phone)}</span>` : ''}
-      <span class="pill">${docs.length} document${docs.length === 1 ? '' : 's'}</span>
-      ${completedAt ? `<span class="pill">${esc(completedAt)}</span>` : ''}
+    <div class="head-inner">
+      <div class="logo-bar">
+        <img src="/logo.png" alt="Ruralift">
+        <span class="brand">Ruralift CRM</span>
+      </div>
+      <h1>${esc(name)}</h1>
+      <div class="pills">
+        ${loanType ? `<span class="pill">${esc(loanType)}</span>` : ''}
+        ${num.phone ? `<span class="pill">\uD83D\uDCDE ${esc(num.phone)}</span>` : ''}
+        <span class="pill">\uD83D\uDCC4 ${docs.length} document${docs.length === 1 ? '' : 's'}</span>
+        ${completedAt ? `<span class="pill">\uD83D\uDD52 ${esc(completedAt)}</span>` : ''}
+      </div>
     </div>
   </div>
+
+  <!-- Documents card -->
   <div class="card">
     <h2>Documents</h2>
     ${docCards}
   </div>
+
+  <!-- Applicant info card -->
   <div class="card">
     <h2>Applicant Information</h2>
     ${infoBlock}
   </div>
-  <p class="foot"><img src="/logo.png" alt="Ruralift"> Secure document link \u00b7 Ruralift CRM</p>
+
+  <p class="foot">
+    <img src="/logo.png" alt="Ruralift">
+    Secure document link
+    <span class="foot-dot">&middot;</span>
+    Ruralift CRM
+  </p>
 </div>
+
 </body></html>`;
   res.send(html);
 });
