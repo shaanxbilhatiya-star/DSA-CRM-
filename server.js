@@ -1452,14 +1452,26 @@ app.get('/share/:token', (req, res) => {
   // Determine if shareInfoText has proper "Label : Value" lines (full format)
   // or is just a legacy 2-3 line minimal summary (no colon-separated fields).
   // If minimal/empty, fall back to rendering structured data from num.form.data.
+  // A proper format requires: section dividers (---- or ====) AND at least 5 proper
+  // "Label : Value" lines with real values. Anything less is a legacy minimal summary.
   function hasProperInfoFormat(txt) {
     if (!txt || !txt.trim()) return false;
-    return txt.split('\n').some(line => {
+    const lines = txt.split('\n');
+    // Must have section dividers (indicating full Applicant_Info.txt structure)
+    const hasDividers = lines.some(line => /^[-=]{10,}$/.test(line.trim()));
+    if (!hasDividers) return false;
+    // Must have at least 5 proper "label : value" lines with real values
+    let realLineCount = 0;
+    for (const line of lines) {
       const m = line.match(/:\s+(.+)$/);
-      if (!m) return false;
+      if (!m) continue;
       const v = m[1].trim();
-      return v && v !== '\u2014' && v !== '-' && v !== 'N/A' && v !== 'None' && v.length > 1;
-    });
+      if (v && v !== '\u2014' && v !== '-' && v !== 'N/A' && v !== 'None' && v.length > 1) {
+        realLineCount++;
+        if (realLineCount >= 5) return true;
+      }
+    }
+    return false;
   }
 
   // Build a human-readable info block from the JSON form snapshot (num.form.data).
