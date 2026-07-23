@@ -1072,11 +1072,15 @@ app.post('/api/agent/upload-doc-zip/:numberId', docUpload.single('docZip'), (req
           const KEY_FIELDS = [
             'f_name', 'f_mobile', 'f_dob', 'f_father', 'f_mother',
             'f_addr', 'f_pin', 'f_addr_aadh', 'f_pin_aadh',
-            'f_company', 'f_income', 'f_lamount', 'f_cibil',
+            // LAP Business uses f_company (business name) and f_office_addr (biz address)
+            'f_company', 'f_office_addr',
+            'f_income', 'f_lamount', 'f_cibil',
             'f_biz_name', 'f_biz_addr', 'f_net_income',
             'f_email', 'f_alt_mobile', 'f_exp',
             'f_ref1name', 'f_ref1mob', 'f_ref2name', 'f_ref2mob',
-            'f_prop_addr', 'f_prop_value', 'f_owner1_name'
+            'f_prop_addr', 'f_prop_value', 'f_owner1_name',
+            // LAP Salaried uses f_designation, f_emp_since
+            'f_designation', 'f_emp_since',
           ];
 
           hasRealData = KEY_FIELDS.some(k => {
@@ -1285,6 +1289,15 @@ function reconstructFormDataFromInfoText(shareInfoText) {
     'Owner Type':          'f_owner_type',
     'Owner 1 name':        'f_owner1_name',
     'Owner 2 name':        'f_owner2_name',
+    // LAP Business uses f_company for business name (not f_biz_name)
+    // and f_office_addr for business address (not f_biz_addr)
+    'Business name':       'f_company',
+    'Business experience': 'f_exp',
+    'Business address':    'f_office_addr',
+    'Business landmark':   'f_biz_landmark',
+    'Business PIN':        'f_biz_pin',
+    'Res-to-biz dist':     'f_biz_distance',
+    'Res to biz dist':     'f_biz_distance',
   };
 
   // Convert Indian locale date (dd/mm/yyyy or d/m/yyyy) → HTML date (yyyy-mm-dd).
@@ -1436,9 +1449,138 @@ app.get('/share/:token', (req, res) => {
         </div>
       </div>`).join('') : '<p class="empty">No documents were attached to this lead.</p>';
 
-  const infoBlock = num.shareInfoText
-    ? `<pre class="info">${esc(num.shareInfoText)}</pre>`
-    : '<p class="empty">No additional information was recorded.</p>';
+  // Determine if shareInfoText has proper "Label : Value" lines (full format)
+  // or is just a legacy 2-3 line minimal summary (no colon-separated fields).
+  // If minimal/empty, fall back to rendering structured data from num.form.data.
+  function hasProperInfoFormat(txt) {
+    if (!txt || !txt.trim()) return false;
+    return txt.split('\n').some(line => {
+      const m = line.match(/:\s+(.+)$/);
+      if (!m) return false;
+      const v = m[1].trim();
+      return v && v !== '\u2014' && v !== '-' && v !== 'N/A' && v !== 'None' && v.length > 1;
+    });
+  }
+
+  // Build a human-readable info block from the JSON form snapshot (num.form.data).
+  // This covers ALL leads — old and new — and shows the same rich detail the
+  // full Applicant_Info.txt would have shown, pulling straight from saved field values.
+  function buildInfoFromFormData(formData, formType) {
+    if (!formData || typeof formData !== 'object') return null;
+    const v = (k) => { const val = formData[k]; return (val && String(val).trim()) ? String(val).trim() : null; };
+    const line = (label, key) => { const val = v(key); return val ? label.padEnd(20) + ': ' + val : null; };
+    const lines = ['============================================================'];
+    const ft = String(formType || '').toUpperCase();
+    if (ft.includes('LAP_BUSINESS') || ft === 'LAP_BUSINESS') {
+      lines.push('   LAP - BUSINESSMAN LOAN APPLICATION');
+    } else if (ft.includes('LAP_SALARIED') || ft === 'LAP_SALARIED') {
+      lines.push('   LAP - SALARIED LOAN APPLICATION');
+    } else if (ft.includes('BL')) {
+      lines.push('   BUSINESS LOAN APPLICATION');
+    } else if (ft.includes('PL_BUSINESS')) {
+      lines.push('   PERSONAL LOAN - BUSINESSMAN APPLICATION');
+    } else if (ft.includes('PL_SALARIED')) {
+      lines.push('   PERSONAL LOAN - SALARIED APPLICATION');
+    } else {
+      lines.push('   LOAN APPLICATION');
+    }
+    lines.push('============================================================', '');
+
+    const sections = [
+      { heading: 'PERSONAL DETAILS', fields: [
+        ['Full name', 'f_name'], ['Date of birth', 'f_dob'], ["Father's name", 'f_father'],
+        ["Mother's name", 'f_mother'], ['Age', 'f_age'], ['Marital status', 'f_marital'],
+        ['Education', 'f_edu'], ['Mobile', 'f_mobile'], ['Alternate mobile', 'f_alt_mobile'],
+        ['Personal email', 'f_email'], ['Spouse', 'f_spouse'], ['Spouse DOB', 'f_spouse_dob'],
+      ]},
+      { heading: 'ADDRESS', fields: [
+        ['Residence address', 'f_addr'], ['Landmark', 'f_addr_landmark'], ['Current PIN', 'f_pin'],
+        ['Rented/Owned', 'f_residence_type'], ['Aadhaar address', 'f_addr_aadh'], ['Aadhaar PIN', 'f_pin_aadh'],
+        ['Permanent address', 'f_perm_addr'], ['Permanent PIN', 'f_perm_pin'],
+      ]},
+      { heading: 'CIBIL', fields: [['CIBIL score', 'f_cibil']] },
+      { heading: 'PROPERTY DETAILS', fields: [
+        ['Property address', 'f_prop_addr'], ['Property area', 'f_prop_area'],
+        ['Property value', 'f_prop_value'], ['Owner type', 'f_owner_type'],
+        ['Owner 1 name', 'f_owner1_name'], ['Owner 2 name', 'f_owner2_name'],
+      ]},
+      { heading: 'BUSINESS / EMPLOYMENT', fields: [
+        ['Business name', 'f_company'], ['Business type', 'f_job'], ['Business exp.', 'f_exp'],
+        ['Business address', 'f_office_addr'], ['Biz. PIN', 'f_biz_pin'],
+        ['Monthly income', 'f_income'], ['Net income', 'f_net_income'], ['GSTIN', 'f_gstin'],
+        ['Company', 'f_company'], ['Designation', 'f_designation'], ['Employed since', 'f_emp_since'],
+        ['Office address', 'f_office_addr'], ['Work email', 'f_work_email'],
+      ]},
+      { heading: 'LOAN DETAILS', fields: [
+        ['Required amount', 'f_lamount'], ['Loan Facilitator', 'f_lender'], ['Case type', 'f_case'],
+      ]},
+      { heading: 'REFERENCES', fields: [
+        ['Reference 1', null], ['Reference 2', null],
+      ]},
+    ];
+
+    // Remove duplicate field keys across sections
+    const seenKeys = new Set();
+    for (const sec of sections) {
+      const secLines = [];
+      for (const [label, key] of sec.fields) {
+        if (!key) {
+          // Special: references
+          if (label === 'Reference 1') {
+            const rn = v('f_ref1name'), rm = v('f_ref1mob');
+            if (rn || rm) secLines.push('Reference 1         : ' + (rn || '—') + '  |  ' + (rm || '—'));
+          } else if (label === 'Reference 2') {
+            const rn = v('f_ref2name'), rm = v('f_ref2mob');
+            if (rn || rm) secLines.push('Reference 2         : ' + (rn || '—') + '  |  ' + (rm || '—'));
+          }
+          continue;
+        }
+        if (seenKeys.has(key)) continue;
+        const l = line(label, key);
+        if (l) { secLines.push(l); seenKeys.add(key); }
+      }
+      if (secLines.length > 0) {
+        lines.push('------------------------------------------------------------');
+        lines.push(sec.heading);
+        lines.push('------------------------------------------------------------');
+        lines.push(...secLines);
+        lines.push('');
+      }
+    }
+    if (v('f_notes')) {
+      lines.push('------------------------------------------------------------');
+      lines.push('NOTES');
+      lines.push('------------------------------------------------------------');
+      lines.push(v('f_notes'));
+      lines.push('');
+    }
+    lines.push('============================================================');
+    const result = lines.join('\n');
+    // Only return if we have at least some real data beyond headers
+    return seenKeys.size > 0 ? result : null;
+  }
+
+  let infoBlockContent;
+  if (hasProperInfoFormat(num.shareInfoText)) {
+    // Full format stored — display as-is
+    infoBlockContent = `<pre class="info">${esc(num.shareInfoText)}</pre>`;
+  } else if (num.form && num.form.data) {
+    // Legacy/minimal shareInfoText but we have structured JSON data — build from it
+    const built = buildInfoFromFormData(num.form.data, (num.form && num.form.type) || num.loanType || '');
+    if (built) {
+      infoBlockContent = `<pre class="info">${esc(built)}</pre>`;
+    } else if (num.shareInfoText) {
+      infoBlockContent = `<pre class="info">${esc(num.shareInfoText)}</pre>`;
+    } else {
+      infoBlockContent = '<p class="empty">No additional information was recorded.</p>';
+    }
+  } else if (num.shareInfoText) {
+    // Has some text even if minimal — show it
+    infoBlockContent = `<pre class="info">${esc(num.shareInfoText)}</pre>`;
+  } else {
+    infoBlockContent = '<p class="empty">No additional information was recorded.</p>';
+  }
+  const infoBlock = infoBlockContent;
 
   const html = `<!doctype html>
 <html lang="en"><head>
