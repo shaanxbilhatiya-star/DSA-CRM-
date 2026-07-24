@@ -780,38 +780,6 @@ function showToast(msg) {
 }
 
 // ── VALIDATE ──────────────────────────────────────────────────────────
-function validate() {
-  const checks = [
-    ['up_aadhaar','aadh-err','sec-address','sec-address-err','Aadhaar card'],
-    ['up_pan',    'pan-err', 'sec-address','sec-address-err','PAN card'],
-    ['up_photo',  'photo-err','sec-address','sec-address-err','Passport-size photo'],
-    ['up_elec',   'elec-err','sec-address', 'sec-address-err', 'Electricity bill'],
-    ['up_cibil',  'cibil-err','sec-cibil','sec-cibil-err','CIBIL report'],
-    ['up_salary', 'sal-err', 'sec-employment','sec-employment-err','Salary slips'],
-    ['up_bank',   'bank-err','sec-employment','sec-employment-err','Bank statements'],
-  ];
-  document.querySelectorAll('.sec-err-banner').forEach(b => b.style.display='none');
-  document.querySelectorAll('.sec').forEach(s => s.classList.remove('error-highlight'));
-  let ok=true, firstSec=null, firstLabel=null;
-  checks.forEach(([inp,err,secId,bannerId,label]) => {
-    const has = g(inp) && g(inp).files && g(inp).files.length > 0;
-    g(err).style.display = has ? 'none' : 'block';
-    if (!has) {
-      ok = false;
-      const sec = g(secId); const banner = g(bannerId);
-      if (sec) sec.classList.add('error-highlight');
-      if (banner) banner.style.display = 'block';
-      if (!firstSec) { firstSec = secId; firstLabel = label; }
-    }
-    updateChecklist(inp, has);
-  });
-
-    if (!ok && firstSec) {
-    g(firstSec).scrollIntoView({ behavior:'smooth', block:'center' });
-    showToast('⚠ Missing: ' + firstLabel + ' — please upload all required documents');
-  }
-  return ok;
-}
 
 // ── OBLIGATION LINES ──────────────────────────────────────────────────
 function getObligationLines() {
