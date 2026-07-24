@@ -397,23 +397,22 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
 
     <!-- Udhyam / Gumastha — at least one required -->
     <div class="fi" style="margin-top:1rem">
-      <label>Udhyam Certificate <span class="r">*</span> <span class="opt">(Udhyam OR Gumastha — at least one required)</span></label>
+      <label>Udhyam Certificate <span class="opt">(Udhyam OR Gumastha — upload if available)</span></label>
       <div class="ub" id="ub-udhyam">
-        <input type="file" accept=".pdf,.jpg,.jpeg,.png" id="up_udhyam" onchange="mark(this,'udhyam-fn','ub-udhyam'); validateUdhyamGumastha()" multiple>
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png" id="up_udhyam" onchange="mark(this,'udhyam-fn','ub-udhyam')" multiple>
         <div class="ub-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></div>
         <div class="ul"><strong>Upload Udhyam Registration Certificate</strong><span class="tag">PDF / JPG / PNG</span></div>
       </div>
       <div class="fn" id="udhyam-fn"></div>
     </div>
     <div class="fi">
-      <label>Gumastha / Shop Act License <span class="r">*</span> <span class="opt">(Udhyam OR Gumastha — at least one required)</span></label>
+      <label>Gumastha / Shop Act License <span class="opt">(Udhyam OR Gumastha — upload if available)</span></label>
       <div class="ub" id="ub-gumastha">
-        <input type="file" accept=".pdf,.jpg,.jpeg,.png" id="up_gumastha" onchange="mark(this,'gumastha-fn','ub-gumastha'); validateUdhyamGumastha()" multiple>
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png" id="up_gumastha" onchange="mark(this,'gumastha-fn','ub-gumastha')" multiple>
         <div class="ub-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg></div>
         <div class="ul"><strong>Upload Gumastha / Shop &amp; Establishment License</strong><span class="tag">PDF / JPG / PNG</span></div>
       </div>
       <div class="fn" id="gumastha-fn"></div>
-      <div class="err" id="udhyam-gumastha-err">⚠ At least one of Udhyam or Gumastha is required</div>
     </div>
 
     <!-- ITR 3 years -->
@@ -794,58 +793,8 @@ function showToast(msg) {
   setTimeout(() => { t.style.display = 'none'; }, 3800);
 }
 
-function validateUdhyamGumastha() {
-  const hasU = g('up_udhyam') && g('up_udhyam').files && g('up_udhyam').files.length > 0;
-  const hasG = g('up_gumastha') && g('up_gumastha').files && g('up_gumastha').files.length > 0;
-  const err = g('udhyam-gumastha-err');
-  if (err) err.style.display = (hasU || hasG) ? 'none' : 'block';
-  return hasU || hasG;
-}
 
 // ── VALIDATE ──────────────────────────────────────────────────────────
-function validate() {
-  const checks = [
-    ['up_aadhaar','aadh-err','sec-address','sec-address-err','Aadhaar card'],
-    ['up_pan',    'pan-err', 'sec-address','sec-address-err','PAN card'],
-    ['up_photo',  'photo-err','sec-address','sec-address-err','Passport-size photo'],
-    ['up_elec',   'elec-err','sec-address', 'sec-address-err', 'Electricity bill'],
-    ['up_cibil',  'cibil-err','sec-cibil','sec-cibil-err','CIBIL report'],
-    ['up_gst',    'gst-err','sec-employment','sec-employment-err','GST Certificate'],
-    ['up_salary', 'sal-err', 'sec-employment','sec-employment-err','ITR (3 years)'],
-    ['up_bank',   'bank-err','sec-employment','sec-employment-err','Bank statements'],
-    ['up_vintage','vintage-err','sec-employment','sec-employment-err','Shop video'],
-  ];
-  document.querySelectorAll('.sec-err-banner').forEach(b => b.style.display='none');
-  document.querySelectorAll('.sec').forEach(s => s.classList.remove('error-highlight'));
-  let ok=true, firstSec=null, firstLabel=null;
-  checks.forEach(([inp,err,secId,bannerId,label]) => {
-    const has = g(inp) && g(inp).files && g(inp).files.length > 0;
-    g(err).style.display = has ? 'none' : 'block';
-    if (!has) {
-      ok = false;
-      const sec = g(secId); const banner = g(bannerId);
-      if (sec) sec.classList.add('error-highlight');
-      if (banner) banner.style.display = 'block';
-      if (!firstSec) { firstSec = secId; firstLabel = label; }
-    }
-    updateChecklist(inp, has);
-  });
-  // Udhyam OR Gumastha — at least one
-  const ugOk = validateUdhyamGumastha();
-  if (!ugOk) {
-    ok = false;
-    const sec = g('sec-employment'); const banner = g('sec-employment-err');
-    if (sec) sec.classList.add('error-highlight');
-    if (banner) banner.style.display = 'block';
-    if (!firstSec) { firstSec = 'sec-employment'; firstLabel = 'Udhyam or Gumastha certificate'; }
-  }
-
-    if (!ok && firstSec) {
-    g(firstSec).scrollIntoView({ behavior:'smooth', block:'center' });
-    showToast('⚠ Missing: ' + firstLabel + ' — please upload all required documents');
-  }
-  return ok;
-}
 
 // ── OBLIGATION LINES ──────────────────────────────────────────────────
 function getObligationLines() {
