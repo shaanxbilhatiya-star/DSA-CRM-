@@ -2641,6 +2641,29 @@ app.get('/api/agent/state/:agentId', (req, res) => {
   });
 });
 
+// ─── Global cross-client TTS turn lock ──────────────────────────────────────────
+// Multiple agent/TL PCs can be wired to a single shared speaker. Each browser
+// tab has its own local audio queue, but nothing coordinates *between* PCs —
+// so two machines could speak at the same instant (e.g. everyone's hourly
+// 12PM/1PM.../5PM review fires at the same IST minute, or two agents' break
+// timers expire together). This lock makes every "turn to speak" pass through
+// the server first: a client asks for a turn, waits until granted, plays its
+// audio, then releases so the next queued client gets a turn.
+let ttsQueue = [];       // [{ socketId, reqId }] FIFO of pending speak requests
+let ttsLockedBy = null;  // socket.id currently allowed to play audio
+let ttsLockTimer = null; // safety auto-release if a client never releases (e.g. tab closed mid-speech)
+
+function ttsGrantNext() {
+  if (ttsLockedBy || !ttsQueue.length) return;
+  const next = ttsQueue.shift();
+  ttsLockedBy = next.socketId;
+  io.to(next.socketId).emit('tts-turn-granted', { reqId: next.reqId });
+  clearTimeout(ttsLockTimer);
+  ttsLockTimer = setTimeout(() => {
+    if (ttsLockedBy === next.socketId) { ttsLockedBy = null; ttsGrantNext(); }
+  }, 25000); // failsafe: no single announcement should ever hold the lock this long
+}
+
 // ─── Socket.IO ─────────────────────────────────────────────────────────────────
 io.on('connection', (socket) => {
   let socketAgentId = null;
@@ -2651,7 +2674,27 @@ io.on('connection', (socket) => {
     socket.emit('stats-update', getAdminStats());
   });
 
+  socket.on('tts-request-turn', ({ reqId }) => {
+    if (!reqId) return;
+    ttsQueue.push({ socketId: socket.id, reqId });
+    ttsGrantNext();
+  });
+
+  socket.on('tts-release-turn', () => {
+    if (ttsLockedBy === socket.id) {
+      ttsLockedBy = null;
+      clearTimeout(ttsLockTimer);
+      ttsGrantNext();
+    }
+  });
+
   socket.on('disconnect', () => {
+    ttsQueue = ttsQueue.filter(q => q.socketId !== socket.id);
+    if (ttsLockedBy === socket.id) {
+      ttsLockedBy = null;
+      clearTimeout(ttsLockTimer);
+      ttsGrantNext();
+    }
     if (socketAgentId) {
       agentSocketMap.delete(socketAgentId);
       const agent = appState.agents[socketAgentId];

@@ -5146,26 +5146,50 @@ const DAILY_CALL_TARGET = 300;
 const _ttsQueue = [];
 let _ttsPlaying = false;
 
-function _ttsPlayNext() {
+// Cross-PC coordination: before actually playing audio, ask the server for a
+// "turn". If several agent/TL PCs are wired to one shared speaker, this stops
+// two machines announcing at the same instant.
+let _ttsReqCounter = 0;
+const _ttsPendingTurns = {};
+socket.on('tts-turn-granted', ({ reqId }) => {
+  const cb = _ttsPendingTurns[reqId];
+  if (cb) { delete _ttsPendingTurns[reqId]; cb(); }
+});
+function _ttsRequestGlobalTurn() {
+  return new Promise((resolve) => {
+    const reqId = 'r' + (++_ttsReqCounter) + '_' + Date.now();
+    let done = false;
+    const finish = () => { if (!done) { done = true; delete _ttsPendingTurns[reqId]; resolve(); } };
+    _ttsPendingTurns[reqId] = finish;
+    try { socket.emit('tts-request-turn', { reqId }); } catch (e) { finish(); }
+    setTimeout(finish, 30000); // failsafe — never block an announcement forever
+  });
+}
+function _ttsReleaseGlobalTurn() {
+  try { socket.emit('tts-release-turn'); } catch (e) {}
+}
+
+async function _ttsPlayNext() {
   if (_ttsPlaying || !_ttsQueue.length) return;
   _ttsPlaying = true;
   const chunk = _ttsQueue.shift();
+  await _ttsRequestGlobalTurn();
   const audio = new Audio('/api/tts?lang=hi&text=' + encodeURIComponent(chunk));
-  audio.onended = () => { _ttsPlaying = false; _ttsPlayNext(); };
+  audio.onended = () => { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); };
   audio.onerror = () => {
     try {
       if ('speechSynthesis' in window) {
         const u = new SpeechSynthesisUtterance(chunk);
         u.lang = 'hi-IN'; u.rate = 0.95;
-        u.onend   = () => { _ttsPlaying = false; _ttsPlayNext(); };
-        u.onerror = () => { _ttsPlaying = false; _ttsPlayNext(); };
+        u.onend   = () => { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); };
+        u.onerror = () => { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); };
         window.speechSynthesis.speak(u);
         return;
       }
     } catch(e) {}
-    _ttsPlaying = false; _ttsPlayNext();
+    _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext();
   };
-  audio.play().catch(() => { _ttsPlaying = false; _ttsPlayNext(); });
+  audio.play().catch(() => { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); });
 }
 
 function _splitTTS(text) {
