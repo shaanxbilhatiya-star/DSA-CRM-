@@ -2737,7 +2737,14 @@ function checkTimeRestriction() {
   const minutes = istTime.getMinutes();
 
   // Restrict dialing from 5:45 PM (17:45) until 2:00 AM (02:00) next day
-  const isRestricted = (hours === 17 && minutes >= 45) || hours >= 18 || hours < 2;
+  let isRestricted = (hours === 17 && minutes >= 45) || hours >= 18 || hours < 2;
+
+  // ── TEMP TEST BYPASS — REMOVE AFTER TESTING ────────────────────────────────
+  // Exempts ONLY an agent literally named "Test User" from the dialer time
+  // restriction, so break/announcement testing can happen outside the normal
+  // window. No other agent, page, or stored data is affected by this.
+  if (agentName === 'Test User') { isRestricted = false; }
+  // ── END TEMP TEST BYPASS ────────────────────────────────────────────────────
 
   if (isRestricted && !dialingRestricted) {
     dialingRestricted = true;
