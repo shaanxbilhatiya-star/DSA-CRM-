@@ -2222,11 +2222,11 @@ function showLoginPopup(lateLogin) {
 
   // ── Audio announcement on login ──────────────────────────────────────────
   try {
-    var nm = agentName || 'Agent';
+    var nm = agentName || 'एजेंट';
     if (lateLogin) {
-      speakAnnouncement('Hello ' + nm + ', you have logged in late. This shall be reported to the managers.');
+      speakAnnouncement('नमस्ते ' + nm + ', आपने देर से लॉगिन किया है। इसकी सूचना मैनेजर्स को दी जाएगी।');
     } else {
-      speakAnnouncement('Hello ' + nm + ', you have logged in at ' + currentISTTimeString() + '.');
+      speakAnnouncement('नमस्ते ' + nm + ', आपने ' + currentISTTimeString() + ' बजे लॉगिन किया है।');
     }
   } catch (e) {}
 }
@@ -4796,8 +4796,8 @@ function restrictDialingShowRecordingUpload() {
 
   // ── 5:30 PM TL responsibility audio announcement ─────────────────────────
   try {
-    var nm = (typeof agentName !== 'undefined' && agentName) ? agentName : 'Team Leader';
-    speakAnnouncement('Attention Team Leader ' + nm + '. It is 5:30 PM. You are responsible now. Please check all agents and prepare the daily report.');
+    var nm = (typeof agentName !== 'undefined' && agentName) ? agentName : 'टीम लीडर';
+    speakAnnouncement('टीम लीडर ' + nm + ' ध्यान दें। शाम के 5:30 बज चुके हैं। अब आपकी ज़िम्मेदारी है। कृपया सभी एजेंट्स की जाँच करें और दैनिक रिपोर्ट तैयार करें।');
   } catch (e) {}
 }
 
@@ -5076,13 +5076,15 @@ function speakAnnouncement(text, opts) {
     opts = opts || {};
     if (opts.flush) window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang   = 'en-IN';
-    u.rate   = 0.98;
+    u.lang   = 'hi-IN';
+    u.rate   = 0.95;
     u.pitch  = 1.0;
     u.volume = 1.0;
+    // Prefer a Hindi (India) voice when available, fall back to English-India.
     const voices = window.speechSynthesis.getVoices() || [];
-    const preferred = voices.find(v => /en[-_]IN/i.test(v.lang))
-      || voices.find(v => /en[-_](US|GB)/i.test(v.lang))
+    const preferred = voices.find(v => /hi[-_]IN/i.test(v.lang))
+      || voices.find(v => /^hi/i.test(v.lang))
+      || voices.find(v => /en[-_]IN/i.test(v.lang))
       || voices.find(v => /^en/i.test(v.lang));
     if (preferred) u.voice = preferred;
     window.speechSynthesis.speak(u);
@@ -5106,14 +5108,14 @@ function getISTDate() {
 
 // Human-readable label for a disposition key.
 const DISPOSITION_LABELS = {
-  interested:     'Interested',
-  followup:       'Follow up',
-  not_interested: 'Not interested',
-  dead:           'Call not connected',
-  not_received:   'Call not received',
-  switch_off:     'Switch off',
-  discard:        'Discarded',
-  dnd:            'Do not disturb'
+  interested:     'इच्छुक',
+  followup:       'फॉलो अप',
+  not_interested: 'अनिच्छुक',
+  dead:           'कॉल कनेक्ट नहीं हुई',
+  not_received:   'कॉल रिसीव नहीं हुई',
+  switch_off:     'स्विच ऑफ',
+  discard:        'रद्द',
+  dnd:            'डू नॉट डिस्टर्ब'
 };
 
 // Build and speak this user's disposition stats for today.
@@ -5122,11 +5124,11 @@ async function announceDispositionStats() {
   try {
     const r = await fetch('/api/stats/dispositions?period=daily&agentId=' + agentId);
     const s = await r.json();
-    const nm = agentName || 'Agent';
-    let parts = ['Hello ' + nm + '. Here are your disposition stats for today.'];
-    parts.push('Total calls ' + (s.totalCalls || 0) + '.');
+    const nm = agentName || 'एजेंट';
+    let parts = ['नमस्ते ' + nm + '। आज के आपके डिस्पोज़िशन आँकड़े इस प्रकार हैं।'];
+    parts.push('कुल कॉल ' + (s.totalCalls || 0) + '।');
     ['interested','followup','not_interested','dead','not_received','switch_off'].forEach(k => {
-      parts.push(DISPOSITION_LABELS[k] + ' ' + (s[k] || 0) + '.');
+      parts.push(DISPOSITION_LABELS[k] + ' ' + (s[k] || 0) + '।');
     });
     speakAnnouncement(parts.join(' '));
     return s;
@@ -5135,7 +5137,7 @@ async function announceDispositionStats() {
 
 // Announce the daily target and where this user ranks by total number of calls.
 async function announceTargetAndRanking() {
-  speakAnnouncement(DAILY_CALL_TARGET + ' is today\'s calling target for total number of calls.');
+  speakAnnouncement('आज कुल कॉल का लक्ष्य ' + DAILY_CALL_TARGET + ' है।');
   try {
     const r = await fetch('/api/rankings?period=daily');
     const d = await r.json();
@@ -5147,19 +5149,19 @@ async function announceTargetAndRanking() {
     const myCalls = me ? (me.totalCalls || 0) : 0;
 
     if (idx <= 0 && me) {
-      speakAnnouncement('You are currently leading in total number of calls with ' + myCalls + ' calls. Keep it up.');
+      speakAnnouncement('आप ' + myCalls + ' कॉल के साथ कुल कॉल में सबसे आगे हैं। इसी तरह बनाए रखें।');
     } else if (me) {
       const ahead = list[idx - 1];
       const top   = list[0];
       speakAnnouncement(
-        'You have made ' + myCalls + ' calls so far. You are behind ' +
-        (ahead.name || 'the agent ahead of you') + ' who has made ' + (ahead.totalCalls || 0) + ' calls. ' +
-        'The top performer is ' + (top.name || 'the leader') + ' with ' + (top.totalCalls || 0) + ' calls.'
+        'आपने अब तक ' + myCalls + ' कॉल की हैं। आप ' +
+        (ahead.name || 'अपने से आगे वाले एजेंट') + ' से पीछे हैं जिन्होंने ' + (ahead.totalCalls || 0) + ' कॉल की हैं। ' +
+        'सबसे आगे ' + (top.name || 'अग्रणी एजेंट') + ' हैं जिन्होंने ' + (top.totalCalls || 0) + ' कॉल की हैं।'
       );
     }
     if (list.length > 1) {
-      const order = list.map(x => (x.name || 'Agent') + ' with ' + (x.totalCalls || 0) + ' calls');
-      speakAnnouncement('Current standing by total number of calls: ' + order.join(', then ') + '.');
+      const order = list.map(x => (x.name || 'एजेंट') + ' ' + (x.totalCalls || 0) + ' कॉल के साथ');
+      speakAnnouncement('कुल कॉल के अनुसार वर्तमान स्थिति: ' + order.join(', फिर ') + '।');
     }
   } catch (e) { /* ignore */ }
 }
@@ -5173,16 +5175,16 @@ function showJustificationPopup() {
   modal.innerHTML =
     '<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;padding:26px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35);">' +
       '<div style="font-size:44px;margin-bottom:8px;">📢</div>' +
-      '<h3 style="font-size:19px;font-weight:700;color:var(--accent);margin-bottom:6px;">Performance Check</h3>' +
+      '<h3 style="font-size:19px;font-weight:700;color:var(--accent);margin-bottom:6px;">प्रदर्शन जाँच</h3>' +
       '<p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:16px;">' +
-        'The daily calling target is <strong>' + DAILY_CALL_TARGET + '</strong> calls. ' +
-        'If you are behind the target, please justify why below.</p>' +
-      '<textarea id="justificationText" rows="4" placeholder="Type your justification / remarks here..." ' +
+        'आज कुल कॉल का लक्ष्य <strong>' + DAILY_CALL_TARGET + '</strong> कॉल है। ' +
+        'यदि आप लक्ष्य से पीछे हैं, तो कृपया नीचे इसका कारण बताएँ।</p>' +
+      '<textarea id="justificationText" rows="4" placeholder="अपना स्पष्टीकरण / टिप्पणी यहाँ लिखें..." ' +
         'style="width:100%;padding:12px;border:1px solid var(--border-strong);border-radius:10px;font-family:inherit;font-size:14px;resize:vertical;box-sizing:border-box;"></textarea>' +
       '<div style="display:flex;gap:10px;margin-top:16px;">' +
-        '<button onclick="submitJustification()" class="action-btn" style="flex:1;background:var(--accent);color:#fff;">Submit Justification</button>' +
+        '<button onclick="submitJustification()" class="action-btn" style="flex:1;background:var(--accent);color:#fff;">स्पष्टीकरण भेजें</button>' +
         '<button onclick="(function(){var m=document.getElementById(\'justificationModal\');if(m)m.remove();})()" ' +
-          'style="flex:0 0 auto;padding:12px 16px;border:1px solid var(--border);background:#fff;border-radius:10px;cursor:pointer;font-weight:600;">Later</button>' +
+          'style="flex:0 0 auto;padding:12px 16px;border:1px solid var(--border);background:#fff;border-radius:10px;cursor:pointer;font-weight:600;">बाद में</button>' +
       '</div>' +
     '</div>';
   document.body.appendChild(modal);
@@ -5191,11 +5193,11 @@ function showJustificationPopup() {
 function submitJustification() {
   const ta = document.getElementById('justificationText');
   const val = ta ? ta.value.trim() : '';
-  if (!val) { showToast('Please type your justification before submitting.', 'error'); return; }
+  if (!val) { showToast('कृपया भेजने से पहले अपना स्पष्टीकरण लिखें।', 'error'); return; }
   const m = document.getElementById('justificationModal');
   if (m) m.remove();
-  showToast('✅ Your justification has been recorded. Thank you.', 'success');
-  speakAnnouncement('Thank you. Your justification has been recorded.');
+  showToast('✅ आपका स्पष्टीकरण दर्ज कर लिया गया है। धन्यवाद।', 'success');
+  speakAnnouncement('धन्यवाद। आपका स्पष्टीकरण दर्ज कर लिया गया है।');
 }
 
 async function runHourlyReview() {
