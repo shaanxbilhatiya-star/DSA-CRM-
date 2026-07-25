@@ -3755,6 +3755,34 @@ app.get('/api/recordings/:id/download', (req, res) => {
   res.sendFile(filePath);
 });
 
+
+// ─── TTS Proxy ─────────────────────────────────────────────────────────────────
+// Proxies Google Translate TTS so announcements play in background browser tabs
+// and use a clean, natural Hindi voice rather than the browser's system voice.
+app.get('/api/tts', (req, res) => {
+  const text = String(req.query.text || '').trim().slice(0, 200);
+  const lang = String(req.query.lang || 'hi').replace(/[^a-z-]/gi, '').slice(0, 10);
+  if (!text) return res.status(400).end();
+  const qs = 'ie=UTF-8&tl=' + lang + '&client=tw-ob&ttsspeed=0.85&q=' + encodeURIComponent(text);
+  const httpsLib = require('https');
+  const options = {
+    hostname: 'translate.google.com',
+    path: '/translate_tts?' + qs,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Referer': 'https://translate.google.com/'
+    }
+  };
+  const proxyReq = httpsLib.get(options, (r) => {
+    if (r.statusCode !== 200) { r.resume(); return res.status(502).end(); }
+    res.set('Content-Type', 'audio/mpeg');
+    res.set('Cache-Control', 'public, max-age=3600');
+    r.pipe(res);
+  });
+  proxyReq.on('error', () => { try { res.status(502).end(); } catch(e){} });
+  proxyReq.setTimeout(8000, () => { proxyReq.destroy(); try { res.status(504).end(); } catch(e){} });
+});
+
 // ─── Page Routes ──────────────────────────────────────────────────────────────
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/admin/index.html')));
 app.get('/agent', (req, res) => res.sendFile(path.join(__dirname, 'public/agent/index.html')));
