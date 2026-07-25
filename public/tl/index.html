@@ -2083,6 +2083,8 @@ let totalBreakMsUsed  = 0;
 let breakAllowedMs  = 3600000;
 let breakInterval   = null;
 let breakExhausted  = false;
+let _breakFiveMinWarned   = false;
+let _breakExceededAnnounced = false;
 
 // Washroom state
 let onWashroom         = false;
@@ -2384,7 +2386,9 @@ socket.on('break-started', (data) => {
   if (data.error) { alert(data.error); return; }
   onBreak = true; dialerWasOnBreak = true;
   breakStartedAt = data.breakStartedAt || Date.now();
+  _breakFiveMinWarned = false; _breakExceededAnnounced = false;
   showBreakMode(); startBreakCountdown();
+  try { speakAnnouncement((agentName || 'एजेंट') + ' ब्रेक पर चले गए हैं।'); } catch (e) {}
 });
 
 socket.on('break-ended', (data) => {
@@ -2393,6 +2397,7 @@ socket.on('break-ended', (data) => {
   totalBreakMsUsed = data.totalBreakMs || totalBreakMsUsed;
   breakExhausted   = totalBreakMsUsed >= breakAllowedMs;
   stopBreakCountdown(); updateBreakUsedDisplay(); hideBreakMode();
+  try { speakAnnouncement((agentName || 'एजेंट') + ' ब्रेक से वापस आ गए हैं।'); } catch (e) {}
   if (currentNumberId) {
     document.getElementById('numberDisplay').style.display     = 'block';
     document.getElementById('dispositionPanel').style.display  = 'block';
@@ -2440,7 +2445,15 @@ function tickBreak() {
   document.getElementById('breakTimerDisplay').textContent = formatMs(remaining);
   document.getElementById('breakBarFill').style.width = ((remaining / breakAllowedMs) * 100) + '%';
   updateBreakUsedDisplayLive(totalUsed);
+  if (!_breakFiveMinWarned && remaining > 0 && remaining <= 5 * 60 * 1000) {
+    _breakFiveMinWarned = true;
+    try { speakAnnouncement((agentName || 'एजेंट') + ', आपके ब्रेक के केवल 5 मिनट शेष हैं।'); } catch (e) {}
+  }
   if (remaining <= 0) {
+    if (!_breakExceededAnnounced) {
+      _breakExceededAnnounced = true;
+      try { speakAnnouncement((agentName || 'एजेंट') + ' का ब्रेक समय समाप्त हो गया है।'); } catch (e) {}
+    }
     stopBreakCountdown();
     breakExhausted = true;
     socket.emit('agent-break-end', { agentId });
