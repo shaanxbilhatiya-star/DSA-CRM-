@@ -336,6 +336,7 @@ function createFreshState(preserveAllowedEids) {
     uploadedFiles: [],
     dialedLog: [],
     recordings: [],
+    justifications: [],
     lastReset: getTodayStr(),
     allowedEids: eids
   };
@@ -438,6 +439,9 @@ if (!appState.dndNumbers) {
 // Migration: older state.json files predate the call-recording feature.
 if (!appState.recordings) {
   appState.recordings = [];
+}
+if (!appState.justifications) {
+  appState.justifications = [];
 }
 // Map of shortCode -> shareToken for URL shortening
 if (!appState.shortLinks) {
@@ -2767,6 +2771,38 @@ io.on('connection', (socket) => {
     const agent = appState.agents[agentId];
     if (agent) appState = checkDailyReset(appState);
   });
+});
+
+// ─── Behind-target Justification/Remarks Endpoint ───────────────────────────────
+// Agents submit a remark from the hourly "behind target" popup; TL/admin can read them.
+app.post('/api/agent/justification', (req, res) => {
+  const { agentId, remarks } = req.body;
+  if (!agentId || !remarks || !remarks.trim()) {
+    return res.status(400).json({ error: 'agentId and remarks required' });
+  }
+  if (!appState.justifications) appState.justifications = [];
+  const agent = appState.agents[agentId] || {};
+  const now = new Date();
+  const ist = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+  appState.justifications.push({
+    id: uuidv4(),
+    agentId,
+    name: agent.name || agentId,
+    remarks: remarks.trim(),
+    totalDialedToday: agent.totalDialedToday || 0,
+    date: getTodayStr(),
+    time: ist.toISOString().slice(11, 16),
+    createdAt: now.toISOString()
+  });
+  saveState(appState);
+  io.to('admin-room').emit('justification-added', appState.justifications[appState.justifications.length - 1]);
+  res.json({ success: true });
+});
+
+app.get('/api/justifications', (req, res) => {
+  const date = req.query.date || getTodayStr();
+  const list = (appState.justifications || []).filter(j => j.date === date);
+  res.json({ date, justifications: list });
 });
 
 // ─── Disposition Stats Endpoint ─────────────────────────────────────────────────

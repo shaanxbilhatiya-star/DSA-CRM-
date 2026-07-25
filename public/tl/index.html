@@ -5212,10 +5212,16 @@ function showJustificationPopup() {
   document.body.appendChild(modal);
 }
 
-function submitJustification() {
+async function submitJustification() {
   const ta = document.getElementById('justificationText');
   const val = ta ? ta.value.trim() : '';
   if (!val) { showToast('कृपया भेजने से पहले अपना स्पष्टीकरण लिखें।', 'error'); return; }
+  try {
+    await fetch('/api/agent/justification', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId, remarks: val })
+    });
+  } catch (e) { /* still close UI even if network hiccups */ }
   const m = document.getElementById('justificationModal');
   if (m) m.remove();
   showToast('✅ आपका स्पष्टीकरण दर्ज कर लिया गया है। धन्यवाद।', 'success');
