@@ -711,6 +711,25 @@ function adminLogout(){
     </div>
   </div>
 
+  <!-- Performance Justifications Panel -->
+  <div class="panel" style="margin-bottom:20px">
+    <div class="panel-header" style="background:rgba(217,119,6,.08);flex-wrap:wrap;gap:10px">
+      <h2 style="color:#d97706">&#128226; Performance Justifications (Behind-Target Remarks)</h2>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <input type="date" id="justifDate" onchange="loadJustifications()" style="padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:13px;outline:none;">
+        <button onclick="document.getElementById('justifDate').value='';loadJustifications()" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;font-weight:600;cursor:pointer;">All dates</button>
+        <button onclick="loadJustifications()" style="padding:7px 14px;border-radius:8px;border:none;background:#d97706;color:#fff;font-size:12px;font-weight:700;cursor:pointer;">&#8635; Refresh</button>
+        <span style="font-size:12px;color:var(--muted)" id="justifCountBadge">0 remarks</span>
+      </div>
+    </div>
+    <div class="panel-body">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5">These are the justifications agents typed in the hourly (12&ndash;5 PM) performance-check popup explaining why they are behind the daily calling target of 300.</p>
+      <div id="justifList" style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto;">
+        <div class="empty">No justifications yet</div>
+      </div>
+    </div>
+  </div>
+
   <!-- RECORDINGS PANEL -->
   <div class="panel" style="margin-bottom:20px">
     <div class="panel-header" style="background:rgba(37,99,235,.06)">
@@ -2171,6 +2190,60 @@ async function removeDndNumber(phone) {
 }
 
 loadDndNumbers();
+
+// ── Performance Justifications ────────────────────────────────────────────────
+function formatReviewHour(h) {
+  if (h === null || h === undefined || isNaN(h)) return '';
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  let hr = h % 12; if (hr === 0) hr = 12;
+  return hr + ':00 ' + ampm;
+}
+
+async function loadJustifications() {
+  const dateEl = document.getElementById('justifDate');
+  const date = dateEl ? dateEl.value : '';
+  try {
+    const r = await fetch('/api/admin/justifications' + (date ? ('?date=' + encodeURIComponent(date)) : ''));
+    const d = await r.json();
+    renderJustifications(d.justifications || []);
+  } catch (e) { /* silent */ }
+}
+
+function renderJustifications(items) {
+  const el = document.getElementById('justifList');
+  const badge = document.getElementById('justifCountBadge');
+  if (badge) badge.textContent = items.length + ' remark' + (items.length !== 1 ? 's' : '');
+  if (!el) return;
+  if (!items.length) { el.innerHTML = '<div class="empty">No justifications yet</div>'; return; }
+  el.innerHTML = items.map(j => {
+    const when = j.timestamp ? formatTimestamp(j.timestamp) : (j.date || '');
+    const hourTag = (j.hour === 0 || j.hour) ? ('<span style="font-size:11px;background:rgba(217,119,6,.12);color:#b45309;border-radius:20px;padding:2px 9px;font-weight:700;margin-left:8px">' + formatReviewHour(j.hour) + ' check</span>') : '';
+    const eid = j.employeeId ? (' &middot; EID: ' + escapeHtml(String(j.employeeId))) : '';
+    return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">' +
+        '<div style="font-weight:700;color:var(--accent)">' + escapeHtml(j.agentName || 'Unknown') +
+          '<span style="font-size:11px;color:var(--muted);font-weight:500">' + eid + '</span>' + hourTag + '</div>' +
+        '<div style="display:flex;align-items:center;gap:10px"><span style="font-size:11px;color:var(--muted)">' + when + '</span>' +
+        '<button class="btn-del" onclick="deleteJustification(\'' + escapeHtml(j.id) + '\')" style="padding:3px 10px">Delete</button></div>' +
+      '</div>' +
+      '<div style="margin-top:8px;font-size:14px;color:var(--text);line-height:1.55;white-space:pre-wrap;">' + escapeHtml(j.text || '') + '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function deleteJustification(id) {
+  if (!confirm('Delete this justification?')) return;
+  try {
+    const r = await fetch('/api/admin/justification/' + encodeURIComponent(id), { method: 'DELETE' });
+    const d = await r.json();
+    if (d.error) { showToast(d.error, 'error'); return; }
+    showToast('Justification deleted', 'success');
+    loadJustifications();
+  } catch (e) { showToast('Failed to delete', 'error'); }
+}
+
+loadJustifications();
+setInterval(loadJustifications, 15000);
 
 // ── Script Upload ─────────────────────────────────────────────────────────────
 (function initScriptUpload() {

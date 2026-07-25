@@ -3222,10 +3222,21 @@ function showJustificationPopup() {
   document.body.appendChild(modal);
 }
 
-function submitJustification() {
+async function submitJustification() {
   const ta = document.getElementById('justificationText');
   const val = ta ? ta.value.trim() : '';
   if (!val) { showToast('कृपया भेजने से पहले अपना स्पष्टीकरण लिखें।', 'error'); return; }
+  const btn = document.querySelector('#justificationModal .action-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'भेजा जा रहा है...'; }
+  try {
+    await fetch('/api/justification', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: agentId, agentName: agentName, employeeId: empId,
+        hour: getISTDate().getHours(), text: val
+      })
+    });
+  } catch (e) { /* still acknowledge locally so the agent isn't blocked */ }
   const m = document.getElementById('justificationModal');
   if (m) m.remove();
   showToast('✅ आपका स्पष्टीकरण दर्ज कर लिया गया है। धन्यवाद।', 'success');

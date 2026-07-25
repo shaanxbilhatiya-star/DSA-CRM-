@@ -439,6 +439,11 @@ if (!appState.dndNumbers) {
 if (!appState.recordings) {
   appState.recordings = [];
 }
+// Migration: performance-review justifications submitted by agents from the
+// hourly (12–5 PM) popup. Persisted so admin/TL can review who is behind and why.
+if (!appState.justifications) {
+  appState.justifications = [];
+}
 // Map of shortCode -> shareToken for URL shortening
 if (!appState.shortLinks) {
   appState.shortLinks = {};
@@ -3439,6 +3444,59 @@ app.delete('/api/admin/dnd/:phone', (req, res) => {
   const idx = appState.dndNumbers.findIndex(d => d.phone === phone);
   if (idx === -1) return res.status(404).json({ error: 'Number not in DND list' });
   appState.dndNumbers.splice(idx, 1);
+  saveState(appState);
+  res.json({ success: true });
+});
+
+// ─── Performance-review Justifications (hourly 12–5 PM popup) ─────────────────
+// Agents type why they are behind the calling target; stored here so admin/TL
+// can review them. Each record: { id, agentId, agentName, employeeId, hour,
+// text, date, timestamp }.
+app.post('/api/justification', (req, res) => {
+  let { agentId, agentName, employeeId, hour, text } = req.body || {};
+  if (!text || !String(text).trim()) {
+    return res.status(400).json({ error: 'Justification text is required' });
+  }
+  // Prefer authoritative name/EID from server state when we can resolve the agent.
+  const agent = agentId && appState.agents[agentId] ? appState.agents[agentId] : null;
+  if (agent) {
+    agentName  = agent.name || agentName || '';
+    employeeId = agent.employeeId || employeeId || '';
+  }
+  if (!appState.justifications) appState.justifications = [];
+  const record = {
+    id: uuidv4(),
+    agentId:    agentId || '',
+    agentName:  agentName || 'Unknown',
+    employeeId: employeeId || '',
+    hour:       (hour === 0 || hour) ? Number(hour) : null,
+    text:       String(text).trim().slice(0, 2000),
+    date:       getTodayStr(),
+    timestamp:  new Date().toISOString()
+  };
+  appState.justifications.push(record);
+  // Keep the log bounded — retain the most recent 60 days.
+  const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+  appState.justifications = appState.justifications.filter(j => !j.timestamp || j.timestamp >= cutoff);
+  saveState(appState);
+  res.json({ success: true, id: record.id });
+});
+
+// List justifications (newest first). Optional filters: ?date=YYYY-MM-DD, ?agentId=...
+app.get('/api/admin/justifications', (req, res) => {
+  const { date, agentId } = req.query;
+  let list = (appState.justifications || []).slice();
+  if (date)    list = list.filter(j => j.date === date);
+  if (agentId) list = list.filter(j => j.agentId === agentId);
+  list.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+  res.json({ justifications: list });
+});
+
+app.delete('/api/admin/justification/:id', (req, res) => {
+  if (!appState.justifications) appState.justifications = [];
+  const idx = appState.justifications.findIndex(j => j.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Justification not found' });
+  appState.justifications.splice(idx, 1);
   saveState(appState);
   res.json({ success: true });
 });
