@@ -799,6 +799,29 @@ function adminLogout(){
     </div>
   </div>
 
+  <!-- Today's Justifications Panel -->
+  <div class="panel" style="margin-bottom:20px">
+    <div class="panel-header" style="background:rgba(244,67,54,.06)">
+      <h2 style="color:#c62828">&#128172; Today's Justifications</h2>
+      <span id="justificationCount" style="font-size:12px;color:var(--muted)">0 remarks</span>
+    </div>
+    <div class="panel-body" style="padding:0;overflow-x:auto">
+      <table class="agents-table" style="min-width:700px">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Agent</th>
+            <th>Calls So Far</th>
+            <th>Remark</th>
+          </tr>
+        </thead>
+        <tbody id="justificationTable">
+          <tr><td colspan="4" class="empty">No justifications submitted yet today</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Active Agents Panel (full width) -->
   <div class="panel" style="margin-bottom:20px">
     <div class="panel-header">
@@ -976,6 +999,43 @@ socket.on('reconnect_failed', () => showAdminBanner('disconnected', '❌ Could n
 socket.emit('join-admin');
 
 socket.on('stats-update', renderStats);
+
+// ── Today's Justifications ──────────────────────────────────────────────────
+function escapeHtmlJ(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+function renderJustificationRow(j) {
+  return '<tr>' +
+    '<td>' + escapeHtmlJ(j.time) + '</td>' +
+    '<td>' + escapeHtmlJ(j.name) + '</td>' +
+    '<td>' + (j.totalDialedToday || 0) + '</td>' +
+    '<td>' + escapeHtmlJ(j.remarks) + '</td>' +
+  '</tr>';
+}
+
+function renderJustifications(list) {
+  const tbody = document.getElementById('justificationTable');
+  const countEl = document.getElementById('justificationCount');
+  if (!tbody) return;
+  if (!list || !list.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">No justifications submitted yet today</td></tr>';
+    if (countEl) countEl.textContent = '0 remarks';
+    return;
+  }
+  const sorted = list.slice().sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  tbody.innerHTML = sorted.map(renderJustificationRow).join('');
+  if (countEl) countEl.textContent = list.length + ' remark' + (list.length === 1 ? '' : 's');
+}
+
+async function loadJustifications() {
+  try {
+    const r = await fetch('/api/justifications');
+    const d = await r.json();
+    renderJustifications(d.justifications || []);
+  } catch (e) { /* ignore */ }
+}
+loadJustifications();
+setInterval(loadJustifications, 60000);
+socket.on('justification-added', () => { loadJustifications(); });
 socket.on('force-stop', () => showToast('All agents stopped', 'warn'));
 socket.on('timer-update', () => {
   // Refresh stats when timer state changes

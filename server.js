@@ -2795,7 +2795,7 @@ app.post('/api/agent/justification', (req, res) => {
     createdAt: now.toISOString()
   });
   saveState(appState);
-  io.to('admin-room').emit('justification-added', appState.justifications[appState.justifications.length - 1]);
+  io.emit('justification-added', appState.justifications[appState.justifications.length - 1]);
   res.json({ success: true });
 });
 
