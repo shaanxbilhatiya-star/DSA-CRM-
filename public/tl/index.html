@@ -5069,30 +5069,52 @@ checkTimeRestriction(); // Initial check
 // Daily calling target (total number of calls) used in the hourly announcement.
 const DAILY_CALL_TARGET = 300;
 
-// Speak a message aloud using the browser's Speech Synthesis API.
-function speakAnnouncement(text, opts) {
-  try {
-    if (!('speechSynthesis' in window) || !text) return;
-    opts = opts || {};
-    if (opts.flush) window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang   = 'hi-IN';
-    u.rate   = 0.95;
-    u.pitch  = 1.0;
-    u.volume = 1.0;
-    // Prefer a Hindi (India) voice when available, fall back to English-India.
-    const voices = window.speechSynthesis.getVoices() || [];
-    const preferred = voices.find(v => /hi[-_]IN/i.test(v.lang))
-      || voices.find(v => /^hi/i.test(v.lang))
-      || voices.find(v => /en[-_]IN/i.test(v.lang))
-      || voices.find(v => /^en/i.test(v.lang));
-    if (preferred) u.voice = preferred;
-    window.speechSynthesis.speak(u);
-  } catch (e) { /* TTS unavailable — ignore */ }
+// ── TTS audio queue — works in background tabs, Google Hindi voice ──────────
+const _ttsQueue = [];
+let _ttsPlaying = false;
+
+function _ttsPlayNext() {
+  if (_ttsPlaying || !_ttsQueue.length) return;
+  _ttsPlaying = true;
+  const chunk = _ttsQueue.shift();
+  const audio = new Audio('/api/tts?lang=hi&text=' + encodeURIComponent(chunk));
+  audio.onended = () => { _ttsPlaying = false; _ttsPlayNext(); };
+  audio.onerror = () => {
+    try {
+      if ('speechSynthesis' in window) {
+        const u = new SpeechSynthesisUtterance(chunk);
+        u.lang = 'hi-IN'; u.rate = 0.95;
+        u.onend   = () => { _ttsPlaying = false; _ttsPlayNext(); };
+        u.onerror = () => { _ttsPlaying = false; _ttsPlayNext(); };
+        window.speechSynthesis.speak(u);
+        return;
+      }
+    } catch(e) {}
+    _ttsPlaying = false; _ttsPlayNext();
+  };
+  audio.play().catch(() => { _ttsPlaying = false; _ttsPlayNext(); });
 }
-if ('speechSynthesis' in window) {
-  window.speechSynthesis.onvoiceschanged = function () { window.speechSynthesis.getVoices(); };
-  window.speechSynthesis.getVoices();
+
+function _splitTTS(text) {
+  const chunks = [];
+  const segs = text.replace(/([\u0964.!?,])\s+/g, '$1\n').split('\n');
+  let buf = '';
+  segs.forEach(s => {
+    if ((buf + ' ' + s).length > 190) { if (buf) chunks.push(buf.trim()); buf = s; }
+    else { buf = buf ? buf + ' ' + s : s; }
+  });
+  if (buf.trim()) chunks.push(buf.trim());
+  return chunks.length ? chunks : [text];
+}
+
+// Speak a message aloud via server-side Google Translate TTS.
+// Uses <Audio> element — plays correctly even when tab is in the background.
+function speakAnnouncement(text, opts) {
+  if (!text) return;
+  opts = opts || {};
+  if (opts.flush) { _ttsQueue.length = 0; _ttsPlaying = false; }
+  _splitTTS(text).forEach(c => { if (c.trim()) _ttsQueue.push(c.trim()); });
+  _ttsPlayNext();
 }
 
 // Current time in India as a spoken-friendly string, e.g. "10 05 AM".
