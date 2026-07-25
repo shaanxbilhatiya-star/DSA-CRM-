@@ -2219,6 +2219,16 @@ function showLoginPopup(lateLogin) {
     msg.textContent = '\u0906\u092A\u0928\u0947 \u0938\u092E\u092F \u092A\u0930 \u0932\u0949\u0917\u093F\u0928 \u0915\u093F\u092F\u093E \u0939\u0948\u0964 \u092C\u0939\u0941\u0924 \u0905\u091A\u094D\u091B\u093E \u0915\u093E\u0930\u094D\u092F, \u0907\u0938\u0940 \u0924\u0930\u0939 \u0938\u092E\u092F \u0915\u0940 \u092A\u093E\u092C\u0902\u0926\u0940 \u092C\u0928\u093E\u090F \u0930\u0916\u0947\u0902\u0964';
   }
   document.getElementById('loginPopupModal').classList.add('active');
+
+  // ── Audio announcement on login ──────────────────────────────────────────
+  try {
+    var nm = agentName || 'Agent';
+    if (lateLogin) {
+      speakAnnouncement('Hello ' + nm + ', you have logged in late. This shall be reported to the managers.');
+    } else {
+      speakAnnouncement('Hello ' + nm + ', you have logged in at ' + currentISTTimeString() + '.');
+    }
+  } catch (e) {}
 }
 
 function closeLoginPopup() {
@@ -4676,7 +4686,7 @@ tickLiveClock();
 setInterval(tickLiveClock, 1000);
 
 
-// ── 5:45 PM IST Restriction & Recording Upload ────────────────────────────────
+// ── 5:30 PM IST Restriction & Recording Upload (TL) ────────────────────────────
 let selectedRecordingFiles = [];
 let dialingRestricted = false;
 
@@ -4686,8 +4696,8 @@ function checkTimeRestriction() {
   const hours = istTime.getHours();
   const minutes = istTime.getMinutes();
 
-  // Restrict dialing from 5:45 PM (17:45) until 2:00 AM (02:00) next day
-  const isRestricted = (hours === 17 && minutes >= 45) || hours >= 18 || hours < 2;
+  // TL dialing is restricted from 5:30 PM (17:30) until 2:00 AM (02:00) next day
+  const isRestricted = (hours === 17 && minutes >= 30) || hours >= 18 || hours < 2;
 
   if (isRestricted && !dialingRestricted) {
     dialingRestricted = true;
@@ -4731,7 +4741,7 @@ function restrictDialingShowRecordingUpload() {
     recordingPanel.innerHTML = `
       <div class="panel-header accent-h">
         <h2>🎙️ Upload Call Recordings</h2>
-        <span style="font-size:11px;color:var(--muted)">Dialing Restricted: 5:45 PM - 2:00 AM IST</span>
+        <span style="font-size:11px;color:var(--muted)">Dialing Restricted: 5:30 PM - 2:00 AM IST</span>
       </div>
       <div class="panel-body" style="padding: 30px 20px; text-align: center;">
         <div style="font-size: 48px; margin-bottom: 12px;">🎙️</div>
@@ -4782,7 +4792,13 @@ function restrictDialingShowRecordingUpload() {
     grid2.appendChild(recordingPanel);
   }
 
-  showToast('⏰ Dialing restricted (5:45 PM - 2:00 AM IST). Please upload today\'s recordings and logout.', 'warn');
+  showToast('⏰ Dialing restricted (5:30 PM - 2:00 AM IST). Please check all agents and prepare the daily report.', 'warn');
+
+  // ── 5:30 PM TL responsibility audio announcement ─────────────────────────
+  try {
+    var nm = (typeof agentName !== 'undefined' && agentName) ? agentName : 'Team Leader';
+    speakAnnouncement('Attention Team Leader ' + nm + '. It is 5:30 PM. You are responsible now. Please check all agents and prepare the daily report.');
+  } catch (e) {}
 }
 
 function resumeDialingAfterRestriction() {
@@ -4966,7 +4982,7 @@ async function submitRecordings() {
   setTimeout(() => { if (progressContainer) progressContainer.style.display = 'none'; }, 3000);
 }
 
-// Manual upload button trigger (can be called before 5:45 PM)
+// Manual upload button trigger (can be called before 5:30 PM)
 function manualRecordingUpload() {
   if (dialingRestricted) {
     // Already showing upload interface
@@ -5044,6 +5060,171 @@ function manualRecordingUpload() {
 // Check time restriction every minute
 setInterval(checkTimeRestriction, 60000);
 checkTimeRestriction(); // Initial check
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AUDIO ANNOUNCEMENTS (Text-to-Speech) + HOURLY PERFORMANCE REVIEW
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Daily calling target (total number of calls) used in the hourly announcement.
+const DAILY_CALL_TARGET = 300;
+
+// Speak a message aloud using the browser's Speech Synthesis API.
+function speakAnnouncement(text, opts) {
+  try {
+    if (!('speechSynthesis' in window) || !text) return;
+    opts = opts || {};
+    if (opts.flush) window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang   = 'en-IN';
+    u.rate   = 0.98;
+    u.pitch  = 1.0;
+    u.volume = 1.0;
+    const voices = window.speechSynthesis.getVoices() || [];
+    const preferred = voices.find(v => /en[-_]IN/i.test(v.lang))
+      || voices.find(v => /en[-_](US|GB)/i.test(v.lang))
+      || voices.find(v => /^en/i.test(v.lang));
+    if (preferred) u.voice = preferred;
+    window.speechSynthesis.speak(u);
+  } catch (e) { /* TTS unavailable — ignore */ }
+}
+if ('speechSynthesis' in window) {
+  window.speechSynthesis.onvoiceschanged = function () { window.speechSynthesis.getVoices(); };
+  window.speechSynthesis.getVoices();
+}
+
+// Current time in India as a spoken-friendly string, e.g. "10 05 AM".
+function currentISTTimeString() {
+  const now = new Date();
+  return now.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+// Returns a Date object shifted to India time so getHours()/getMinutes() read IST.
+function getISTDate() {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+}
+
+// Human-readable label for a disposition key.
+const DISPOSITION_LABELS = {
+  interested:     'Interested',
+  followup:       'Follow up',
+  not_interested: 'Not interested',
+  dead:           'Call not connected',
+  not_received:   'Call not received',
+  switch_off:     'Switch off',
+  discard:        'Discarded',
+  dnd:            'Do not disturb'
+};
+
+// Build and speak this user's disposition stats for today.
+async function announceDispositionStats() {
+  if (!agentId) return null;
+  try {
+    const r = await fetch('/api/stats/dispositions?period=daily&agentId=' + agentId);
+    const s = await r.json();
+    const nm = agentName || 'Agent';
+    let parts = ['Hello ' + nm + '. Here are your disposition stats for today.'];
+    parts.push('Total calls ' + (s.totalCalls || 0) + '.');
+    ['interested','followup','not_interested','dead','not_received','switch_off'].forEach(k => {
+      parts.push(DISPOSITION_LABELS[k] + ' ' + (s[k] || 0) + '.');
+    });
+    speakAnnouncement(parts.join(' '));
+    return s;
+  } catch (e) { return null; }
+}
+
+// Announce the daily target and where this user ranks by total number of calls.
+async function announceTargetAndRanking() {
+  speakAnnouncement(DAILY_CALL_TARGET + ' is today\'s calling target for total number of calls.');
+  try {
+    const r = await fetch('/api/rankings?period=daily');
+    const d = await r.json();
+    const list = (d.rankings || []).slice()
+      .sort((a, b) => (b.totalCalls || 0) - (a.totalCalls || 0));
+    if (!list.length) return;
+    const idx = list.findIndex(x => x.agentId === agentId);
+    const me  = idx >= 0 ? list[idx] : null;
+    const myCalls = me ? (me.totalCalls || 0) : 0;
+
+    if (idx <= 0 && me) {
+      speakAnnouncement('You are currently leading in total number of calls with ' + myCalls + ' calls. Keep it up.');
+    } else if (me) {
+      const ahead = list[idx - 1];
+      const top   = list[0];
+      speakAnnouncement(
+        'You have made ' + myCalls + ' calls so far. You are behind ' +
+        (ahead.name || 'the agent ahead of you') + ' who has made ' + (ahead.totalCalls || 0) + ' calls. ' +
+        'The top performer is ' + (top.name || 'the leader') + ' with ' + (top.totalCalls || 0) + ' calls.'
+      );
+    }
+    if (list.length > 1) {
+      const order = list.map(x => (x.name || 'Agent') + ' with ' + (x.totalCalls || 0) + ' calls');
+      speakAnnouncement('Current standing by total number of calls: ' + order.join(', then ') + '.');
+    }
+  } catch (e) { /* ignore */ }
+}
+
+// Popup asking the user to justify why they are behind the calling target.
+function showJustificationPopup() {
+  if (document.getElementById('justificationModal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'justificationModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:11000;padding:16px;';
+  modal.innerHTML =
+    '<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;padding:26px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35);">' +
+      '<div style="font-size:44px;margin-bottom:8px;">📢</div>' +
+      '<h3 style="font-size:19px;font-weight:700;color:var(--accent);margin-bottom:6px;">Performance Check</h3>' +
+      '<p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:16px;">' +
+        'The daily calling target is <strong>' + DAILY_CALL_TARGET + '</strong> calls. ' +
+        'If you are behind the target, please justify why below.</p>' +
+      '<textarea id="justificationText" rows="4" placeholder="Type your justification / remarks here..." ' +
+        'style="width:100%;padding:12px;border:1px solid var(--border-strong);border-radius:10px;font-family:inherit;font-size:14px;resize:vertical;box-sizing:border-box;"></textarea>' +
+      '<div style="display:flex;gap:10px;margin-top:16px;">' +
+        '<button onclick="submitJustification()" class="action-btn" style="flex:1;background:var(--accent);color:#fff;">Submit Justification</button>' +
+        '<button onclick="(function(){var m=document.getElementById(\'justificationModal\');if(m)m.remove();})()" ' +
+          'style="flex:0 0 auto;padding:12px 16px;border:1px solid var(--border);background:#fff;border-radius:10px;cursor:pointer;font-weight:600;">Later</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(modal);
+}
+
+function submitJustification() {
+  const ta = document.getElementById('justificationText');
+  const val = ta ? ta.value.trim() : '';
+  if (!val) { showToast('Please type your justification before submitting.', 'error'); return; }
+  const m = document.getElementById('justificationModal');
+  if (m) m.remove();
+  showToast('✅ Your justification has been recorded. Thank you.', 'success');
+  speakAnnouncement('Thank you. Your justification has been recorded.');
+}
+
+async function runHourlyReview() {
+  await announceDispositionStats();
+  await announceTargetAndRanking();
+  showJustificationPopup();
+}
+
+// ── Scheduler ─────────────────────────────────────────────────────────────────
+const _firedAnnouncements = new Set();
+const HOURLY_REVIEW_HOURS = [12, 13, 14, 15, 16, 17]; // 12 PM .. 5 PM
+
+function announcementScheduler() {
+  if (!agentId) return;
+  const ist = getISTDate();
+  const dateKey = ist.toISOString().slice(0, 10);
+  const h = ist.getHours();
+  const m = ist.getMinutes();
+
+  if (m === 0 && HOURLY_REVIEW_HOURS.indexOf(h) !== -1) {
+    const key = dateKey + '-review-' + h;
+    if (!_firedAnnouncements.has(key)) {
+      _firedAnnouncements.add(key);
+      runHourlyReview();
+    }
+  }
+}
+setInterval(announcementScheduler, 15000);
+announcementScheduler();
 
 // ── Call Recordings (TL Mode) ─────────────────────────────────────────────────
 async function loadTlRecordings() {
