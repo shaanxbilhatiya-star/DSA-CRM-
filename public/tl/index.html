@@ -3479,6 +3479,192 @@ socket.on('reconnect_failed', () => showAdminBanner('disconnected', '❌ Could n
 
 socket.emit('join-admin');
 
+// ══════════════════════════════════════════════════════════════════════════════
+// VOICE ANNOUNCEMENTS (Text-to-Speech) — TL panel speaker
+// Mirrors the admin panel so the TL hears every announcement in her own room.
+// The TL tab already joins 'admin-room' (join-admin above), so the server
+// already relays every 'voice-announce' event to this tab — same events the
+// admin panel receives. This plays INDEPENDENTLY of the admin's cross-PC turn
+// lock (separate room, separate speaker) so it announces at the SAME TIME as
+// the admin panel instead of waiting behind it.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _ttsQueue = [];
+let _ttsPlaying = false;
+
+function _ttsPlayNext() {
+  if (_ttsPlaying || !_ttsQueue.length) return;
+  _ttsPlaying = true;
+  const chunk = _ttsQueue.shift();
+  const audio = new Audio('/api/tts?lang=hi&text=' + encodeURIComponent(chunk));
+  audio.onended = () => { _ttsPlaying = false; _ttsPlayNext(); };
+  audio.onerror = () => {
+    try {
+      if ('speechSynthesis' in window) {
+        const u = new SpeechSynthesisUtterance(chunk);
+        u.lang = 'hi-IN'; u.rate = 0.95;
+        u.onend   = () => { _ttsPlaying = false; _ttsPlayNext(); };
+        u.onerror = () => { _ttsPlaying = false; _ttsPlayNext(); };
+        window.speechSynthesis.speak(u);
+        return;
+      }
+    } catch(e) {}
+    _ttsPlaying = false; _ttsPlayNext();
+  };
+  audio.play().catch(() => { _ttsPlaying = false; _ttsPlayNext(); });
+}
+
+function _splitTTS(text) {
+  const chunks = [];
+  const segs = text.replace(/([\u0964.!?,])\s+/g, '$1\n').split('\n');
+  let buf = '';
+  segs.forEach(s => {
+    if ((buf + ' ' + s).length > 190) { if (buf) chunks.push(buf.trim()); buf = s; }
+    else { buf = buf ? buf + ' ' + s : s; }
+  });
+  if (buf.trim()) chunks.push(buf.trim());
+  return chunks.length ? chunks : [text];
+}
+
+function speakAnnouncement(text, opts) {
+  if (!text) return;
+  opts = opts || {};
+  if (opts.flush) { _ttsQueue.length = 0; _ttsPlaying = false; }
+  _splitTTS(text).forEach(c => { if (c.trim()) _ttsQueue.push(c.trim()); });
+  _ttsPlayNext();
+}
+
+// Listen for voice announcements relayed by the server (same events admin gets).
+socket.on('voice-announce', ({ text }) => {
+  if (text) speakAnnouncement(text);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ANTI-TAB-SUSPENSION: Keep TL tab alive so it never misses an announcement.
+// Copied from the admin panel — prevents Chrome/Edge from suspending the tab.
+// ══════════════════════════════════════════════════════════════════════════════
+
+(function initKeepAlive() {
+
+  // --- Technique 1: Silent Audio Loop ---
+  let _keepAliveAudioCtx = null;
+  function startSilentAudioLoop() {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      _keepAliveAudioCtx = new AudioContext();
+      const oscillator = _keepAliveAudioCtx.createOscillator();
+      const gainNode = _keepAliveAudioCtx.createGain();
+      gainNode.gain.value = 0.001; // Nearly inaudible
+      oscillator.connect(gainNode);
+      gainNode.connect(_keepAliveAudioCtx.destination);
+      oscillator.frequency.value = 1; // 1Hz - below human hearing
+      oscillator.start();
+      setInterval(() => {
+        if (_keepAliveAudioCtx && _keepAliveAudioCtx.state === 'suspended') {
+          _keepAliveAudioCtx.resume().catch(() => {});
+        }
+      }, 10000);
+      console.log('[KeepAlive] Silent audio loop started');
+    } catch (e) {
+      console.warn('[KeepAlive] Silent audio loop failed:', e);
+    }
+  }
+
+  // --- Technique 2: Web Lock API ---
+  function acquireWebLock() {
+    if (navigator.locks && navigator.locks.request) {
+      navigator.locks.request('tl-tts-keepalive', { mode: 'exclusive' }, () => {
+        return new Promise(() => {});
+      }).catch(() => {});
+      console.log('[KeepAlive] Web Lock acquired');
+    }
+  }
+
+  // --- Technique 3: Periodic Activity (Title flicker + hidden canvas) ---
+  let _keepAliveCanvas = null;
+  function startPeriodicActivity() {
+    _keepAliveCanvas = document.createElement('canvas');
+    _keepAliveCanvas.width = 1;
+    _keepAliveCanvas.height = 1;
+    _keepAliveCanvas.style.position = 'fixed';
+    _keepAliveCanvas.style.top = '-9999px';
+    _keepAliveCanvas.style.left = '-9999px';
+    _keepAliveCanvas.style.pointerEvents = 'none';
+    _keepAliveCanvas.style.opacity = '0';
+    document.body.appendChild(_keepAliveCanvas);
+    const ctx = _keepAliveCanvas.getContext('2d');
+
+    setInterval(() => {
+      if (ctx) {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, 1, 1);
+      }
+      const originalTitle = document.title;
+      document.title = originalTitle + ' ';
+      setTimeout(() => { document.title = originalTitle; }, 50);
+    }, 30000);
+    console.log('[KeepAlive] Periodic activity started');
+  }
+
+  // --- Technique 4: Dedicated Worker keep-alive ping ---
+  let _keepAliveWorker = null;
+  function startKeepAliveWorker() {
+    try {
+      const workerCode = `
+        setInterval(function() {
+          self.postMessage({ type: 'keepalive', ts: Date.now() });
+        }, 15000);
+      `;
+      const blob = new Blob([workerCode], { type: 'application/javascript' });
+      _keepAliveWorker = new Worker(URL.createObjectURL(blob));
+      _keepAliveWorker.onmessage = function() {};
+      console.log('[KeepAlive] Worker ping started');
+    } catch (e) {
+      console.warn('[KeepAlive] Worker creation failed:', e);
+    }
+  }
+
+  // --- Technique 5: Visibility change recovery ---
+  function setupVisibilityRecovery() {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        if (_keepAliveAudioCtx && _keepAliveAudioCtx.state === 'suspended') {
+          _keepAliveAudioCtx.resume().catch(() => {});
+        }
+      }
+      if (document.visibilityState === 'hidden') {
+        fetch('/api/tts?lang=hi&text=.', { method: 'HEAD' }).catch(() => {});
+      }
+    });
+    console.log('[KeepAlive] Visibility recovery handler attached');
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    acquireWebLock();
+    startPeriodicActivity();
+    startKeepAliveWorker();
+    setupVisibilityRecovery();
+  } else {
+    document.addEventListener('DOMContentLoaded', () => {
+      acquireWebLock();
+      startPeriodicActivity();
+      startKeepAliveWorker();
+      setupVisibilityRecovery();
+    });
+  }
+
+  // AudioContext requires user gesture - start on first click/keydown
+  const startAudioOnInteraction = () => {
+    startSilentAudioLoop();
+    document.removeEventListener('click', startAudioOnInteraction);
+    document.removeEventListener('keydown', startAudioOnInteraction);
+  };
+  document.addEventListener('click', startAudioOnInteraction);
+  document.addEventListener('keydown', startAudioOnInteraction);
+
+})();
+
 socket.on('stats-update', function(d) { try { tlRenderStats(d); } catch(e) { console.error('stats-update handler error:', e); } });
 
 // ── Today's Justifications (TL mode) ────────────────────────────────────────
