@@ -1,0 +1,26 @@
+{
+  "project_type": "Node.js Express CRM with Socket.IO, monolithic server.js, multi-panel HTML (admin/agent/tl)",
+  "language": "JavaScript (Node.js backend, vanilla JS frontend)",
+  "build_system": "npm, no build step - server.js is the single entry point",
+  "test_framework": "None - no test files exist. Validation is done by running the server.",
+  "build_command": "unset NODE_OPTIONS && node -e \"require('./server.js')\" (server starts and listens, ctrl+c to stop)",
+  "test_command": "No test suite. Verify by syntax check: unset NODE_OPTIONS && node --check server.js",
+  "verification_instructions": "1. Run `unset NODE_OPTIONS && node --check server.js` to verify no syntax errors. 2. Run `unset NODE_OPTIONS && node --check public/forms/PLJOB-main/lead-shared.js` to verify shared JS. 3. Verify HTML files parse correctly.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "npm install (but npm registry is blocked in this sandbox - all deps already in node_modules)",
+  "environment_constraints": "npm registry is 403 forbidden - cannot install new packages. ffprobe/ffmpeg not available. Must use pure Node.js for audio duration parsing. Use `unset NODE_OPTIONS` before running node commands.",
+  "contribution_requirements": "Commit on a new branch created from origin/main. Do NOT push.",
+  "key_patterns": "Single server.js (~3900 lines) with Express routes. HTML panels in public/admin/index.html, public/tl/index.html, public/agent/index.html. Forms in public/forms/PLJOB-main/. State stored in appState object with JSON persistence.",
+  "relevant_files": [
+    "server.js (lines 1200-1310 for LABEL_TO_FIELD mapping, lines 3760-3860 for recordings API)",
+    "public/forms/PLJOB-main/lead-shared.js (prefill logic)",
+    "public/forms/PLJOB-main/BL_Business.html (uses f_agent, f_biz_name, f_biz_addr, f_distance)",
+    "public/forms/PLJOB-main/PL_Business.html (uses f_company, f_office_addr, f_biz_distance, f_bank)",
+    "public/forms/PLJOB-main/PL_Salaried.html (uses f_company, f_office_addr, f_bank)",
+    "public/forms/PLJOB-main/LAP_Business.html (uses f_company, f_office_addr, f_biz_distance, f_bank)",
+    "public/forms/PLJOB-main/LAP_Salaried.html (uses f_company, f_office_addr, f_bank)",
+    "public/admin/index.html (disposition stats section around line 469-540)",
+    "public/tl/index.html (disposition stats section around line 1482-1558)"
+  ],
+  "directory_structure": "Root: server.js, package.json. public/admin/index.html, public/tl/index.html, public/agent/index.html. public/forms/PLJOB-main/ has 5 form HTMLs + lead-shared.js. Data stored externally in DATA_ROOT."
+}

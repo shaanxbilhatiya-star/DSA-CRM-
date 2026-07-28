@@ -3753,24 +3753,181 @@ setTimeout(cleanupOldRecordings, 10000);
 // Serve uploaded recordings
 app.use('/uploads/recordings', express.static(path.join(DATA_ROOT, 'uploads', 'recordings')));
 
+// ── Pure Node.js Audio Duration Calculator ────────────────────────────────────
+// Since we cannot install npm packages or use ffprobe, parse file headers directly.
+async function getAudioDurationSeconds(filePath) {
+  try {
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+    if (fileSize < 100) return 0;
+    const ext = path.extname(filePath).toLowerCase();
+
+    if (ext === '.wav') {
+      // WAV: Read RIFF header to find fmt and data chunks
+      const fd = fs.openSync(filePath, 'r');
+      try {
+        const header = Buffer.alloc(44);
+        fs.readSync(fd, header, 0, 44, 0);
+        // Verify RIFF header
+        if (header.toString('ascii', 0, 4) !== 'RIFF' || header.toString('ascii', 8, 12) !== 'WAVE') {
+          fs.closeSync(fd);
+          return 0;
+        }
+        // Search for 'fmt ' and 'data' chunks
+        let pos = 12;
+        let sampleRate = 0, channels = 0, bitsPerSample = 0, dataSize = 0;
+        const buf = Buffer.alloc(8);
+        while (pos < fileSize - 8) {
+          fs.readSync(fd, buf, 0, 8, pos);
+          const chunkId = buf.toString('ascii', 0, 4);
+          const chunkSize = buf.readUInt32LE(4);
+          if (chunkId === 'fmt ') {
+            const fmtBuf = Buffer.alloc(Math.min(chunkSize, 40));
+            fs.readSync(fd, fmtBuf, 0, fmtBuf.length, pos + 8);
+            channels = fmtBuf.readUInt16LE(2);
+            sampleRate = fmtBuf.readUInt32LE(4);
+            bitsPerSample = fmtBuf.readUInt16LE(14);
+          } else if (chunkId === 'data') {
+            dataSize = chunkSize;
+          }
+          pos += 8 + chunkSize;
+          if (chunkSize % 2 !== 0) pos++; // padding byte
+        }
+        fs.closeSync(fd);
+        if (sampleRate > 0 && channels > 0 && bitsPerSample > 0 && dataSize > 0) {
+          const byteRate = sampleRate * channels * (bitsPerSample / 8);
+          return Math.round(dataSize / byteRate);
+        }
+        return 0;
+      } catch (e) { try { fs.closeSync(fd); } catch(_) {} return 0; }
+    }
+
+    if (ext === '.mp3') {
+      // MP3: Check for Xing/VBRI VBR header, otherwise estimate from CBR frame header
+      const fd = fs.openSync(filePath, 'r');
+      try {
+        const headerBuf = Buffer.alloc(Math.min(fileSize, 4096));
+        fs.readSync(fd, headerBuf, 0, headerBuf.length, 0);
+        fs.closeSync(fd);
+        // Skip ID3v2 tag if present
+        let offset = 0;
+        if (headerBuf.toString('ascii', 0, 3) === 'ID3') {
+          const id3Size = ((headerBuf[6] & 0x7f) << 21) | ((headerBuf[7] & 0x7f) << 14) |
+                          ((headerBuf[8] & 0x7f) << 7) | (headerBuf[9] & 0x7f);
+          offset = 10 + id3Size;
+          if (offset >= headerBuf.length) {
+            // Fallback: estimate with 128kbps
+            return Math.round((fileSize * 8) / 128000);
+          }
+        }
+        // Find first sync frame (0xFF 0xE0+)
+        let frameOffset = offset;
+        while (frameOffset < headerBuf.length - 4) {
+          if (headerBuf[frameOffset] === 0xFF && (headerBuf[frameOffset + 1] & 0xE0) === 0xE0) break;
+          frameOffset++;
+        }
+        if (frameOffset >= headerBuf.length - 4) {
+          return Math.round((fileSize * 8) / 128000);
+        }
+        // Parse frame header
+        const b1 = headerBuf[frameOffset + 1];
+        const b2 = headerBuf[frameOffset + 2];
+        const versionBits = (b1 >> 3) & 0x03;
+        const layerBits = (b1 >> 1) & 0x03;
+        const bitrateBits = (b2 >> 4) & 0x0F;
+        const sampleRateBits = (b2 >> 2) & 0x03;
+        // Bitrate table for MPEG1 Layer3
+        const bitrateTable = [0,32,40,48,56,64,80,96,112,128,160,192,224,256,320,0];
+        // Sample rate table
+        const sampleRateTable = [[44100,48000,32000],[22050,24000,16000],[11025,12000,8000]];
+        let bitrate = 128; // default fallback
+        if (versionBits === 3 && layerBits === 1) {
+          // MPEG1 Layer 3
+          bitrate = bitrateTable[bitrateBits] || 128;
+        } else if (versionBits === 2 && layerBits === 1) {
+          // MPEG2 Layer 3
+          const br2 = [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160,0];
+          bitrate = br2[bitrateBits] || 64;
+        } else {
+          bitrate = 128;
+        }
+        // Check for Xing header (VBR)
+        const xingOffset = frameOffset + (versionBits === 3 ? 36 : 21);
+        if (xingOffset + 12 < headerBuf.length) {
+          const xingTag = headerBuf.toString('ascii', xingOffset, xingOffset + 4);
+          if (xingTag === 'Xing' || xingTag === 'Info') {
+            const flags = headerBuf.readUInt32BE(xingOffset + 4);
+            if (flags & 0x01) { // frames field present
+              const totalFrames = headerBuf.readUInt32BE(xingOffset + 8);
+              const vIdx = versionBits === 3 ? 0 : (versionBits === 2 ? 1 : 2);
+              const sr = (sampleRateTable[vIdx] || sampleRateTable[0])[sampleRateBits] || 44100;
+              const samplesPerFrame = versionBits === 3 ? 1152 : 576;
+              return Math.round((totalFrames * samplesPerFrame) / sr);
+            }
+          }
+        }
+        // CBR estimate: duration = (fileSize - offset) * 8 / (bitrate * 1000)
+        const audioSize = fileSize - frameOffset;
+        return Math.round((audioSize * 8) / (bitrate * 1000));
+      } catch (e) { try { fs.closeSync(fd); } catch(_) {} return Math.round((fileSize * 8) / 128000); }
+    }
+
+    // For other formats (ogg, webm, aac, m4a, flac, amr, 3gp) - estimate based on file size
+    // Use typical bitrates for estimation
+    const bitrateEstimates = {
+      '.ogg': 96000, '.webm': 96000, '.aac': 128000, '.m4a': 128000,
+      '.flac': 800000, '.amr': 12200, '.3gp': 12200, '.opus': 64000
+    };
+    const estimatedBitrate = bitrateEstimates[ext] || 128000;
+    return Math.round((fileSize * 8) / estimatedBitrate);
+  } catch (e) { return 0; }
+}
+
+// Backfill duration for existing recordings that lack it (one-time on startup)
+async function backfillRecordingDurations() {
+  const recordings = appState.recordings || [];
+  let updated = false;
+  for (const rec of recordings) {
+    if (rec.duration === undefined || rec.duration === null) {
+      const filePath = path.join(DATA_ROOT, 'uploads', 'recordings', rec.filename);
+      if (fs.existsSync(filePath)) {
+        rec.duration = await getAudioDurationSeconds(filePath);
+      } else {
+        rec.duration = 0;
+      }
+      updated = true;
+    }
+  }
+  if (updated) {
+    saveState(appState);
+    console.log('Backfilled duration for existing recordings');
+  }
+}
+setTimeout(backfillRecordingDurations, 5000);
+
 // Recording upload endpoint
-app.post('/api/recordings/upload', uploadRecording.array('recordings', 200), (req, res) => {
+app.post('/api/recordings/upload', uploadRecording.array('recordings', 200), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No files uploaded' });
     const { agentName, agentEmail, leadPhone, leadName } = req.body;
-    const uploadedRecordings = req.files.map(file => ({
-      id: Date.now() + Math.random().toString(36).substr(2, 9),
-      filename: file.filename,
-      originalName: file.originalname,
-      agentName: agentName || 'Unknown',
-      agentEmail: agentEmail || '',
-      leadPhone: leadPhone || '',
-      leadName: leadName || '',
-      uploadDate: Date.now(),
-      fileSize: file.size,
-      important: false,
-      path: file.path
-    }));
+    const uploadedRecordings = [];
+    for (const file of req.files) {
+      const duration = await getAudioDurationSeconds(file.path);
+      uploadedRecordings.push({
+        id: Date.now() + Math.random().toString(36).substr(2, 9),
+        filename: file.filename,
+        originalName: file.originalname,
+        agentName: agentName || 'Unknown',
+        agentEmail: agentEmail || '',
+        leadPhone: leadPhone || '',
+        leadName: leadName || '',
+        uploadDate: Date.now(),
+        fileSize: file.size,
+        duration: duration,
+        important: false,
+        path: file.path
+      });
+    }
     if (!appState.recordings) appState.recordings = [];
     appState.recordings.push(...uploadedRecordings);
     saveState(appState);
@@ -3811,6 +3968,60 @@ app.get('/api/recordings', (req, res) => {
     recordings: filteredRecordings,
     stats: { total: allRecordings.length, today: todayCount, important: allRecordings.filter(r => r.important).length }
   });
+});
+
+// Get recordings talktime (total duration for a specific date)
+app.get('/api/recordings/talktime', (req, res) => {
+  try {
+    const { agent, date } = req.query;
+    // Default to yesterday
+    let targetDate;
+    if (date) {
+      targetDate = new Date(date + 'T00:00:00');
+    } else {
+      targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() - 1);
+    }
+    targetDate.setHours(0, 0, 0, 0);
+    const targetDateEnd = new Date(targetDate);
+    targetDateEnd.setHours(23, 59, 59, 999);
+    const targetMs = targetDate.getTime();
+    const targetEndMs = targetDateEnd.getTime();
+
+    let filteredRecordings = [...(appState.recordings || [])];
+
+    // Filter by agent (case-insensitive partial match)
+    if (agent && agent !== 'all') {
+      filteredRecordings = filteredRecordings.filter(rec =>
+        (rec.agentName || '').toLowerCase().includes(agent.toLowerCase()) ||
+        (rec.agentEmail || '').toLowerCase().includes(agent.toLowerCase())
+      );
+    }
+
+    // Filter by date
+    filteredRecordings = filteredRecordings.filter(rec => {
+      const recMs = typeof rec.uploadDate === 'number' ? rec.uploadDate : Date.parse(rec.uploadDate);
+      return recMs >= targetMs && recMs <= targetEndMs;
+    });
+
+    // Sum durations
+    const totalSeconds = filteredRecordings.reduce((sum, rec) => sum + (rec.duration || 0), 0);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+    const dateStr = targetDate.toISOString().split('T')[0];
+    res.json({
+      totalSeconds,
+      hours,
+      minutes,
+      recordingCount: filteredRecordings.length,
+      date: dateStr,
+      agent: agent || 'all'
+    });
+  } catch (error) {
+    console.error('Talktime API error:', error);
+    res.status(500).json({ error: 'Failed to calculate talktime' });
+  }
 });
 
 // Toggle important flag

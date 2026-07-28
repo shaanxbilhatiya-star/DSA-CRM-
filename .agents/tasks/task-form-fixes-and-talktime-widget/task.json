@@ -1,0 +1,7 @@
+{
+  "task_id": "task-form-fixes-and-talktime-widget",
+  "task_description": "Fix form name mismatch issues in LABEL_TO_FIELD mapping (duplicate keys, inconsistent agent field IDs) and add an Actual Talktime widget to admin.html and tl.html Disposition Stats sections that shows previous day's total recording duration per agent",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001", "FEAT-002"],
+  "blocked_reason": null
+}

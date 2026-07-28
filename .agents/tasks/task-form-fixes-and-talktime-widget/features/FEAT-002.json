@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Add Actual Talktime widget to admin.html and tl.html Disposition Stats section, calculating total recording duration for previous day with per-agent filtering",
+  "status": "in_progress",
+  "steps": [
+    "Step 1: Add a pure Node.js audio duration calculator in server.js. Since we cannot install npm packages or use ffprobe, write a function getAudioDuration(filePath) that reads file headers to estimate duration. Support MP3 (parse frame headers to get bitrate, duration = fileSize / bitrate), WAV (read RIFF header for sample rate and data chunk size), and for other formats fall back to a rough estimate. The function should return duration in seconds. Place it near the recordings section (around line 3700).",
+    "Step 2: Modify the POST /api/recordings/upload endpoint (server.js line 3762) to calculate and store duration for each uploaded file. After files are saved to disk, call getAudioDuration() on each file and add a 'duration' field (in seconds) to each recording object before pushing to appState.recordings.",
+    "Step 3: Add a new API endpoint GET /api/recordings/talktime that accepts query params: agent (optional, filter by agent name), date (optional, defaults to yesterday's date in YYYY-MM-DD format). It should: filter recordings for the specified date, sum up all duration values, return { totalSeconds, hours, minutes, recordingCount, date, agent }.",
+    "Step 4: Add the Actual Talktime widget card to admin.html inside the dispo-stats-grid div (after the DND card, around line 533). Add a new dispo-stat-card with id='adminStatsTalktime' showing hours and minutes. Style it with a phone/headphone indicator color (e.g. teal #0d9488). The card label should say 'Actual Talktime' with a tooltip 'Previous day total recording duration for selected agent'.",
+    "Step 5: Add JavaScript in admin.html to fetch /api/recordings/talktime on page load and when agent filter changes (reuse the existing adminStatsAgentFilter select). Update the adminStatsTalktime element with the fetched hours/minutes. Format as 'Xh Ym'. Call this function fetchTalktime() and invoke it from the existing onAdminAgentFilterChange() function and on initial load.",
+    "Step 6: Add the same Actual Talktime widget card to tl.html inside BOTH dispo-stats-grid sections: the 'My Disposition Stats' section (line 1132) for the agent's own view, AND the TL Mode admin-like 'Disposition Stats' section (line 1502). Use id='myStatsTalktime' for the personal stats and id='adminStatsTalktime' for the TL Mode admin view. Add corresponding JavaScript to fetch and display talktime.",
+    "Step 7: Run syntax verification: unset NODE_OPTIONS && node --check server.js"
+  ],
+  "acceptance_criteria": [
+    "GET /api/recordings/talktime endpoint exists and returns talktime data",
+    "Audio duration is calculated and stored on upload for supported formats (MP3, WAV, OGG, WebM, M4A)",
+    "Admin.html shows an 'Actual Talktime' card in the Disposition Stats grid",
+    "TL.html shows 'Actual Talktime' card in both personal and TL Mode disposition stats",
+    "Talktime widget shows previous day's data by default",
+    "Widget respects the agent filter dropdown",
+    "node --check server.js passes with no errors"
+  ],
+  "verification": [
+    "unset NODE_OPTIONS && node --check server.js",
+    "grep -n 'talktime\\|Talktime' server.js public/admin/index.html public/tl/index.html | wc -l (should be > 10)"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

@@ -1169,6 +1169,11 @@
               <div class="dispo-stat-val" id="myStatsDiscard">0</div>
               <div class="dispo-stat-lbl">Not-Eligible</div>
             </div>
+            <div class="dispo-stat-card">
+              <div class="dispo-stat-indicator" style="background:#0d9488"></div>
+              <div class="dispo-stat-val" id="myStatsTalktime">0h 0m</div>
+              <div class="dispo-stat-lbl">Actual Talktime <span title="Previous day total recording duration" style="cursor:help;opacity:.7">&#9432;</span></div>
+            </div>
           </div>
         </div>
       </div>
@@ -1543,6 +1548,11 @@
           <div class="dispo-stat-indicator" style="background:#c62828"></div>
           <div class="dispo-stat-val" id="adminStatsDnd">0</div>
           <div class="dispo-stat-lbl">DND</div>
+        </div>
+        <div class="dispo-stat-card">
+          <div class="dispo-stat-indicator" style="background:#0d9488"></div>
+          <div class="dispo-stat-val" id="adminStatsTalktime">0h 0m</div>
+          <div class="dispo-stat-lbl">Actual Talktime <span title="Previous day total recording duration" style="cursor:help;opacity:.7">&#9432;</span></div>
         </div>
       </div>
     </div>
@@ -3067,6 +3077,18 @@ async function fetchMyStats() {
   } catch (e) { /* silent */ }
 }
 
+// ── My Actual Talktime ────────────────────────────────────────────────────────
+async function fetchMyTalktime() {
+  if (!agentName) return;
+  try {
+    const r = await fetch('/api/recordings/talktime?agent=' + encodeURIComponent(agentName));
+    const d = await r.json();
+    const el = document.getElementById('myStatsTalktime');
+    if (el) el.textContent = d.hours + 'h ' + d.minutes + 'm';
+  } catch (e) { /* silent */ }
+}
+fetchMyTalktime();
+
 // ── Leaderboard ───────────────────────────────────────────────────────────────
 let currentLbPeriod = 'daily';
 
@@ -4315,6 +4337,7 @@ function onAdminAgentFilterChange() {
     label.textContent = '';
   }
   fetchAdminDispoStats();
+  fetchAdminTalktime();
 }
 
 async function fetchAdminDispoStats() {
@@ -4363,6 +4386,23 @@ async function populateAgentFilterDropdown() {
 populateAgentFilterDropdown();
 fetchAdminDispoStats();
 socket.on('stats-update', () => { populateAgentFilterDropdown(); populateFollowupAgentFilter(); });
+
+// ── Actual Talktime Widget (TL Admin Mode) ────────────────────────────────────
+async function fetchAdminTalktime() {
+  try {
+    let url = '/api/recordings/talktime';
+    if (adminStatsAgentId) {
+      const sel = document.getElementById('adminStatsAgentFilter');
+      const name = sel.options[sel.selectedIndex].text.replace(/^👤\s*/, '');
+      url += '?agent=' + encodeURIComponent(name);
+    }
+    const r = await fetch(url);
+    const d = await r.json();
+    const el = document.getElementById('adminStatsTalktime');
+    if (el) el.textContent = d.hours + 'h ' + d.minutes + 'm';
+  } catch (e) { /* silent */ }
+}
+fetchAdminTalktime();
 
 // ── EID Management ────────────────────────────────────────────────────────────
 async function loadEids() {
