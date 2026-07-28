@@ -2048,6 +2048,7 @@ function initAgentMode() {
   sessionStorage.setItem('empId', empId);
   showDialer(agentName, empId);
   restoreSession();
+  fetchMyTalktime();
 }
 
 
@@ -2247,6 +2248,7 @@ async function registerAgent() {
   applyAgentState(d, true);
   // Show login popup
   showLoginPopup(d.lateLogin);
+  fetchMyTalktime();
 }
 
 function logoutAgent() {
