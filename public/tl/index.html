@@ -3844,7 +3844,10 @@ function renderInterestedLeads(leads) {
       <option value="PL_Business" ${l.loanType==='PL_Business'?'selected':''}>PL_Business</option>
       <option value="PL_Salaried" ${l.loanType==='PL_Salaried'?'selected':''}>PL_Salaried</option>
     </select>`;
-    const remarksCell = `<input type="text" value="${escapeHtml(l.remarks || '')}" onchange="adminUpdateInterested('${escapeHtml(l.id)}','remarks',this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);width:100px;font-family:var(--sans)" placeholder="Add remarks">`;
+    const remarksCell = `<div style="display:flex;align-items:center;gap:5px">
+      <input type="text" value="${escapeHtml(l.remarks || '')}" onchange="adminUpdateInterested('${escapeHtml(l.id)}','remarks',this.value)" style="font-size:13px;padding:5px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);width:160px;font-family:var(--sans)" placeholder="Add remarks">
+      <button type="button" onclick="viewFullRemark(this)" title="View full remarks" style="flex:none;padding:5px 9px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);cursor:pointer;font-size:13px;line-height:1">&#128065;</button>
+    </div>`;
     const _tllLaNum = Number(l.loanAmount);
     const _tllLaValid = l.loanAmount !== '' && l.loanAmount != null && !isNaN(_tllLaNum) && _tllLaNum > 0;
     const loanAmtCell = `<input type="number" value="${escapeHtml(l.loanAmount || '')}" onchange="adminUpdateInterested('${escapeHtml(l.id)}','loanAmount',this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);width:110px;font-family:var(--mono)" placeholder="Amount">${_tllLaValid ? `<div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.35;max-width:130px"><span style="font-family:var(--mono);color:var(--green);font-weight:700">₹${formatINR(_tllLaNum)}</span><br><span style="font-style:italic;text-transform:capitalize">${amountToWordsINR(_tllLaNum)}</span></div>` : ''}`;
@@ -3862,6 +3865,33 @@ function renderInterestedLeads(leads) {
       </td>
     </tr>`;
   }).join('');
+}
+
+// View the full remarks text in a popup (remarks input is narrow, long text gets cut off).
+function viewFullRemark(btn) {
+  const input = btn.previousElementSibling;
+  const text = (input && input.value ? input.value : '').trim();
+  showRemarkModal(text);
+}
+
+function showRemarkModal(text) {
+  const existing = document.getElementById('remarkViewModal');
+  if (existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.id = 'remarkViewModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:12000;padding:16px;';
+  modal.innerHTML =
+    '<div style="background:var(--surface);border-radius:14px;padding:24px;max-width:520px;width:100%;box-shadow:0 12px 50px rgba(0,0,0,.3);border:1px solid var(--border);">' +
+      '<h3 style="margin:0 0 12px;font-size:18px;font-weight:700;color:var(--accent);">Remarks</h3>' +
+      '<div style="font-size:15px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word;max-height:50vh;overflow-y:auto;">' +
+        (text ? escapeHtml(text) : '<em style="color:var(--muted)">No remarks added.</em>') +
+      '</div>' +
+      '<div style="text-align:right;margin-top:18px;">' +
+        '<button onclick="document.getElementById(\'remarkViewModal\').remove()" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer;">Close</button>' +
+      '</div>' +
+    '</div>';
+  modal.addEventListener('click', function (e) { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
 }
 
 function formatHoursRemaining(hours) {
@@ -4100,7 +4130,10 @@ function renderCompletedLeads(allLeads) {
       <option value="Approved" ${l.adminStatus==='Approved'?'selected':''}>Approved</option>
       <option value="On Hold" ${l.adminStatus==='On Hold'?'selected':''}>On Hold</option>
     </select>${elapsedStr}</div>`;
-    const remarksCell = `<input type="text" value="${escapeHtml(l.remarks || '')}" onchange="adminUpdateInterested('${escapeHtml(l.id)}','remarks',this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);width:100px;font-family:var(--sans)" placeholder="Add remarks">`;
+    const remarksCell = `<div style="display:flex;align-items:center;gap:5px">
+      <input type="text" value="${escapeHtml(l.remarks || '')}" onchange="adminUpdateInterested('${escapeHtml(l.id)}','remarks',this.value)" style="font-size:13px;padding:5px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);width:160px;font-family:var(--sans)" placeholder="Add remarks">
+      <button type="button" onclick="viewFullRemark(this)" title="View full remarks" style="flex:none;padding:5px 9px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);cursor:pointer;font-size:13px;line-height:1">&#128065;</button>
+    </div>`;
     const _laNum = Number(l.loanAmount);
     const _laValid = l.loanAmount !== '' && l.loanAmount != null && !isNaN(_laNum) && _laNum > 0;
     const loanAmtCell = `<input type="number" value="${escapeHtml(l.loanAmount || '')}" onchange="adminUpdateInterested('${escapeHtml(l.id)}','loanAmount',this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);width:110px;font-family:var(--mono)" placeholder="Amount">${_laValid ? `<div style="font-size:10px;color:var(--muted);margin-top:3px;line-height:1.35;max-width:130px"><span style="font-family:var(--mono);color:var(--green);font-weight:700">₹${formatINR(_laNum)}</span><br><span style="font-style:italic;text-transform:capitalize">${amountToWordsINR(_laNum)}</span></div>` : ''}`;
