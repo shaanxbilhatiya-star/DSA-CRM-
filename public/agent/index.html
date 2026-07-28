@@ -609,7 +609,7 @@
         <span class="stat-value" style="color:#0891b2" id="meetingTimeUsed">0:00</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">Pace <span title="Required pace = 36 calls/hour to hit the 250 daily target" style="cursor:help;opacity:.7">&#9432;</span></span>
+        <span class="stat-label">Pace <span title="Required pace = 36 calls/hour, net of break/washroom/meeting time, to hit your daily target" style="cursor:help;opacity:.7">&#9432;</span></span>
         <span class="stat-value" id="paceStatus">–</span>
       </div>
       <div class="stat-card">
@@ -3121,13 +3121,15 @@ checkTimeRestriction(); // Initial check
 // AUDIO ANNOUNCEMENTS (Voice via Admin Panel) + HOURLY PERFORMANCE REVIEW
 // ══════════════════════════════════════════════════════════════════════════════
 
-// Daily calling target (total number of calls) used in the hourly announcement.
-const DAILY_CALL_TARGET = 250;
-
-// Required pace to hit the daily target — 36 calls/hour, measured against
-// wall-clock time since shift start (10:00 AM IST).
+// Required pace — 36 calls/hour, derived from 250 ÷ (8h login − 1h break) ≈ 36.
 const CALLS_PER_HOUR_TARGET = 36;
-const SHIFT_START_HOUR = 10; // 10:00 AM IST
+const SHIFT_START_HOUR = 10;      // 10:00 AM IST
+const AGENT_LOGIN_HOURS = 8;      // full 8h shift
+const STANDARD_BREAK_HOURS = 1;   // same 1h break baked into the 36/hr figure itself
+
+// Daily calling target, derived the same way as the TL panel's target so it
+// self-adjusts if the pace or shift length ever changes: 36 × (8h − 1h) = 252.
+const DAILY_CALL_TARGET = Math.round(CALLS_PER_HOUR_TARGET * (AGENT_LOGIN_HOURS - STANDARD_BREAK_HOURS));
 
 // How many calls the agent SHOULD have made by right now, given the pace.
 // Uses NET elapsed time (wall-clock time minus break/washroom/meeting time),
