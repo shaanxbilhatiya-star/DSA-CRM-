@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Add Actual Talktime widget to admin.html and tl.html Disposition Stats section, calculating total recording duration for previous day with per-agent filtering",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Step 1: Add a pure Node.js audio duration calculator in server.js. Since we cannot install npm packages or use ffprobe, write a function getAudioDuration(filePath) that reads file headers to estimate duration. Support MP3 (parse frame headers to get bitrate, duration = fileSize / bitrate), WAV (read RIFF header for sample rate and data chunk size), and for other formats fall back to a rough estimate. The function should return duration in seconds. Place it near the recordings section (around line 3700).",
     "Step 2: Modify the POST /api/recordings/upload endpoint (server.js line 3762) to calculate and store duration for each uploaded file. After files are saved to disk, call getAudioDuration() on each file and add a 'duration' field (in seconds) to each recording object before pushing to appState.recordings.",
@@ -26,5 +26,5 @@
     "grep -n 'talktime\\|Talktime' server.js public/admin/index.html public/tl/index.html | wc -l (should be > 10)"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All implementations complete. Pure Node.js audio duration parsing works for MP3 (CBR/VBR with Xing header) and WAV (RIFF header parsing). Other formats use bitrate-based estimation. The upload endpoint is now async to support await on duration calculation. Backfill runs 5 seconds after server startup. Talktime API defaults to yesterday's date. Widget cards use teal (#0d9488) indicator color."
 }
