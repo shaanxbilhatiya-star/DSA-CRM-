@@ -1,0 +1,7 @@
+{
+  "task_id": "task-centralize-voice-announcements",
+  "task_description": "Centralize all voice announcements to play ONLY from the admin panel (admin.html). Remove voice playback from agent and TL panels since those tabs may not always be open. The admin panel is always open, making it the reliable single source for all voice announcements.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null
+}

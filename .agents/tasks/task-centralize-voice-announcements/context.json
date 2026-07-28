@@ -1,0 +1,21 @@
+{
+  "project_type": "Node.js Express + Socket.IO multi-panel CRM (single-page apps served as HTML)",
+  "language": "JavaScript (Node.js server + vanilla JS client)",
+  "build_system": "npm (no build step - just node server.js)",
+  "test_framework": "None - no automated tests exist",
+  "build_command": "npm install",
+  "test_command": "node -c server.js && node -c public/admin/index.html 2>/dev/null || true",
+  "verification_instructions": "1. Run npm install to verify dependencies. 2. Run node -e \"require('./server.js')\" with a timeout to verify server starts without error. 3. Verify syntax of modified HTML/JS files using node --check where possible.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "cd /projects/sandbox/DSA-CRM- && npm install",
+  "environment_constraints": "Internet access available for npm installs. No test framework. No Docker. Verification is limited to syntax checks and ensuring server starts.",
+  "contribution_requirements": "No formal CONTRIBUTING.md. Code is inline HTML with embedded JS/CSS.",
+  "key_patterns": "Each panel is a single HTML file with embedded <script> and <style>. Socket.IO is used for real-time communication. Admin joins 'admin-room'. TTS uses Google Translate proxy at /api/tts endpoint. Cross-PC TTS coordination via server-side turn lock (tts-request-turn, tts-turn-granted, tts-release-turn events). speakAnnouncement() queues text, splits into chunks, requests server turn lock, plays via Audio element with speechSynthesis fallback.",
+  "relevant_files": [
+    "server.js (lines 2659-2700: TTS turn lock; lines 2687-2690: join-admin handler; lines 2819-2820: break events; lines 3854-3880: /api/tts proxy)",
+    "public/admin/index.html (lines 924-1014: socket.io setup, join-admin, event handlers; lines 2600-2618: end of file)",
+    "public/agent/index.html (lines 1291-1298: login announcement; lines 1441-1452: break start/end; lines 1502-1510: break warnings; lines 3118-3195: TTS infrastructure; lines 3218-3340: hourly review and scheduler)",
+    "public/tl/index.html (lines 2265-2272: login announcement; lines 2406-2417: break start/end; lines 2465-2472: break warnings; lines 5196-5270: TTS infrastructure; lines 5295-5411: hourly review and scheduler)"
+  ],
+  "directory_structure": "Root: server.js (main), package.json. public/admin/index.html (admin panel), public/agent/index.html (agent dialer), public/tl/index.html (telecaller/TL panel). data/ for state persistence."
+}
