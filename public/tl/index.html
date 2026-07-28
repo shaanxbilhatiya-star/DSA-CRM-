@@ -1689,9 +1689,9 @@
     <div class="panel-header" style="background:rgba(76,175,80,.06);flex-wrap:wrap;gap:10px">
       <h2 style="color:var(--accent)">Documentation Completed</h2>
       <div style="display:flex;align-items:center;gap:12px">
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none" title="Show leads that were dumped from this list">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none" title="Switch between active leads and dumped leads">
           <span class="dc-switch"><input type="checkbox" id="tlShowDumpedToggle" onchange="tlToggleShowDumped()"><span class="dc-switch-track"></span></span>
-          Show Dumped
+          View Dumped Only
         </label>
         <span style="font-size:12px;color:var(--muted)" id="tlCompletedCountBadge">0 leads</span>
       </div>
@@ -3493,6 +3493,10 @@ async function loadJustifications() {
 loadJustifications();
 setInterval(loadJustifications, 60000);
 socket.on('justification-added', () => { loadJustifications(); });
+socket.on('completedLeadsChanged', () => {
+  try { fetchCompletedLeads(); } catch (e) {}
+  try { refreshLeadSections(); } catch (e) {}
+});
 socket.on('force-stop', () => tlShowToast('All agents stopped', 'warn'));
 socket.on('timer-update', () => {
   // Refresh stats when timer state changes
@@ -3977,19 +3981,23 @@ async function adminUpdateLeadStatus(numberId, adminStatus) {
 // ── Completed Leads ───────────────────────────────────────────────────────────
 let tlCompletedLeadsCache = [];
 
-function tlGetDumpedSet() {
-  try {
-    return new Set(JSON.parse(localStorage.getItem('tlDumpedCompletedLeads') || '[]'));
-  } catch (e) { return new Set(); }
-}
-function tlSaveDumpedSet(set) {
-  try { localStorage.setItem('tlDumpedCompletedLeads', JSON.stringify(Array.from(set))); } catch (e) {}
-}
-function tlToggleDumpLead(id) {
-  const set = tlGetDumpedSet();
-  if (set.has(id)) set.delete(id); else set.add(id);
-  tlSaveDumpedSet(set);
+async function tlToggleDumpLead(id, dumped) {
+  // Optimistic update so the UI reacts instantly, then confirm with the server.
+  const lead = tlCompletedLeadsCache.find(l => l.id === id);
+  if (lead) lead.dumped = dumped;
   renderCompletedLeads(tlCompletedLeadsCache);
+  try {
+    const r = await fetch('/api/admin/toggle-dump-lead', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ numberId: id, dumped })
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+  } catch (e) {
+    console.error('Failed to toggle dump state:', e);
+    if (lead) lead.dumped = !dumped;
+    renderCompletedLeads(tlCompletedLeadsCache);
+  }
 }
 function tlToggleShowDumped() {
   renderCompletedLeads(tlCompletedLeadsCache);
@@ -4036,11 +4044,10 @@ function renderCompletedLeads(allLeads) {
   const badge = document.getElementById('tlCompletedCountBadge');
   if (!tbody || !badge) return;
   tlCompletedLeadsCache = allLeads || [];
-  const dumpedSet = tlGetDumpedSet();
   const showDumped = !!document.getElementById('tlShowDumpedToggle')?.checked;
-  const leads = showDumped ? tlCompletedLeadsCache : tlCompletedLeadsCache.filter(l => !dumpedSet.has(l.id));
-  const dumpedCount = tlCompletedLeadsCache.filter(l => dumpedSet.has(l.id)).length;
-  badge.textContent = leads.length + ' lead' + (leads.length !== 1 ? 's' : '') + (dumpedCount ? ` (${dumpedCount} dumped)` : '');
+  const leads = showDumped ? tlCompletedLeadsCache.filter(l => l.dumped) : tlCompletedLeadsCache.filter(l => !l.dumped);
+  const dumpedCount = tlCompletedLeadsCache.filter(l => l.dumped).length;
+  badge.textContent = leads.length + ' lead' + (leads.length !== 1 ? 's' : '') + (showDumped ? '' : (dumpedCount ? ` (${dumpedCount} dumped, hidden)` : ''));
   if (!leads || leads.length === 0) {
     tbody.innerHTML = `<tr><td colspan="9" class="empty">${showDumped ? 'No dumped leads' : 'No completed leads yet'}</td></tr>`;
     return;
@@ -4081,10 +4088,10 @@ function renderCompletedLeads(allLeads) {
       : (l.hasDocZip
           ? `<a href="/api/admin/download-doc-zip/${escapeHtml(l.id)}" download class="dc-zip" title="Download documents ZIP">${_svgDl}<span>ZIP</span></a>`
           : `<span class="dc-nofile">No file</span>`);
-    const isDumped = dumpedSet.has(l.id);
+    const isDumped = !!l.dumped;
     const dumpBtn = isDumped
-      ? `<button class="dc-dump restore" onclick="tlToggleDumpLead('${escapeHtml(l.id)}')" title="Bring this lead back to the active list">&#8635; Restore</button>`
-      : `<button class="dc-dump" onclick="tlToggleDumpLead('${escapeHtml(l.id)}')" title="Dump — not needed right now, can be restored later">&#128230; Dump</button>`;
+      ? `<button class="dc-dump restore" onclick="tlToggleDumpLead('${escapeHtml(l.id)}',false)" title="Bring this lead back to the active list">&#8635; Restore</button>`
+      : `<button class="dc-dump" onclick="tlToggleDumpLead('${escapeHtml(l.id)}',true)" title="Dump — not needed right now, can be restored later">&#128230; Dump</button>`;
     return `<tr class="${isDumped ? 'dc-row-dumped' : ''}">
       <td><span class="phone-number">${escapeHtml(tlFormatPhone(l.phone))}</span></td>
       <td>${escapeHtml(l.name) || '&#8212;'}</td>

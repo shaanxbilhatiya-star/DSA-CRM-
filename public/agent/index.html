@@ -1398,6 +1398,7 @@ socket.on('force-stop', () => {
   currentNumberId = null; dialerWasActive = false;
   showIdle();
 });
+socket.on('completedLeadsChanged', () => { try { refreshLeadSections(); } catch (e) {} });
 socket.on('force-page-reload', ({ agentId: targetId, reason } = {}) => {
   // Only reload if this event is for this agent (or broadcast to all)
   if (!targetId || targetId === agentId) {

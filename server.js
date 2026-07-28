@@ -2335,6 +2335,7 @@ app.get('/api/admin/completed', (req, res) => {
       interestedByAgentId: n.interestedBy,
       documentationCompletedAt: n.documentationCompletedAt || null,
       adminStatus: n.adminStatus || '',
+      dumped: !!n.dumped,
       hasDocZip: !!(n.docZipPath && fs.existsSync(n.docZipPath)),
       docZipName: n.docZipName || null,
       shareToken: n.shareToken || null,
@@ -2346,9 +2347,23 @@ app.get('/api/admin/completed', (req, res) => {
   res.json(completed);
 });
 
+// Toggle the "dumped" (hidden) flag on a documentation-completed lead.
+// Dumped leads stay hidden everywhere: admin panel, TL panel, agent panel,
+// and TL panel's Agent Mode — they only reappear via "Show Dumped"/"Restore".
+app.post('/api/admin/toggle-dump-lead', (req, res) => {
+  const { numberId, dumped } = req.body;
+  if (!numberId) return res.status(400).json({ error: 'numberId is required' });
+  const num = appState.numbers.find(n => n.id === numberId);
+  if (!num) return res.status(404).json({ error: 'Number not found' });
+  num.dumped = !!dumped;
+  saveState(appState);
+  io.emit('completedLeadsChanged');
+  res.json({ success: true, dumped: num.dumped });
+});
+
 app.get('/api/agent/completed/:agentId', (req, res) => {
   const agentId = req.params.agentId;
-  const completed = appState.numbers.filter(n => n.disposition === 'interested' && n.documentationComplete && n.interestedBy === agentId).map(n => ({
+  const completed = appState.numbers.filter(n => n.disposition === 'interested' && n.documentationComplete && n.interestedBy === agentId && !n.dumped).map(n => ({
     id: n.id, phone: n.phone, name: n.leadName || n.name || '',
     loanType: n.loanType || '',
     remarks: n.remarks || '',

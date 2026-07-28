@@ -639,9 +639,9 @@ function adminLogout(){
     <div class="panel-header" style="background:rgba(76,175,80,.06);flex-wrap:wrap;gap:10px">
       <h2 style="color:var(--accent)">Documentation Completed</h2>
       <div style="display:flex;align-items:center;gap:12px">
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none" title="Show leads that were dumped from this list">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none" title="Switch between active leads and dumped leads">
           <span class="dc-switch"><input type="checkbox" id="showDumpedToggle" onchange="toggleShowDumped()"><span class="dc-switch-track"></span></span>
-          Show Dumped
+          View Dumped Only
         </label>
         <span style="font-size:12px;color:var(--muted)" id="completedCountBadge">0 leads</span>
       </div>
@@ -1053,6 +1053,7 @@ async function loadJustifications() {
 loadJustifications();
 setInterval(loadJustifications, 60000);
 socket.on('justification-added', () => { loadJustifications(); });
+socket.on('completedLeadsChanged', () => { fetchCompletedLeads(); });
 socket.on('force-stop', () => showToast('All agents stopped', 'warn'));
 socket.on('timer-update', () => {
   // Refresh stats when timer state changes
@@ -1581,19 +1582,23 @@ async function adminUpdateLeadStatus(numberId, adminStatus) {
 // ── Completed Leads ───────────────────────────────────────────────────────────
 let completedLeadsCache = [];
 
-function getDumpedSet() {
-  try {
-    return new Set(JSON.parse(localStorage.getItem('dumpedCompletedLeads') || '[]'));
-  } catch (e) { return new Set(); }
-}
-function saveDumpedSet(set) {
-  try { localStorage.setItem('dumpedCompletedLeads', JSON.stringify(Array.from(set))); } catch (e) {}
-}
-function toggleDumpLead(id) {
-  const set = getDumpedSet();
-  if (set.has(id)) set.delete(id); else set.add(id);
-  saveDumpedSet(set);
+async function toggleDumpLead(id, dumped) {
+  // Optimistic update so the UI reacts instantly, then confirm with the server.
+  const lead = completedLeadsCache.find(l => l.id === id);
+  if (lead) lead.dumped = dumped;
   renderCompletedLeads(completedLeadsCache);
+  try {
+    const r = await fetch('/api/admin/toggle-dump-lead', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ numberId: id, dumped })
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+  } catch (e) {
+    console.error('Failed to toggle dump state:', e);
+    if (lead) lead.dumped = !dumped;
+    renderCompletedLeads(completedLeadsCache);
+  }
 }
 function toggleShowDumped() {
   renderCompletedLeads(completedLeadsCache);
@@ -1650,11 +1655,10 @@ function renderCompletedLeads(allLeads) {
   const tbody = document.getElementById('completedTable');
   const badge = document.getElementById('completedCountBadge');
   completedLeadsCache = allLeads || [];
-  const dumpedSet = getDumpedSet();
   const showDumped = !!document.getElementById('showDumpedToggle')?.checked;
-  const leads = showDumped ? completedLeadsCache : completedLeadsCache.filter(l => !dumpedSet.has(l.id));
-  const dumpedCount = completedLeadsCache.filter(l => dumpedSet.has(l.id)).length;
-  badge.textContent = leads.length + ' lead' + (leads.length !== 1 ? 's' : '') + (dumpedCount ? ` (${dumpedCount} dumped)` : '');
+  const leads = showDumped ? completedLeadsCache.filter(l => l.dumped) : completedLeadsCache.filter(l => !l.dumped);
+  const dumpedCount = completedLeadsCache.filter(l => l.dumped).length;
+  badge.textContent = leads.length + ' lead' + (leads.length !== 1 ? 's' : '') + (showDumped ? '' : (dumpedCount ? ` (${dumpedCount} dumped, hidden)` : ''));
   if (!leads || leads.length === 0) {
     tbody.innerHTML = `<tr><td colspan="9" class="empty">${showDumped ? 'No dumped leads' : 'No completed leads yet'}</td></tr>`;
     return;
@@ -1695,10 +1699,10 @@ function renderCompletedLeads(allLeads) {
       : (l.hasDocZip
           ? `<a href="/api/admin/download-doc-zip/${escapeHtml(l.id)}" download class="dc-zip" title="Download documents ZIP">${_svgDl}<span>ZIP</span></a>`
           : `<span class="dc-nofile">No file</span>`);
-    const isDumped = dumpedSet.has(l.id);
+    const isDumped = !!l.dumped;
     const dumpBtn = isDumped
-      ? `<button class="dc-dump restore" onclick="toggleDumpLead('${escapeHtml(l.id)}')" title="Bring this lead back to the active list">&#8635; Restore</button>`
-      : `<button class="dc-dump" onclick="toggleDumpLead('${escapeHtml(l.id)}')" title="Dump — not needed right now, can be restored later">&#128230; Dump</button>`;
+      ? `<button class="dc-dump restore" onclick="toggleDumpLead('${escapeHtml(l.id)}',false)" title="Bring this lead back to the active list">&#8635; Restore</button>`
+      : `<button class="dc-dump" onclick="toggleDumpLead('${escapeHtml(l.id)}',true)" title="Dump — not needed right now, can be restored later">&#128230; Dump</button>`;
     return `<tr class="${isDumped ? 'dc-row-dumped' : ''}">
       <td><span class="phone-number">${escapeHtml(formatPhone(l.phone))}</span></td>
       <td>${escapeHtml(l.name) || '&#8212;'}</td>
