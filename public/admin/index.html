@@ -83,6 +83,17 @@
   .dc-remove { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; font-size:12px; font-weight:700; border-radius:8px; background:#fef2f2; color:#dc2626; border:1px solid #fecaca; cursor:pointer; transition:all .16s; font-family:var(--sans); }
   .dc-remove:hover { background:#dc2626; color:#fff; border-color:#dc2626; }
   .dc-remove svg { width:13px; height:13px; }
+  .dc-dump { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; font-size:12px; font-weight:700; border-radius:8px; background:#fffbeb; color:#b45309; border:1px solid #fde68a; cursor:pointer; transition:all .16s; font-family:var(--sans); }
+  .dc-dump:hover { background:#b45309; color:#fff; border-color:#b45309; }
+  .dc-dump.restore { background:#ecfdf5; color:#047857; border-color:#a7f3d0; }
+  .dc-dump.restore:hover { background:#047857; color:#fff; border-color:#047857; }
+  .dc-switch { position:relative; display:inline-block; width:30px; height:17px; flex-shrink:0; }
+  .dc-switch input { opacity:0; width:0; height:0; }
+  .dc-switch-track { position:absolute; cursor:pointer; inset:0; background:var(--border); border-radius:17px; transition:.16s; }
+  .dc-switch-track::before { content:""; position:absolute; height:13px; width:13px; left:2px; top:2px; background:#fff; border-radius:50%; transition:.16s; box-shadow:0 1px 2px rgba(0,0,0,.2); }
+  .dc-switch input:checked + .dc-switch-track { background:var(--accent); }
+  .dc-switch input:checked + .dc-switch-track::before { transform:translateX(13px); }
+  tr.dc-row-dumped { opacity:.6; }
 
   .upload-zone { border: 2px dashed var(--border); border-radius: 10px; padding: 36px; text-align: center; cursor: pointer; transition: all .2s; position: relative; }
   .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: rgba(124,58,237,.06); }
@@ -625,9 +636,15 @@ function adminLogout(){
 
   <!-- Documentation Completed Panel -->
   <div class="panel panel-completed" style="margin-bottom:20px">
-    <div class="panel-header" style="background:rgba(76,175,80,.06)">
+    <div class="panel-header" style="background:rgba(76,175,80,.06);flex-wrap:wrap;gap:10px">
       <h2 style="color:var(--accent)">Documentation Completed</h2>
-      <span style="font-size:12px;color:var(--muted)" id="completedCountBadge">0 leads</span>
+      <div style="display:flex;align-items:center;gap:12px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none" title="Show leads that were dumped from this list">
+          <span class="dc-switch"><input type="checkbox" id="showDumpedToggle" onchange="toggleShowDumped()"><span class="dc-switch-track"></span></span>
+          Show Dumped
+        </label>
+        <span style="font-size:12px;color:var(--muted)" id="completedCountBadge">0 leads</span>
+      </div>
     </div>
     <div class="panel-body" style="padding:0;overflow-x:auto">
       <table class="leads-table">
@@ -1562,10 +1579,31 @@ async function adminUpdateLeadStatus(numberId, adminStatus) {
 }
 
 // ── Completed Leads ───────────────────────────────────────────────────────────
+let completedLeadsCache = [];
+
+function getDumpedSet() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('dumpedCompletedLeads') || '[]'));
+  } catch (e) { return new Set(); }
+}
+function saveDumpedSet(set) {
+  try { localStorage.setItem('dumpedCompletedLeads', JSON.stringify(Array.from(set))); } catch (e) {}
+}
+function toggleDumpLead(id) {
+  const set = getDumpedSet();
+  if (set.has(id)) set.delete(id); else set.add(id);
+  saveDumpedSet(set);
+  renderCompletedLeads(completedLeadsCache);
+}
+function toggleShowDumped() {
+  renderCompletedLeads(completedLeadsCache);
+}
+
 async function fetchCompletedLeads() {
   try {
     const r = await fetch('/api/admin/completed');
     const leads = await r.json();
+    completedLeadsCache = leads;
     renderCompletedLeads(leads);
   } catch (e) {
     console.error('Failed to fetch completed leads:', e);
@@ -1608,12 +1646,17 @@ function editLeadForm(numberId, agentId, formType, editorKind) {
   window.open('/forms/PLJOB-main/' + file + '?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId), '_blank');
 }
 
-function renderCompletedLeads(leads) {
+function renderCompletedLeads(allLeads) {
   const tbody = document.getElementById('completedTable');
   const badge = document.getElementById('completedCountBadge');
-  badge.textContent = leads.length + ' lead' + (leads.length !== 1 ? 's' : '');
+  completedLeadsCache = allLeads || [];
+  const dumpedSet = getDumpedSet();
+  const showDumped = !!document.getElementById('showDumpedToggle')?.checked;
+  const leads = showDumped ? completedLeadsCache : completedLeadsCache.filter(l => !dumpedSet.has(l.id));
+  const dumpedCount = completedLeadsCache.filter(l => dumpedSet.has(l.id)).length;
+  badge.textContent = leads.length + ' lead' + (leads.length !== 1 ? 's' : '') + (dumpedCount ? ` (${dumpedCount} dumped)` : '');
   if (!leads || leads.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="empty">No completed leads yet</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="9" class="empty">${showDumped ? 'No dumped leads' : 'No completed leads yet'}</td></tr>`;
     return;
   }
   const _svgFile = `<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><path d='M14 2v6h6'/></svg>`;
@@ -1652,7 +1695,11 @@ function renderCompletedLeads(leads) {
       : (l.hasDocZip
           ? `<a href="/api/admin/download-doc-zip/${escapeHtml(l.id)}" download class="dc-zip" title="Download documents ZIP">${_svgDl}<span>ZIP</span></a>`
           : `<span class="dc-nofile">No file</span>`);
-    return `<tr>
+    const isDumped = dumpedSet.has(l.id);
+    const dumpBtn = isDumped
+      ? `<button class="dc-dump restore" onclick="toggleDumpLead('${escapeHtml(l.id)}')" title="Bring this lead back to the active list">&#8635; Restore</button>`
+      : `<button class="dc-dump" onclick="toggleDumpLead('${escapeHtml(l.id)}')" title="Dump — not needed right now, can be restored later">&#128230; Dump</button>`;
+    return `<tr class="${isDumped ? 'dc-row-dumped' : ''}">
       <td><span class="phone-number">${escapeHtml(formatPhone(l.phone))}</span></td>
       <td>${escapeHtml(l.name) || '&#8212;'}</td>
       <td style="font-weight:500">${escapeHtml(l.interestedBy) || '&#8212;'}</td>
@@ -1661,7 +1708,7 @@ function renderCompletedLeads(leads) {
       <td style="font-size:12px;font-family:var(--mono)">${completedAt}</td>
       <td>${dlBtn}</td>
       <td>${statusSelect}</td>
-      <td style="white-space:nowrap"><div class="dc-cell"><button class="dc-edit" title="Edit lead file" onclick="editLeadForm('${escapeHtml(l.id)}','${escapeHtml(l.interestedByAgentId || '')}','${escapeHtml(l.formType||'')}','${escapeHtml(l.editorKind||'')}')">&#9999;&#65039; Edit File</button><button class="dc-remove" onclick="adminRemoveInterested('${escapeHtml(l.id)}')" title="Remove lead">${_svgTrash}<span>Remove</span></button></div></td>
+      <td style="white-space:nowrap"><div class="dc-cell"><button class="dc-edit" title="Edit lead file" onclick="editLeadForm('${escapeHtml(l.id)}','${escapeHtml(l.interestedByAgentId || '')}','${escapeHtml(l.formType||'')}','${escapeHtml(l.editorKind||'')}')">&#9999;&#65039; Edit File</button>${dumpBtn}<button class="dc-remove" onclick="adminRemoveInterested('${escapeHtml(l.id)}')" title="Remove lead">${_svgTrash}<span>Remove</span></button></div></td>
     </tr>`;
   }).join('');
 }
