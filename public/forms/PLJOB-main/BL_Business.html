@@ -668,7 +668,7 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
       Agent Details
     </div>
     <div class="two">
-      <div class="fi"><label>Agent Name</label><input type="text" id="f_agent" placeholder="e.g. Suresh Patil"></div>
+      <div class="fi"><label>Agent Name</label><input type="text" id="f_bank" placeholder="e.g. Suresh Patil"></div>
       <div class="fi"><label>Case Type</label><input type="text" value="BL — Business Loan" readonly style="background:var(--gray-50);color:var(--gray-500);cursor:default"></div>
     </div>
     <div class="fi"><label>Calling / Visit Date</label><input type="date" id="f_cdate"></div>
@@ -897,7 +897,7 @@ async function saveFile(){
     'Date of entry      : ' + new Date().toLocaleDateString('en-IN'),
     'Calling date       : ' + (val('f_cdate')||'\u2014'),
     'Case type          : BL - Business Loan',
-    'Agent name         : ' + (val('f_agent')||'\u2014'),
+    'Agent name         : ' + (val('f_bank')||'\u2014'),
     'Required amount    : ' + (val('f_lamount')||'\u2014'),
     'Loan purpose       : ' + (val('f_loan_purpose')||'\u2014'),
     '',
