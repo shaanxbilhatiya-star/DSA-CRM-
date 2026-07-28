@@ -1088,12 +1088,22 @@ document.addEventListener('keydown', __unlockNewLeadAudio);
 })();
 
 function playNewLeadSound() {
-  const audio = new Audio('/shared/sounds/new-lead-alert.mp3');
-  audio.play().catch(() => {});
-  audio.addEventListener('ended', () => {
-    const audio2 = new Audio('/shared/sounds/new-lead-alert.mp3');
-    audio2.play().catch(() => {});
-  }, { once: true });
+  // Routed through the shared _ttsQueue (see CENTRALIZED VOICE ANNOUNCEMENTS
+  // section below) so it can never play at the same time as a spoken
+  // announcement — it takes its turn in the same FIFO instead of firing
+  // independently. _enqueueMp3 is defined further down; guard in case this
+  // fires before that script block has run.
+  if (typeof _enqueueMp3 === 'function') {
+    _enqueueMp3('/shared/sounds/new-lead-alert.mp3', 2); // play twice back-to-back, same as before
+  } else {
+    // Fallback (should not normally happen): old direct-play behavior.
+    const audio = new Audio('/shared/sounds/new-lead-alert.mp3');
+    audio.play().catch(() => {});
+    audio.addEventListener('ended', () => {
+      const audio2 = new Audio('/shared/sounds/new-lead-alert.mp3');
+      audio2.play().catch(() => {});
+    }, { once: true });
+  }
 }
 
 socket.on('new-lead', (data) => {
@@ -2715,8 +2725,11 @@ loadAdminRecordings();
 })();
 
 // ══════════════════════════════════════════════════════════════════════════════
-// CENTRALIZED VOICE ANNOUNCEMENTS (Text-to-Speech)
-// All voice announcements play ONLY from admin panel via this TTS infrastructure.
+// CENTRALIZED VOICE ANNOUNCEMENTS (Text-to-Speech) + NEW-LEAD MP3 ALERT
+// All voice announcements AND the new-lead MP3 ping play ONLY from admin panel,
+// through this single shared queue — so the MP3 ping and a spoken announcement
+// can never play on top of each other. Each queue item is either
+// { kind: 'tts', text } or { kind: 'mp3', url, repeat }.
 // ══════════════════════════════════════════════════════════════════════════════
 
 const _ttsQueue = [];
@@ -2746,8 +2759,15 @@ function _ttsReleaseGlobalTurn() {
 async function _ttsPlayNext() {
   if (_ttsPlaying || !_ttsQueue.length) return;
   _ttsPlaying = true;
-  const chunk = _ttsQueue.shift();
+  const item = _ttsQueue.shift();
   await _ttsRequestGlobalTurn();
+
+  if (item.kind === 'mp3') {
+    _playMp3Item(item);
+    return;
+  }
+
+  const chunk = item.text;
   const audio = new Audio('/api/tts?lang=hi&text=' + encodeURIComponent(chunk));
   audio.onended = () => { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); };
   audio.onerror = () => {
@@ -2766,6 +2786,23 @@ async function _ttsPlayNext() {
   audio.play().catch(() => { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); });
 }
 
+// Plays an { url, repeat } mp3 item `repeat` times back-to-back, holding the
+// global turn for the whole burst, then releases and advances the queue —
+// mirrors the old playNewLeadSound() double-ping behavior exactly.
+function _playMp3Item(item) {
+  let playsLeft = item.repeat || 1;
+  const playOnce = () => {
+    const audio = new Audio(item.url);
+    audio.onended = () => {
+      playsLeft -= 1;
+      if (playsLeft > 0) { playOnce(); }
+      else { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); }
+    };
+    audio.play().catch(() => { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); });
+  };
+  playOnce();
+}
+
 function _splitTTS(text) {
   const chunks = [];
   const segs = text.replace(/([\u0964.!?,])\s+/g, '$1\n').split('\n');
@@ -2782,7 +2819,14 @@ function speakAnnouncement(text, opts) {
   if (!text) return;
   opts = opts || {};
   if (opts.flush) { _ttsQueue.length = 0; _ttsPlaying = false; }
-  _splitTTS(text).forEach(c => { if (c.trim()) _ttsQueue.push(c.trim()); });
+  _splitTTS(text).forEach(c => { if (c.trim()) _ttsQueue.push({ kind: 'tts', text: c.trim() }); });
+  _ttsPlayNext();
+}
+
+// Enqueue an MP3 alert (e.g. new-lead ping) into the same shared queue as
+// spoken announcements, so it always waits its turn instead of overlapping.
+function _enqueueMp3(url, repeat) {
+  _ttsQueue.push({ kind: 'mp3', url: url, repeat: repeat || 1 });
   _ttsPlayNext();
 }
 
