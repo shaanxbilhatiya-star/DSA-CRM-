@@ -2690,6 +2690,163 @@ function speakAnnouncement(text, opts) {
 socket.on('voice-announce', ({ text }) => {
   if (text) speakAnnouncement(text);
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ANTI-TAB-SUSPENSION: Keep admin tab alive even after hours of inactivity.
+// Uses multiple techniques to prevent Chrome/Edge from suspending/discarding.
+// ══════════════════════════════════════════════════════════════════════════════
+
+(function initKeepAlive() {
+
+  // --- Technique 1: Silent Audio Loop ---
+  // A looping silent audio context prevents the browser from marking the tab as idle.
+  let _keepAliveAudioCtx = null;
+  function startSilentAudioLoop() {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      _keepAliveAudioCtx = new AudioContext();
+      const oscillator = _keepAliveAudioCtx.createOscillator();
+      const gainNode = _keepAliveAudioCtx.createGain();
+      gainNode.gain.value = 0.001; // Nearly inaudible
+      oscillator.connect(gainNode);
+      gainNode.connect(_keepAliveAudioCtx.destination);
+      oscillator.frequency.value = 1; // 1Hz - below human hearing
+      oscillator.start();
+      // Resume audio context periodically (Chrome suspends it after user interaction timeout)
+      setInterval(() => {
+        if (_keepAliveAudioCtx && _keepAliveAudioCtx.state === 'suspended') {
+          _keepAliveAudioCtx.resume().catch(() => {});
+        }
+      }, 10000);
+      console.log('[KeepAlive] Silent audio loop started');
+    } catch (e) {
+      console.warn('[KeepAlive] Silent audio loop failed:', e);
+    }
+  }
+
+  // --- Technique 2: Web Lock API ---
+  // Holding a Web Lock prevents the browser from discarding/freezing the tab.
+  function acquireWebLock() {
+    if (navigator.locks && navigator.locks.request) {
+      navigator.locks.request('admin-tts-keepalive', { mode: 'exclusive' }, () => {
+        // This lock is held indefinitely (until the tab is closed).
+        // Returning a never-resolving promise keeps the lock held.
+        return new Promise(() => {});
+      }).catch(() => {});
+      console.log('[KeepAlive] Web Lock acquired');
+    }
+  }
+
+  // --- Technique 3: Periodic Activity (Title flicker + hidden canvas) ---
+  // Simulates minimal activity to keep the tab marked as "active" by the browser.
+  let _keepAliveCanvas = null;
+  function startPeriodicActivity() {
+    // Create a hidden canvas for periodic draw operations
+    _keepAliveCanvas = document.createElement('canvas');
+    _keepAliveCanvas.width = 1;
+    _keepAliveCanvas.height = 1;
+    _keepAliveCanvas.style.position = 'fixed';
+    _keepAliveCanvas.style.top = '-9999px';
+    _keepAliveCanvas.style.left = '-9999px';
+    _keepAliveCanvas.style.pointerEvents = 'none';
+    _keepAliveCanvas.style.opacity = '0';
+    document.body.appendChild(_keepAliveCanvas);
+    const ctx = _keepAliveCanvas.getContext('2d');
+
+    setInterval(() => {
+      // Draw a pixel - triggers rendering activity
+      if (ctx) {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, 1, 1);
+      }
+      // Minimal title update to signal activity (invisible to user)
+      const originalTitle = document.title;
+      document.title = originalTitle + ' ';
+      setTimeout(() => { document.title = originalTitle; }, 50);
+    }, 30000); // Every 30 seconds
+    console.log('[KeepAlive] Periodic activity started');
+  }
+
+  // --- Technique 4: Service Worker / Dedicated Worker keep-alive ping ---
+  // A dedicated worker with periodic messaging prevents tab from going idle.
+  let _keepAliveWorker = null;
+  function startKeepAliveWorker() {
+    try {
+      const workerCode = `
+        setInterval(function() {
+          self.postMessage({ type: 'keepalive', ts: Date.now() });
+        }, 15000);
+      `;
+      const blob = new Blob([workerCode], { type: 'application/javascript' });
+      _keepAliveWorker = new Worker(URL.createObjectURL(blob));
+      _keepAliveWorker.onmessage = function() {
+        // Receiving a message keeps the main thread aware the tab is active
+      };
+      console.log('[KeepAlive] Worker ping started');
+    } catch (e) {
+      console.warn('[KeepAlive] Worker creation failed:', e);
+    }
+  }
+
+  // --- Technique 5: Visibility change recovery ---
+  // If the tab becomes hidden, aggressively resume audio context and signal activity.
+  function setupVisibilityRecovery() {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        if (_keepAliveAudioCtx && _keepAliveAudioCtx.state === 'suspended') {
+          _keepAliveAudioCtx.resume().catch(() => {});
+        }
+      }
+      // Even when hidden, do a keep-alive fetch to prevent discard
+      if (document.visibilityState === 'hidden') {
+        // Small self-referencing fetch to show network activity
+        fetch('/api/tts?lang=hi&text=.', { method: 'HEAD' }).catch(() => {});
+      }
+    });
+    console.log('[KeepAlive] Visibility recovery handler attached');
+  }
+
+  // Initialize all keep-alive techniques
+  // Wait for first user interaction to start AudioContext (browser requirement)
+  let _keepAliveInitialized = false;
+  function initAllKeepAlive() {
+    if (_keepAliveInitialized) return;
+    _keepAliveInitialized = true;
+    startSilentAudioLoop();
+    acquireWebLock();
+    startPeriodicActivity();
+    startKeepAliveWorker();
+    setupVisibilityRecovery();
+    console.log('[KeepAlive] All anti-tab-suspension mechanisms active');
+  }
+
+  // Start immediately for non-audio techniques, audio after interaction
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    acquireWebLock();
+    startPeriodicActivity();
+    startKeepAliveWorker();
+    setupVisibilityRecovery();
+  } else {
+    document.addEventListener('DOMContentLoaded', () => {
+      acquireWebLock();
+      startPeriodicActivity();
+      startKeepAliveWorker();
+      setupVisibilityRecovery();
+    });
+  }
+
+  // AudioContext requires user gesture - start on first click/keydown
+  const startAudioOnInteraction = () => {
+    startSilentAudioLoop();
+    document.removeEventListener('click', startAudioOnInteraction);
+    document.removeEventListener('keydown', startAudioOnInteraction);
+  };
+  document.addEventListener('click', startAudioOnInteraction);
+  document.addEventListener('keydown', startAudioOnInteraction);
+
+})();
+
 </script>
 </body>
 </html>
