@@ -5463,12 +5463,13 @@ checkTimeRestriction(); // Initial check
 const CALLS_PER_HOUR_TARGET = 36;
 const SHIFT_START_HOUR = 10;   // 10:00 AM IST
 const TL_DIALING_END_HOUR = 16.5; // 4:30 PM — TL's own dialing window ends here (see checkTimeRestriction)
+const STANDARD_BREAK_HOURS = 1;   // same 1h break baked into the 36/hr figure itself (250 ÷ (8h − 1h) ≈ 36)
 
 // TL-specific daily target: her dialing window is shorter than a regular
 // agent's (10:00 AM – 4:30 PM vs 10:00 AM – 5:45 PM), so 250 isn't a fair
 // target for her — it assumes dialing time she doesn't get. Derived from the
 // same pace so it self-adjusts if the restriction time or pace ever changes.
-const DAILY_CALL_TARGET = Math.round(CALLS_PER_HOUR_TARGET * (TL_DIALING_END_HOUR - SHIFT_START_HOUR));
+const DAILY_CALL_TARGET = Math.round(CALLS_PER_HOUR_TARGET * ((TL_DIALING_END_HOUR - SHIFT_START_HOUR) - STANDARD_BREAK_HOURS));
 
 // How many calls the TL SHOULD have made by right now, given the pace.
 // Uses NET elapsed time (wall-clock time minus break/washroom/meeting time),
