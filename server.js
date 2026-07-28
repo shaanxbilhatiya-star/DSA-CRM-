@@ -2580,6 +2580,29 @@ app.get('/api/config/crm-urls', (req, res) => {
   res.json({ peers });
 });
 
+// POST /api/announce  — external voice-announcement webhook (cross-CRM mirror)
+// Lets a peer CRM (e.g. Swiggy) push a spoken announcement into THIS CRM's
+// centralized TTS queue. We relay the text to the admin-room exactly like a
+// local voice-announce-request, so it flows through speakAnnouncement() and
+// QUEUES behind any announcements already playing/pending instead of cutting
+// them off. Optionally guarded by ANNOUNCE_WEBHOOK_TOKEN (if that env var is
+// set, callers must send the same value as { token } or an X-Announce-Token
+// header — otherwise the endpoint is open for LAN/peer use).
+app.post('/api/announce', (req, res) => {
+  const requiredToken = process.env.ANNOUNCE_WEBHOOK_TOKEN;
+  if (requiredToken) {
+    const provided = (req.body && req.body.token) || req.get('X-Announce-Token');
+    if (provided !== requiredToken) return res.status(403).json({ error: 'Invalid token' });
+  }
+  const text = req.body && typeof req.body.text === 'string' ? req.body.text.trim() : '';
+  const source = req.body && req.body.source ? String(req.body.source).slice(0, 60) : 'peer-crm';
+  if (!text) return res.status(400).json({ error: 'text required' });
+  // Relay to admin panel(s) — plays via the existing centralized TTS queue.
+  io.to('admin-room').emit('voice-announce', { text: text.slice(0, 500) });
+  console.log(`🔊 External announcement from ${source}: ${text}`);
+  res.json({ ok: true });
+});
+
 // GET  /api/sync/timer-state/:empId  — read current timer state for an employee
 app.get('/api/sync/timer-state/:empId', (req, res) => {
   const agentId = 'emp_' + req.params.empId;
