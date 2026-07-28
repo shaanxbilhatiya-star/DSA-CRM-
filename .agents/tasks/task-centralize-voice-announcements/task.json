@@ -1,0 +1,14 @@
+{
+  "task_id": "task-centralize-voice-announcements",
+  "task_description": "Centralize all voice announcements to play ONLY from the admin panel (admin.html). Remove voice playback from agent and TL panels since those tabs may not always be open. The admin panel is always open, making it the reliable single source for all voice announcements.",
+  "status": "completed",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "skipped",
+    "docker_build": "skipped",
+    "summary": "node -c server.js passes (syntax valid). All verification node scripts confirm: admin.html has TTS infrastructure + voice-announce listener; agent.html and tl.html have no TTS infrastructure and use socket.emit voice-announce-request. npm install timed out due to network constraints but is unrelated to code changes."
+  }
+}

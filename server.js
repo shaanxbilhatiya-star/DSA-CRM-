@@ -2703,6 +2703,14 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Centralized voice announcement: agent/TL panels request announcements,
+  // server relays to admin-room where TTS actually plays.
+  socket.on('voice-announce-request', ({ text }) => {
+    if (text && typeof text === 'string') {
+      io.to('admin-room').emit('voice-announce', { text });
+    }
+  });
+
   socket.on('disconnect', () => {
     ttsQueue = ttsQueue.filter(q => q.socketId !== socket.id);
     if (ttsLockedBy === socket.id) {

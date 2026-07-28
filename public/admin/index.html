@@ -2613,6 +2613,83 @@ loadAdminRecordings();
   dateInput.max = today.toISOString().split('T')[0];
   dateInput.min = sevenDaysAgo.toISOString().split('T')[0];
 })();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CENTRALIZED VOICE ANNOUNCEMENTS (Text-to-Speech)
+// All voice announcements play ONLY from admin panel via this TTS infrastructure.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _ttsQueue = [];
+let _ttsPlaying = false;
+
+// Cross-PC coordination: request a global turn before playing audio.
+let _ttsReqCounter = 0;
+const _ttsPendingTurns = {};
+socket.on('tts-turn-granted', ({ reqId }) => {
+  const cb = _ttsPendingTurns[reqId];
+  if (cb) { delete _ttsPendingTurns[reqId]; cb(); }
+});
+function _ttsRequestGlobalTurn() {
+  return new Promise((resolve) => {
+    const reqId = 'r' + (++_ttsReqCounter) + '_' + Date.now();
+    let done = false;
+    const finish = () => { if (!done) { done = true; delete _ttsPendingTurns[reqId]; resolve(); } };
+    _ttsPendingTurns[reqId] = finish;
+    try { socket.emit('tts-request-turn', { reqId }); } catch (e) { finish(); }
+    setTimeout(finish, 30000);
+  });
+}
+function _ttsReleaseGlobalTurn() {
+  try { socket.emit('tts-release-turn'); } catch (e) {}
+}
+
+async function _ttsPlayNext() {
+  if (_ttsPlaying || !_ttsQueue.length) return;
+  _ttsPlaying = true;
+  const chunk = _ttsQueue.shift();
+  await _ttsRequestGlobalTurn();
+  const audio = new Audio('/api/tts?lang=hi&text=' + encodeURIComponent(chunk));
+  audio.onended = () => { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); };
+  audio.onerror = () => {
+    try {
+      if ('speechSynthesis' in window) {
+        const u = new SpeechSynthesisUtterance(chunk);
+        u.lang = 'hi-IN'; u.rate = 0.95;
+        u.onend   = () => { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); };
+        u.onerror = () => { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); };
+        window.speechSynthesis.speak(u);
+        return;
+      }
+    } catch(e) {}
+    _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext();
+  };
+  audio.play().catch(() => { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); });
+}
+
+function _splitTTS(text) {
+  const chunks = [];
+  const segs = text.replace(/([\u0964.!?,])\s+/g, '$1\n').split('\n');
+  let buf = '';
+  segs.forEach(s => {
+    if ((buf + ' ' + s).length > 190) { if (buf) chunks.push(buf.trim()); buf = s; }
+    else { buf = buf ? buf + ' ' + s : s; }
+  });
+  if (buf.trim()) chunks.push(buf.trim());
+  return chunks.length ? chunks : [text];
+}
+
+function speakAnnouncement(text, opts) {
+  if (!text) return;
+  opts = opts || {};
+  if (opts.flush) { _ttsQueue.length = 0; _ttsPlaying = false; }
+  _splitTTS(text).forEach(c => { if (c.trim()) _ttsQueue.push(c.trim()); });
+  _ttsPlayNext();
+}
+
+// Listen for voice announcements relayed by the server from agent/TL panels.
+socket.on('voice-announce', ({ text }) => {
+  if (text) speakAnnouncement(text);
+});
 </script>
 </body>
 </html>

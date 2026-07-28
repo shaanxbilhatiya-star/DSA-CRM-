@@ -1292,9 +1292,9 @@ function showLoginPopup(lateLogin) {
   try {
     var nm = agentName || 'एजेंट';
     if (lateLogin) {
-      speakAnnouncement('नमस्ते ' + nm + ', आपने देर से लॉगिन किया है। इसकी सूचना मैनेजर्स को दी जाएगी।');
+      socket.emit('voice-announce-request', { text: 'नमस्ते ' + nm + ', आपने देर से लॉगिन किया है। इसकी सूचना मैनेजर्स को दी जाएगी।' });
     } else {
-      speakAnnouncement('नमस्ते ' + nm + ', आपने ' + currentISTTimeString() + ' बजे लॉगिन किया है।');
+      socket.emit('voice-announce-request', { text: 'नमस्ते ' + nm + ', आपने ' + currentISTTimeString() + ' बजे लॉगिन किया है।' });
     }
   } catch (e) {}
 }
@@ -1440,7 +1440,7 @@ socket.on('break-started', (data) => {
   breakStartedAt = data.breakStartedAt || Date.now();
   _breakFiveMinWarned = false; _breakExceededAnnounced = false;
   showBreakMode(); startBreakCountdown();
-  try { speakAnnouncement((agentName || 'एजेंट') + ' ब्रेक पर चले गए हैं।'); } catch (e) {}
+  try { socket.emit('voice-announce-request', { text: (agentName || 'एजेंट') + ' ब्रेक पर चले गए हैं।' }); } catch (e) {}
 });
 
 socket.on('break-ended', (data) => {
@@ -1449,7 +1449,7 @@ socket.on('break-ended', (data) => {
   totalBreakMsUsed = data.totalBreakMs || totalBreakMsUsed;
   breakExhausted   = totalBreakMsUsed >= breakAllowedMs;
   stopBreakCountdown(); updateBreakUsedDisplay(); hideBreakMode();
-  try { speakAnnouncement((agentName || 'एजेंट') + ' ब्रेक से वापस आ गए हैं।'); } catch (e) {}
+  try { socket.emit('voice-announce-request', { text: (agentName || 'एजेंट') + ' ब्रेक से वापस आ गए हैं।' }); } catch (e) {}
   if (currentNumberId) {
     document.getElementById('numberDisplay').style.display     = 'block';
     document.getElementById('dispositionPanel').style.display  = 'block';
@@ -1501,12 +1501,12 @@ function tickBreak() {
   updateBreakUsedDisplayLive(totalUsed);
   if (!_breakFiveMinWarned && remaining > 0 && remaining <= 5 * 60 * 1000) {
     _breakFiveMinWarned = true;
-    try { speakAnnouncement((agentName || 'एजेंट') + ', आपके ब्रेक के केवल 5 मिनट शेष हैं।'); } catch (e) {}
+    try { socket.emit('voice-announce-request', { text: (agentName || 'एजेंट') + ', आपके ब्रेक के केवल 5 मिनट शेष हैं।' }); } catch (e) {}
   }
   if (remaining <= 0) {
     if (!_breakExceededAnnounced) {
       _breakExceededAnnounced = true;
-      try { speakAnnouncement((agentName || 'एजेंट') + ' का ब्रेक समय समाप्त हो गया है।'); } catch (e) {}
+      try { socket.emit('voice-announce-request', { text: (agentName || 'एजेंट') + ' का ब्रेक समय समाप्त हो गया है।' }); } catch (e) {}
     }
     stopBreakCountdown();
     breakExhausted = true;
@@ -2845,7 +2845,7 @@ function restrictDialingShowRecordingUpload() {
   // ── 5:45 PM audio announcement ───────────────────────────────────────────
   try {
     var nm = (typeof agentName !== 'undefined' && agentName) ? agentName : 'एजेंट';
-    speakAnnouncement('सभी एजेंट्स ध्यान दें। ' + nm + ', शाम के 5:45 बज चुके हैं। कृपया अपनी कॉल रिकॉर्डिंग अभी अपलोड करें।');
+    socket.emit('voice-announce-request', { text: 'सभी एजेंट्स ध्यान दें। ' + nm + ', शाम के 5:45 बज चुके हैं। कृपया अपनी कॉल रिकॉर्डिंग अभी अपलोड करें।' });
   } catch (e) {}
 }
 
@@ -3112,86 +3112,11 @@ checkTimeRestriction(); // Initial check
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-// AUDIO ANNOUNCEMENTS (Text-to-Speech) + HOURLY PERFORMANCE REVIEW
+// AUDIO ANNOUNCEMENTS (Voice via Admin Panel) + HOURLY PERFORMANCE REVIEW
 // ══════════════════════════════════════════════════════════════════════════════
 
 // Daily calling target (total number of calls) used in the hourly announcement.
 const DAILY_CALL_TARGET = 300;
-
-// ── TTS audio queue — works in background tabs, Google Hindi voice ──────────
-const _ttsQueue = [];
-let _ttsPlaying = false;
-
-// Cross-PC coordination: before actually playing audio, ask the server for a
-// "turn". If several agent PCs are wired to one shared speaker, this stops
-// two machines announcing at the same instant.
-let _ttsReqCounter = 0;
-const _ttsPendingTurns = {};
-socket.on('tts-turn-granted', ({ reqId }) => {
-  const cb = _ttsPendingTurns[reqId];
-  if (cb) { delete _ttsPendingTurns[reqId]; cb(); }
-});
-function _ttsRequestGlobalTurn() {
-  return new Promise((resolve) => {
-    const reqId = 'r' + (++_ttsReqCounter) + '_' + Date.now();
-    let done = false;
-    const finish = () => { if (!done) { done = true; delete _ttsPendingTurns[reqId]; resolve(); } };
-    _ttsPendingTurns[reqId] = finish;
-    try { socket.emit('tts-request-turn', { reqId }); } catch (e) { finish(); }
-    setTimeout(finish, 30000); // failsafe — never block an announcement forever
-  });
-}
-function _ttsReleaseGlobalTurn() {
-  try { socket.emit('tts-release-turn'); } catch (e) {}
-}
-
-async function _ttsPlayNext() {
-  if (_ttsPlaying || !_ttsQueue.length) return;
-  _ttsPlaying = true;
-  const chunk = _ttsQueue.shift();
-  await _ttsRequestGlobalTurn();
-  const audio = new Audio('/api/tts?lang=hi&text=' + encodeURIComponent(chunk));
-  audio.onended = () => { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); };
-  audio.onerror = () => {
-    // Fallback: browser speechSynthesis if server TTS unavailable
-    try {
-      if ('speechSynthesis' in window) {
-        const u = new SpeechSynthesisUtterance(chunk);
-        u.lang = 'hi-IN'; u.rate = 0.95;
-        u.onend   = () => { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); };
-        u.onerror = () => { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); };
-        window.speechSynthesis.speak(u);
-        return;
-      }
-    } catch(e) {}
-    _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext();
-  };
-  audio.play().catch(() => { _ttsReleaseGlobalTurn(); _ttsPlaying = false; _ttsPlayNext(); });
-}
-
-// Split long text into <=190-char chunks on sentence boundaries (Google TTS limit).
-function _splitTTS(text) {
-  const chunks = [];
-  const segs = text.replace(/([\u0964.!?,])\s+/g, '$1\n').split('\n');
-  let buf = '';
-  segs.forEach(s => {
-    if ((buf + ' ' + s).length > 190) { if (buf) chunks.push(buf.trim()); buf = s; }
-    else { buf = buf ? buf + ' ' + s : s; }
-  });
-  if (buf.trim()) chunks.push(buf.trim());
-  return chunks.length ? chunks : [text];
-}
-
-// Speak a message aloud via server-side Google Translate TTS.
-// Uses <Audio> element — plays correctly even when tab is in the background.
-// Falls back to browser speechSynthesis if the server TTS request fails.
-function speakAnnouncement(text, opts) {
-  if (!text) return;
-  opts = opts || {};
-  if (opts.flush) { _ttsQueue.length = 0; _ttsPlaying = false; }
-  _splitTTS(text).forEach(c => { if (c.trim()) _ttsQueue.push(c.trim()); });
-  _ttsPlayNext();
-}
 
 // Current time in India as a spoken-friendly string, e.g. "10 05 AM".
 function currentISTTimeString() {
@@ -3216,7 +3141,7 @@ const DISPOSITION_LABELS = {
   dnd:            'डू नॉट डिस्टर्ब'
 };
 
-// Build and speak this agent's disposition stats for today.
+// Build and emit this agent's disposition stats for today via admin panel.
 async function announceDispositionStats() {
   if (!agentId) return null;
   try {
@@ -3228,14 +3153,14 @@ async function announceDispositionStats() {
     ['interested','followup','not_interested','dead','not_received','switch_off'].forEach(k => {
       parts.push(DISPOSITION_LABELS[k] + ' ' + (s[k] || 0) + '।');
     });
-    speakAnnouncement(parts.join(' '));
+    socket.emit('voice-announce-request', { text: parts.join(' ') });
     return s;
   } catch (e) { return null; }
 }
 
 // Announce the daily target and where this agent ranks by total number of calls.
 async function announceTargetAndRanking() {
-  speakAnnouncement('आज कुल कॉल का लक्ष्य ' + DAILY_CALL_TARGET + ' है।');
+  socket.emit('voice-announce-request', { text: 'आज कुल कॉल का लक्ष्य ' + DAILY_CALL_TARGET + ' है।' });
   try {
     const r = await fetch('/api/rankings?period=daily');
     const d = await r.json();
@@ -3247,20 +3172,20 @@ async function announceTargetAndRanking() {
     const myCalls = me ? (me.totalCalls || 0) : 0;
 
     if (idx <= 0 && me) {
-      speakAnnouncement('आप ' + myCalls + ' कॉल के साथ कुल कॉल में सबसे आगे हैं। इसी तरह बनाए रखें।');
+      socket.emit('voice-announce-request', { text: 'आप ' + myCalls + ' कॉल के साथ कुल कॉल में सबसे आगे हैं। इसी तरह बनाए रखें।' });
     } else if (me) {
       const ahead = list[idx - 1];
       const top   = list[0];
-      speakAnnouncement(
+      socket.emit('voice-announce-request', { text:
         'आपने अब तक ' + myCalls + ' कॉल की हैं। आप ' +
         (ahead.name || 'अपने से आगे वाले एजेंट') + ' से पीछे हैं जिन्होंने ' + (ahead.totalCalls || 0) + ' कॉल की हैं। ' +
         'सबसे आगे ' + (top.name || 'अग्रणी एजेंट') + ' हैं जिन्होंने ' + (top.totalCalls || 0) + ' कॉल की हैं।'
-      );
+      });
     }
     // Also announce who is behind whom across the team (ordering by total calls).
     if (list.length > 1) {
       const order = list.map(x => (x.name || 'एजेंट') + ' ' + (x.totalCalls || 0) + ' कॉल के साथ');
-      speakAnnouncement('कुल कॉल के अनुसार वर्तमान स्थिति: ' + order.join(', फिर ') + '।');
+      socket.emit('voice-announce-request', { text: 'कुल कॉल के अनुसार वर्तमान स्थिति: ' + order.join(', फिर ') + '।' });
     }
   } catch (e) { /* ignore */ }
 }
@@ -3302,7 +3227,7 @@ async function submitJustification() {
   const m = document.getElementById('justificationModal');
   if (m) m.remove();
   showToast('✅ आपका स्पष्टीकरण दर्ज कर लिया गया है। धन्यवाद।', 'success');
-  speakAnnouncement('धन्यवाद। आपका स्पष्टीकरण दर्ज कर लिया गया है।');
+  socket.emit('voice-announce-request', { text: 'धन्यवाद। आपका स्पष्टीकरण दर्ज कर लिया गया है।' });
 }
 
 // Run the full hourly review sequence.
