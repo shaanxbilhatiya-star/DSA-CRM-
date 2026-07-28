@@ -3130,12 +3130,23 @@ const CALLS_PER_HOUR_TARGET = 36;
 const SHIFT_START_HOUR = 10; // 10:00 AM IST
 
 // How many calls the agent SHOULD have made by right now, given the pace.
-// Capped at DAILY_CALL_TARGET so it never asks for more than the daily goal.
+// Uses NET elapsed time (wall-clock time minus break/washroom/meeting time),
+// not raw wall-clock time — so the "expected" number pauses while the agent
+// is on break instead of quietly climbing. Without this, an agent returning
+// from a break would immediately look sharply "behind" through no fault of
+// their own, which is an unfair — and stressful — thing to surface right as
+// they sit back down. Capped at DAILY_CALL_TARGET.
 function expectedCallsByNow() {
   const ist = getISTDate();
-  const hoursElapsed = (ist.getHours() + ist.getMinutes() / 60) - SHIFT_START_HOUR;
-  if (hoursElapsed <= 0) return 0;
-  return Math.min(DAILY_CALL_TARGET, Math.round(hoursElapsed * CALLS_PER_HOUR_TARGET));
+  const wallHoursElapsed = (ist.getHours() + ist.getMinutes() / 60) - SHIFT_START_HOUR;
+  if (wallHoursElapsed <= 0) return 0;
+  const liveBreak    = (onBreak    && breakStartedAt)    ? (Date.now() - breakStartedAt)    : 0;
+  const liveWashroom = (onWashroom && washroomStartedAt) ? (Date.now() - washroomStartedAt) : 0;
+  const liveMeeting  = (onMeeting  && meetingStartedAt)  ? (Date.now() - meetingStartedAt)  : 0;
+  const pausedMs = (totalBreakMsUsed + liveBreak) + (totalWashroomMsUsed + liveWashroom) + (totalMeetingMsUsed + liveMeeting);
+  const pausedHours = pausedMs / (60 * 60 * 1000);
+  const netHoursElapsed = Math.max(0, wallHoursElapsed - pausedHours);
+  return Math.min(DAILY_CALL_TARGET, Math.round(netHoursElapsed * CALLS_PER_HOUR_TARGET));
 }
 
 // Refresh the live "Pace" stat card with expected-vs-actual + color coding.
