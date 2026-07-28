@@ -1028,7 +1028,7 @@
         <span class="stat-value" style="color:#0891b2" id="meetingTimeUsed">0:00</span>
       </div>
       <div class="stat-card">
-        <span class="stat-label">Pace <span title="Required pace = 36 calls/hour to hit the 250 daily target" style="cursor:help;opacity:.7">&#9432;</span></span>
+        <span class="stat-label">Pace <span title="Required pace = 36 calls/hour, net of break/washroom/meeting time, to hit your dialing-window target" style="cursor:help;opacity:.7">&#9432;</span></span>
         <span class="stat-value" id="paceStatus">–</span>
       </div>
       <div class="stat-card">
@@ -5458,21 +5458,36 @@ checkTimeRestriction(); // Initial check
 // AUDIO ANNOUNCEMENTS (Voice via Admin Panel) + HOURLY PERFORMANCE REVIEW
 // ══════════════════════════════════════════════════════════════════════════════
 
-// Daily calling target (total number of calls) used in the hourly announcement.
-const DAILY_CALL_TARGET = 250;
-
-// Required pace to hit the daily target — 36 calls/hour, measured against
-// wall-clock time since shift start (10:00 AM IST).
+// Required pace to hit the daily target — 36 calls/hour (250 calls / 7
+// productive hours: 8h shift − 1h combined break, per business rule).
 const CALLS_PER_HOUR_TARGET = 36;
-const SHIFT_START_HOUR = 10; // 10:00 AM IST
+const SHIFT_START_HOUR = 10;   // 10:00 AM IST
+const TL_DIALING_END_HOUR = 16.5; // 4:30 PM — TL's own dialing window ends here (see checkTimeRestriction)
 
-// How many calls the agent SHOULD have made by right now, given the pace.
-// Capped at DAILY_CALL_TARGET so it never asks for more than the daily goal.
+// TL-specific daily target: her dialing window is shorter than a regular
+// agent's (10:00 AM – 4:30 PM vs 10:00 AM – 5:45 PM), so 250 isn't a fair
+// target for her — it assumes dialing time she doesn't get. Derived from the
+// same pace so it self-adjusts if the restriction time or pace ever changes.
+const DAILY_CALL_TARGET = Math.round(CALLS_PER_HOUR_TARGET * (TL_DIALING_END_HOUR - SHIFT_START_HOUR));
+
+// How many calls the TL SHOULD have made by right now, given the pace.
+// Uses NET elapsed time (wall-clock time minus break/washroom/meeting time),
+// not raw wall-clock time — so the "expected" number pauses while she's on
+// break instead of quietly climbing. Without this, an agent/TL returning
+// from a break would immediately look sharply "behind" through no fault of
+// their own, which is an unfair — and stressful — thing to surface right as
+// they sit back down. Capped at DAILY_CALL_TARGET.
 function expectedCallsByNow() {
   const ist = getISTDate();
-  const hoursElapsed = (ist.getHours() + ist.getMinutes() / 60) - SHIFT_START_HOUR;
-  if (hoursElapsed <= 0) return 0;
-  return Math.min(DAILY_CALL_TARGET, Math.round(hoursElapsed * CALLS_PER_HOUR_TARGET));
+  const wallHoursElapsed = (ist.getHours() + ist.getMinutes() / 60) - SHIFT_START_HOUR;
+  if (wallHoursElapsed <= 0) return 0;
+  const liveBreak    = (onBreak    && breakStartedAt)    ? (Date.now() - breakStartedAt)    : 0;
+  const liveWashroom = (onWashroom && washroomStartedAt) ? (Date.now() - washroomStartedAt) : 0;
+  const liveMeeting  = (onMeeting  && meetingStartedAt)  ? (Date.now() - meetingStartedAt)  : 0;
+  const pausedMs = (totalBreakMsUsed + liveBreak) + (totalWashroomMsUsed + liveWashroom) + (totalMeetingMsUsed + liveMeeting);
+  const pausedHours = pausedMs / (60 * 60 * 1000);
+  const netHoursElapsed = Math.max(0, wallHoursElapsed - pausedHours);
+  return Math.min(DAILY_CALL_TARGET, Math.round(netHoursElapsed * CALLS_PER_HOUR_TARGET));
 }
 
 // Refresh the live "Pace" stat card with expected-vs-actual + color coding.
