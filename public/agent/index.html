@@ -3017,6 +3017,8 @@ async function submitRecordings() {
   if (failedCount === 0) {
     if (progressText) progressText.textContent = `✅ All ${uploadedCount} recording(s) uploaded successfully!`;
     showToast(`✅ ${uploadedCount} recording(s) uploaded successfully!`, 'success');
+    // Announce successful upload via admin panel voice
+    socket.emit('voice-announce-request', { text: (agentName || 'Agent') + ' ne ' + uploadedCount + ' recording successfully upload kar di hain.' });
   } else {
     if (progressText) progressText.textContent = `⚠️ ${uploadedCount} uploaded, ${failedCount} failed`;
     showToast(`⚠️ ${uploadedCount} uploaded, ${failedCount} failed. Try re-uploading failed files.`, 'error');
