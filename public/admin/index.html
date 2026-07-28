@@ -1060,6 +1060,50 @@ setInterval(loadJustifications, 60000);
 socket.on('justification-added', () => { loadJustifications(); });
 socket.on('completedLeadsChanged', () => { fetchCompletedLeads(); });
 socket.on('force-stop', () => showToast('All agents stopped', 'warn'));
+
+// ─── New Lead Alert (custom audio, played twice) ──────────────────────────
+// Mirrors the Swiggy CRM behaviour: when a peer CRM reports a fresh lead, this
+// admin panel plays the same alert sound. Fully independent of the voice
+// (TTS) announcement system.
+let __newLeadAudioUnlocked = false;
+function __unlockNewLeadAudio() {
+  __newLeadAudioUnlocked = true;
+  const banner = document.getElementById('enableSoundBanner');
+  if (banner) banner.remove();
+}
+document.addEventListener('click', __unlockNewLeadAudio);
+document.addEventListener('keydown', __unlockNewLeadAudio);
+
+// Browsers block sound until a real click/keypress happens on the page.
+// Agents click buttons constantly so their alert unlocks itself — admins
+// often just sit watching the dashboard, so show an explicit prompt here.
+(function showEnableSoundBanner() {
+  if (document.getElementById('enableSoundBanner')) return;
+  const b = document.createElement('div');
+  b.id = 'enableSoundBanner';
+  b.textContent = '🔔 Click anywhere to enable New Lead alert sound';
+  b.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;background:var(--accent,#7c3aed);color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.2);cursor:pointer';
+  b.onclick = __unlockNewLeadAudio;
+  document.body.appendChild(b);
+})();
+
+function playNewLeadSound() {
+  const audio = new Audio('/shared/sounds/new-lead-alert.mp3');
+  audio.play().catch(() => {});
+  audio.addEventListener('ended', () => {
+    const audio2 = new Audio('/shared/sounds/new-lead-alert.mp3');
+    audio2.play().catch(() => {});
+  }, { once: true });
+}
+
+socket.on('new-lead', (data) => {
+  playNewLeadSound();
+  const names = (data.leads || []).map(l => l.name || 'Unknown').slice(0, 3).join(', ');
+  const extra = data.count > 3 ? ` +${data.count - 3} more` : '';
+  const src = data.source ? ` (${data.source})` : '';
+  showToast(`\ud83d\udd14 ${data.count} New Lead${data.count > 1 ? 's' : ''}${src}${names ? ': ' + names : ''}${extra}`, 'success');
+});
+
 socket.on('timer-update', () => {
   // Refresh stats when timer state changes
   fetch('/api/admin/stats').then(r => r.json()).then(d => renderStats(d)).catch(() => {});
