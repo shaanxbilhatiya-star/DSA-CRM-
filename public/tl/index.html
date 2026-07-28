@@ -5074,7 +5074,7 @@ tickLiveClock();
 setInterval(tickLiveClock, 1000);
 
 
-// ── 5:30 PM IST Restriction & Recording Upload (TL) ────────────────────────────
+// ── 4:30 PM IST Restriction & Recording Upload (TL) ────────────────────────────
 let selectedRecordingFiles = [];
 let dialingRestricted = false;
 
@@ -5084,8 +5084,8 @@ function checkTimeRestriction() {
   const hours = istTime.getHours();
   const minutes = istTime.getMinutes();
 
-  // TL dialing is restricted from 5:30 PM (17:30) until 2:00 AM (02:00) next day
-  const isRestricted = (hours === 17 && minutes >= 30) || hours >= 18 || hours < 2;
+  // TL dialing is restricted from 4:30 PM (16:30) until 2:00 AM (02:00) next day
+  const isRestricted = (hours === 16 && minutes >= 30) || hours >= 17 || hours < 2;
 
   if (isRestricted && !dialingRestricted) {
     dialingRestricted = true;
@@ -5129,7 +5129,7 @@ function restrictDialingShowRecordingUpload() {
     recordingPanel.innerHTML = `
       <div class="panel-header accent-h">
         <h2>🎙️ Upload Call Recordings</h2>
-        <span style="font-size:11px;color:var(--muted)">Dialing Restricted: 5:30 PM - 2:00 AM IST</span>
+        <span style="font-size:11px;color:var(--muted)">Dialing Restricted: 4:30 PM - 2:00 AM IST</span>
       </div>
       <div class="panel-body" style="padding: 30px 20px; text-align: center;">
         <div style="font-size: 48px; margin-bottom: 12px;">🎙️</div>
@@ -5180,12 +5180,12 @@ function restrictDialingShowRecordingUpload() {
     grid2.appendChild(recordingPanel);
   }
 
-  showToast('⏰ Dialing restricted (5:30 PM - 2:00 AM IST). Please check all agents and prepare the daily report.', 'warn');
+  showToast('⏰ Dialing restricted (4:30 PM - 2:00 AM IST). Please check all agents and prepare the daily report.', 'warn');
 
-  // ── 5:30 PM TL responsibility audio announcement ─────────────────────────
+  // ── 4:30 PM TL responsibility audio announcement (Team Performance Review) ──
   try {
     var nm = (typeof agentName !== 'undefined' && agentName) ? agentName : 'टीम लीडर';
-    socket.emit('voice-announce-request', { text: 'टीम लीडर ' + nm + ' ध्यान दें। शाम के 5:30 बज चुके हैं। अब आपकी ज़िम्मेदारी है। कृपया सभी एजेंट्स की जाँच करें और दैनिक रिपोर्ट तैयार करें।' });
+    socket.emit('voice-announce-request', { text: 'टीम लीडर ' + nm + ' ध्यान दें। शाम के 4:30 बज चुके हैं। अब आपकी ज़िम्मेदारी है। कृपया सभी एजेंट्स की कॉल काउंट की जाँच करें। प्रत्येक एजेंट से उनकी वर्तमान कुल कॉल संख्या पूछें। यदि किसी एजेंट की कॉल काउंट 185 से कम है, तो उसका कारण अवश्य पूछें। केवल दो कारण मान्य होंगे—यदि एजेंट ने किसी इच्छुक ग्राहक (Interested Lead) का कार्य पूरा किया है या किसी ग्राहक का डॉक्यूमेंटेशन किया है। इसके अतिरिक्त कोई भी कारण मान्य नहीं होगा। आवश्यक निर्देश दें ताकि प्रत्येक एजेंट शाम 6:00 बजे तक 250 कॉल का लक्ष्य पूरा कर सके।' });
   } catch (e) {}
 }
 
@@ -5574,9 +5574,40 @@ async function runHourlyReview() {
   showJustificationPopup();
 }
 
+// ── 5:00 PM TL announcement — Field Rider Status Check ──────────────────────
+function announceFieldRiderCheck() {
+  try {
+    var nm = (typeof agentName !== 'undefined' && agentName) ? agentName : 'टीम लीडर';
+    socket.emit('voice-announce-request', { text: 'टीम लीडर ' + nm + ' ध्यान दें। शाम के 5:00 बज चुके हैं। कृपया तुरंत फील्ड राइडर से संपर्क करें और आज की ऑनबोर्डिंग, जॉइनिंग तथा अन्य सभी कार्यों की वर्तमान स्थिति प्राप्त करें। सभी आवश्यक जानकारी नोट करें ताकि प्रबंधन को सटीक अपडेट दिया जा सके।' });
+  } catch (e) {}
+}
+
+// ── 5:15 PM TL announcement — Meeting Preparation Reminder ──────────────────
+function announceMeetingPrepReminder() {
+  try {
+    var nm = (typeof agentName !== 'undefined' && agentName) ? agentName : 'टीम लीडर';
+    socket.emit('voice-announce-request', { text: 'टीम लीडर ' + nm + ' ध्यान दें। शाम के 5:15 बज चुके हैं। कृपया मैनेजर्स के साथ होने वाली समीक्षा बैठक के लिए स्वयं को तैयार करें। सभी एजेंट्स की कॉल काउंट, इच्छुक लीड्स, डॉक्यूमेंटेशन, फील्ड राइडर की स्थिति तथा दिनभर की प्रगति का संक्षिप्त विवरण तैयार रखें, ताकि बैठक में सभी जानकारी स्पष्ट रूप से प्रस्तुत की जा सके।' });
+  } catch (e) {}
+}
+
+// ── 5:25 PM TL announcement — Final Meeting Alert ────────────────────────────
+function announceFinalMeetingAlert() {
+  try {
+    var nm = (typeof agentName !== 'undefined' && agentName) ? agentName : 'टीम लीडर';
+    socket.emit('voice-announce-request', { text: 'टीम लीडर ' + nm + ' ध्यान दें। शाम के 5:25 बज चुके हैं। कृपया तुरंत मैनेजर्स के साथ निर्धारित समीक्षा बैठक में शामिल हों। आज के कार्यों की संपूर्ण रिपोर्ट, एजेंट्स का प्रदर्शन, कॉल काउंट, इच्छुक लीड्स, डॉक्यूमेंटेशन तथा फील्ड राइडर की स्थिति साझा करें।' });
+  } catch (e) {}
+}
+
 // ── Scheduler ─────────────────────────────────────────────────────────────────
 const _firedAnnouncements = new Set();
-const HOURLY_REVIEW_HOURS = [12, 13, 14, 15, 16, 17]; // 12 PM .. 5 PM
+const HOURLY_REVIEW_HOURS = [12, 13, 14, 15, 16]; // 12 PM .. 4 PM (4:30 PM restriction takes over from here)
+
+// Fixed-time TL announcements: [hour, minute, handler, key]
+const FIXED_TL_ANNOUNCEMENTS = [
+  [17, 0,  announceFieldRiderCheck,    'fieldrider-1700'],
+  [17, 15, announceMeetingPrepReminder,'meetingprep-1715'],
+  [17, 25, announceFinalMeetingAlert,  'finalmeeting-1725']
+];
 
 function announcementScheduler() {
   if (!agentId) return;
@@ -5592,6 +5623,17 @@ function announcementScheduler() {
       runHourlyReview();
     }
   }
+
+  FIXED_TL_ANNOUNCEMENTS.forEach(function (entry) {
+    var hh = entry[0], mm = entry[1], fn = entry[2], keyBase = entry[3];
+    if (h === hh && m === mm) {
+      const key = dateKey + '-' + keyBase;
+      if (!_firedAnnouncements.has(key)) {
+        _firedAnnouncements.add(key);
+        fn();
+      }
+    }
+  });
 }
 setInterval(announcementScheduler, 15000);
 announcementScheduler();
