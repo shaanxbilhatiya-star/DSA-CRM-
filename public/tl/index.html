@@ -1028,6 +1028,10 @@
         <span class="stat-value" style="color:#0891b2" id="meetingTimeUsed">0:00</span>
       </div>
       <div class="stat-card">
+        <span class="stat-label">Pace <span title="Required pace = 36 calls/hour to hit the 250 daily target" style="cursor:help;opacity:.7">&#9432;</span></span>
+        <span class="stat-value" id="paceStatus">–</span>
+      </div>
+      <div class="stat-card">
         <span class="stat-label">Interested</span>
         <span class="stat-value green" id="statInterestedCount">0</span>
       </div>
@@ -5457,6 +5461,43 @@ checkTimeRestriction(); // Initial check
 // Daily calling target (total number of calls) used in the hourly announcement.
 const DAILY_CALL_TARGET = 250;
 
+// Required pace to hit the daily target — 36 calls/hour, measured against
+// wall-clock time since shift start (10:00 AM IST).
+const CALLS_PER_HOUR_TARGET = 36;
+const SHIFT_START_HOUR = 10; // 10:00 AM IST
+
+// How many calls the agent SHOULD have made by right now, given the pace.
+// Capped at DAILY_CALL_TARGET so it never asks for more than the daily goal.
+function expectedCallsByNow() {
+  const ist = getISTDate();
+  const hoursElapsed = (ist.getHours() + ist.getMinutes() / 60) - SHIFT_START_HOUR;
+  if (hoursElapsed <= 0) return 0;
+  return Math.min(DAILY_CALL_TARGET, Math.round(hoursElapsed * CALLS_PER_HOUR_TARGET));
+}
+
+// Refresh the live "Pace" stat card with expected-vs-actual + color coding.
+async function updatePaceBadge() {
+  const el = document.getElementById('paceStatus');
+  if (!el || !agentId) return;
+  try {
+    const r = await fetch('/api/stats/dispositions?period=daily&agentId=' + agentId);
+    const s = await r.json();
+    const actual = s.totalCalls || 0;
+    const expected = expectedCallsByNow();
+    const diff = actual - expected;
+    if (diff >= 0) {
+      el.textContent = '+' + diff + ' ahead';
+      el.style.color = 'var(--green)';
+    } else {
+      el.textContent = diff + ' behind';
+      el.style.color = 'var(--danger, #ef4444)';
+    }
+    el.title = 'Expected by now: ' + expected + ' · Your calls: ' + actual + ' · Pace: ' + CALLS_PER_HOUR_TARGET + '/hr';
+  } catch (e) { /* ignore */ }
+}
+setInterval(updatePaceBadge, 60000);
+updatePaceBadge();
+
 // Current time in India as a spoken-friendly string, e.g. "10 05 AM".
 function currentISTTimeString() {
   const now = new Date();
@@ -5510,6 +5551,19 @@ async function announceTargetAndRanking() {
     const me  = idx >= 0 ? list[idx] : null;
     const myCalls = me ? (me.totalCalls || 0) : 0;
 
+    // ── Pace check: expected calls by now (36/hour) vs actual ────────────────
+    const expected = expectedCallsByNow();
+    const gap = myCalls - expected;
+    if (gap >= 0) {
+      socket.emit('voice-announce-request', { text:
+        'निर्धारित गति के अनुसार अब तक आपको लगभग ' + expected + ' कॉल कर लेनी चाहिए थीं। आपने ' + myCalls + ' कॉल की हैं, आप गति से आगे हैं। बहुत बढ़िया।'
+      });
+    } else {
+      socket.emit('voice-announce-request', { text:
+        'निर्धारित गति के अनुसार अब तक आपको लगभग ' + expected + ' कॉल कर लेनी चाहिए थीं। आपने केवल ' + myCalls + ' कॉल की हैं, यानी आप ' + Math.abs(gap) + ' कॉल पीछे हैं। कृपया गति बढ़ाएँ।'
+      });
+    }
+
     if (idx <= 0 && me) {
       socket.emit('voice-announce-request', { text: 'आप ' + myCalls + ' कॉल के साथ कुल कॉल में सबसे आगे हैं। इसी तरह बनाए रखें।' });
     } else if (me) {
@@ -5529,8 +5583,19 @@ async function announceTargetAndRanking() {
 }
 
 // Popup asking the user to justify why they are behind the calling target.
-function showJustificationPopup() {
+async function showJustificationPopup() {
   if (document.getElementById('justificationModal')) return;
+  let paceLine = '';
+  try {
+    const r = await fetch('/api/stats/dispositions?period=daily&agentId=' + agentId);
+    const s = await r.json();
+    const actual = s.totalCalls || 0;
+    const expected = expectedCallsByNow();
+    const gap = actual - expected;
+    paceLine = gap >= 0
+      ? '<p style="font-size:13px;color:var(--green);margin-bottom:12px;">✅ ' + CALLS_PER_HOUR_TARGET + '/घंटा की गति के अनुसार अब तक ' + expected + ' कॉल अपेक्षित थीं — आपने ' + actual + ' की हैं (' + gap + ' आगे)।</p>'
+      : '<p style="font-size:13px;color:var(--danger,#ef4444);margin-bottom:12px;">⚠️ ' + CALLS_PER_HOUR_TARGET + '/घंटा की गति के अनुसार अब तक ' + expected + ' कॉल अपेक्षित थीं — आपने केवल ' + actual + ' की हैं (' + Math.abs(gap) + ' पीछे)।</p>';
+  } catch (e) { /* ignore, popup still shows without pace line */ }
   const modal = document.createElement('div');
   modal.id = 'justificationModal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:11000;padding:16px;';
@@ -5538,9 +5603,10 @@ function showJustificationPopup() {
     '<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;padding:26px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35);">' +
       '<div style="font-size:44px;margin-bottom:8px;">📢</div>' +
       '<h3 style="font-size:19px;font-weight:700;color:var(--accent);margin-bottom:6px;">प्रदर्शन जाँच</h3>' +
-      '<p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:16px;">' +
+      '<p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:10px;">' +
         'आज कुल कॉल का लक्ष्य <strong>' + DAILY_CALL_TARGET + '</strong> कॉल है। ' +
         'यदि आप लक्ष्य से पीछे हैं, तो कृपया नीचे इसका कारण बताएँ।</p>' +
+      paceLine +
       '<textarea id="justificationText" rows="4" placeholder="अपना स्पष्टीकरण / टिप्पणी यहाँ लिखें..." ' +
         'style="width:100%;padding:12px;border:1px solid var(--border-strong);border-radius:10px;font-family:inherit;font-size:14px;resize:vertical;box-sizing:border-box;"></textarea>' +
       '<div style="display:flex;gap:10px;margin-top:16px;">' +
