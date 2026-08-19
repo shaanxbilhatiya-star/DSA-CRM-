@@ -1477,6 +1477,50 @@ header::after {
     transparent 44px) !important;
 }
 </style>
+
+<style id="rl-logo-new">
+/* New wide-banner logo (1600x266): size by height, let width be auto */
+.logo-img {
+  height: 46px !important;
+  width: auto !important;
+  object-fit: contain !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  /* Subtle glow that complements the purple-on-purple logo */
+  filter: drop-shadow(0 2px 18px rgba(139,92,246,.55)) brightness(1.04) !important;
+  animation: rl-logo-pulse 3s ease-in-out infinite !important;
+  position: relative; z-index: 1;
+}
+@keyframes rl-logo-pulse {
+  0%,100% { filter: drop-shadow(0 2px 14px rgba(139,92,246,.5)) brightness(1.02); }
+  50%      { filter: drop-shadow(0 2px 28px rgba(139,92,246,.9)) brightness(1.08); }
+}
+
+/* TL mode dark header: same treatment */
+#tlModeScreen .logo-img,
+#agentModeScreen .logo-img {
+  height: 46px !important;
+  width: auto !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: drop-shadow(0 2px 18px rgba(139,92,246,.6)) brightness(1.04) !important;
+  animation: rl-logo-pulse 3s ease-in-out infinite !important;
+}
+
+/* The login screen inline logo (height:48px style) */
+img[src="/logo-new.jpg"][style*="height:48px"] {
+  height: 44px !important;
+  width: auto !important;
+  border-radius: 8px !important;
+  border: none !important;
+}
+</style>
 </head>
 <body style="margin:0;padding:0;">
 
@@ -1525,7 +1569,7 @@ header::after {
     </div>
   </div>
   <div class="header-center">
-    <img src="/logo.jpg" alt="Ruralift" class="logo-img">
+    <img src="/logo-new.jpg" alt="Ruralift" class="logo-img">
     <span class="header-brand">Ruralift CRM</span>
   </div>
   <div class="header-right">
@@ -2050,7 +2094,7 @@ header::after {
     <span class="today-badge" id="todayBadge">&#8212;</span>
   </div>
   <div class="logo">
-    <img src="/logo.jpg" alt="Ruralift" class="logo-img">
+    <img src="/logo-new.jpg" alt="Ruralift" class="logo-img">
     <h1>Ruralift CRM</h1>
   </div>
   <div style="display:flex;align-items:center;gap:14px">
