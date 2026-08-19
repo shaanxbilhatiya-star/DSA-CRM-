@@ -562,7 +562,7 @@ function adminLogout(){
         <h2 style="color:var(--green)">&#128202; Daily Reports (XLS)</h2>
         <span style="font-size:12px;color:var(--muted)">Agent-wise disposition reports | Auto-generated 5:45PM IST | Reset 2:00AM IST</span>
       </div>
-      <button onclick="generateAdminReports()" style="padding:7px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans)">&#9889; Generate Now</button>
+      <button onclick="generateAdminReports(event)" style="padding:7px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans)">&#9889; Generate Now</button>
     </div>
     <div class="panel-body" id="adminDailyReports">
       <div style="font-size:13px;color:var(--muted)">Loading...</div>
@@ -2559,8 +2559,8 @@ function renderAdminDailyReports(files) {
   container.innerHTML = html;
 }
 
-async function generateAdminReports() {
-  const btn = event && event.target ? event.target : null;
+async function generateAdminReports(e) {
+  const btn = e && e.target ? e.target : null;
   if (btn) { btn.disabled = true; btn.textContent = 'Generating...'; }
   try {
     const r = await fetch('/api/admin/daily-reports/generate', { method: 'POST' });

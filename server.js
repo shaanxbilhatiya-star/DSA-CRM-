@@ -4165,8 +4165,9 @@ app.get('/api/tts', (req, res) => {
 // Auto-generates at 5:45 PM IST, resets (cleanup) at 2:00 AM IST.
 // Reports cover calls dialed between 10:00 AM and 5:43 PM IST.
 
-let lastReportGenDate = null;
+let lastScheduledGenDate = null;
 let lastReportCleanDate = null;
+let lastManualGenTimestamp = 0;
 
 function generateDailyReports() {
   const now = new Date();
@@ -4194,6 +4195,12 @@ function generateDailyReports() {
 
   const generatedFiles = [];
 
+  // Build phone-to-name lookup map for efficient O(1) resolution
+  const phoneToName = new Map();
+  if (appState.numbers && Array.isArray(appState.numbers)) {
+    appState.numbers.forEach(n => { if (n.phone) phoneToName.set(n.phone, n.name || ''); });
+  }
+
   Object.keys(agentGroups).forEach(agentId => {
     const entries = agentGroups[agentId];
     if (entries.length === 0) return;
@@ -4210,12 +4217,8 @@ function generateDailyReports() {
     const rows = [['Phone', 'Lead Name', 'Disposition', 'Time of Call']];
     entries.forEach(entry => {
       const phone = entry.phone || '';
-      // Look up lead name from appState.numbers
-      let leadName = '';
-      if (appState.numbers && Array.isArray(appState.numbers)) {
-        const lead = appState.numbers.find(n => n.phone === phone);
-        if (lead) leadName = lead.name || '';
-      }
+      // Look up lead name from phoneToName map
+      const leadName = phoneToName.get(phone) || '';
       const disposition = entry.disposition || 'Pending';
       // Format timestamp in IST
       let timeStr = '';
@@ -4242,7 +4245,6 @@ function generateDailyReports() {
     generatedFiles.push({ filename, agentName, eid, date: istTodayStr });
   });
 
-  lastReportGenDate = istTodayStr;
   console.log('[DailyReports] Generated ' + generatedFiles.length + ' report(s) for ' + istTodayStr);
   return generatedFiles;
 }
@@ -4272,8 +4274,9 @@ setInterval(() => {
     const hours = istNow.getUTCHours();
     const minutes = istNow.getUTCMinutes();
     // 5:45 PM IST = 17:45
-    if (hours === 17 && minutes === 45 && lastReportGenDate !== istTodayStr) {
+    if (hours === 17 && minutes === 45 && lastScheduledGenDate !== istTodayStr) {
       generateDailyReports();
+      lastScheduledGenDate = istTodayStr;
     }
   } catch (e) { console.error('[DailyReports] Scheduled generation error:', e.message); }
 }, 60000);
@@ -4329,9 +4332,14 @@ app.get('/api/admin/daily-reports/download/:filename', (req, res) => {
   res.download(filePath, filename);
 });
 
-// API: Manually trigger report generation
+// API: Manually trigger report generation (rate-limited: once per 30 seconds)
 app.post('/api/admin/daily-reports/generate', (req, res) => {
   try {
+    const now = Date.now();
+    if (now - lastManualGenTimestamp < 30000) {
+      return res.status(429).json({ error: 'Please wait at least 30 seconds between report generations' });
+    }
+    lastManualGenTimestamp = now;
     const generated = generateDailyReports();
     res.json({ success: true, generated });
   } catch (e) {
