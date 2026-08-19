@@ -1527,6 +1527,42 @@ img[src="/logo-new.jpg"][style*="height:48px"] {
   border: none !important;
 }
 </style>
+
+<style id="rl-tlmode-final-fix">
+/* ═══ AUTHORITATIVE TL HEADER + GAP FIX (supersedes earlier conflicting blocks) ═══
+   The fixed mode-toggle bar is exactly 54px tall. Earlier blocks forced the
+   TL-mode header to position:relative which, combined with the container's
+   54px padding-top, double-offset the header to 108px and exposed a white gap.
+   Here we lock both mode headers to a single sticky 54px offset so they sit
+   flush directly beneath the toggle bar, and give TL mode a clean full-height
+   dark background. */
+#agentModeScreen, #tlModeScreen { padding-top: 54px !important; }
+#tlModeScreen {
+  background: linear-gradient(155deg, #050310 0%, #0a0818 50%, #060412 100%) !important;
+  background-attachment: fixed !important;
+}
+#agentModeScreen > header,
+#tlModeScreen > header {
+  position: sticky !important;
+  top: 54px !important;
+  margin-top: 0 !important;
+}
+/* TL-mode header quick-action button */
+#tlModeScreen .tl-webdialer-admin {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; font-size: 12px; font-weight: 700;
+  border-radius: 8px; text-decoration: none; white-space: nowrap;
+  color: #fff; background: linear-gradient(135deg, #7c3aed, #4c1d95);
+  border: 1px solid rgba(139,92,246,.5);
+  box-shadow: 0 2px 12px rgba(109,40,217,.4);
+  transition: transform .18s, box-shadow .18s, filter .18s;
+  position: relative; z-index: 2;
+}
+#tlModeScreen .tl-webdialer-admin:hover {
+  filter: brightness(1.08); transform: translateY(-1px);
+  box-shadow: 0 5px 18px rgba(109,40,217,.6);
+}
+</style>
 </head>
 <body style="margin:0;padding:0;">
 
@@ -2103,6 +2139,7 @@ img[src="/logo-new.jpg"][style*="height:48px"] {
     <h1>Ruralift CRM</h1>
   </div>
   <div style="display:flex;align-items:center;gap:14px">
+    <a href="https://crm.9ance.com/dashboard" target="_blank" rel="noopener noreferrer" class="tl-webdialer-admin">&#127760; Web Dialer Admin</a>
     <span class="badge">ADMIN</span>
   </div>
 </header>
