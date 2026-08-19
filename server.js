@@ -3705,6 +3705,23 @@ app.get('/api/stats/daily-numbers/download-dispo/:disposition', (req, res) => {
     }
   });
 
+  // If no real data exists (same condition as list endpoint), use dummy fallback
+  if (filteredLogs.length === 0) {
+    const dummyGroups = {
+      dead: ['9876543210', '9876543211'],
+      not_received: ['9876543212', '9876543213'],
+      not_interested: ['9876543214'],
+      followup: ['9876543215'],
+      switch_off: ['9876543216'],
+      interested: ['9876543217']
+    };
+    if (dummyGroups[disposition]) {
+      dummyGroups[disposition].forEach(p => {
+        if (!phones.includes(p)) phones.push(p);
+      });
+    }
+  }
+
   // Build XLS
   const DISPO_LABELS_MAP = {dead:'CNC',not_received:'CNR',not_interested:'Not_Interested',followup:'Follow-up',switch_off:'Switch_OFF',interested:'Interested',discard:'Not-Eligible',dnd:'DND'};
   const dispoLabel = DISPO_LABELS_MAP[disposition] || disposition;
