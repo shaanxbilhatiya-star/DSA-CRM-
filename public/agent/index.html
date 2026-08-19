@@ -510,6 +510,24 @@
   }
   .rank-1-avatar { border-color: #f59e0b !important; box-shadow: 0 0 12px rgba(245,158,11,.4); }
 
+  /* ── Softphone dock: persistent left panel, Current Lead + Script stay visible beside it ── */
+  #phoneDockPanel { position:fixed; left:0; top:0; width:340px; height:100vh; z-index:1000; background:#0b0f19; border-right:2px solid var(--border); box-shadow:4px 0 24px rgba(0,0,0,.12); display:flex; flex-direction:column; }
+  #phoneDockPanel .phone-dock-header { flex-shrink:0; padding:10px 14px; background:linear-gradient(135deg,#4c1d95,#6d28d9); color:#fff; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:space-between; }
+  #phoneDockPanel .phone-dock-header span.dot { width:8px; height:8px; border-radius:50%; background:#22c55e; display:inline-block; margin-right:6px; box-shadow:0 0 6px #22c55e; }
+  #phoneDockPanel iframe { flex:1; width:100%; border:0; background:#fff; }
+  #phoneDockCollapseBtn { background:none; border:1px solid rgba(255,255,255,.5); color:#fff; border-radius:6px; font-size:11px; padding:2px 8px; cursor:pointer; font-family:inherit; }
+  body.phone-dock-collapsed #phoneDockPanel { width:44px; }
+  body.phone-dock-collapsed #phoneDockPanel iframe,
+  body.phone-dock-collapsed #phoneDockPanel .phone-dock-header span.label { display:none; }
+  body.phone-dock-collapsed header, body.phone-dock-collapsed #connBanner,
+  body.phone-dock-collapsed #loginScreen, body.phone-dock-collapsed #dialerScreen { margin-left:44px !important; }
+  header, #connBanner, #loginScreen, #dialerScreen { margin-left:340px; transition:margin-left .2s; }
+  @media (max-width:900px) {
+    #phoneDockPanel { width:0; overflow:hidden; }
+    header, #connBanner, #loginScreen, #dialerScreen { margin-left:0; }
+    body.phone-dock-collapsed #phoneDockPanel { width:0; }
+  }
+
   /* ── Script: right-side slide panel; Current Lead panel stays fully visible ── */
   #scriptPopupModal { background:transparent !important; justify-content:flex-end !important; align-items:stretch !important; transition:none !important; }
   #scriptPopupModal.active { pointer-events:none !important; opacity:1 !important; }
@@ -519,6 +537,15 @@
 </style>
 </head>
 <body>
+
+<!-- ── SOFTPHONE DOCK (persistent — stays connected across leads/scripts) ── -->
+<div id="phoneDockPanel">
+  <div class="phone-dock-header">
+    <span><span class="dot"></span><span class="label">☎ Softphone</span></span>
+    <button id="phoneDockCollapseBtn" onclick="togglePhoneDock()">⟨⟩</button>
+  </div>
+  <iframe id="phoneDockFrame" src="https://kenyavoice.rpdigitalphone.com/Browser-Phone/Phone/indexNew.php" allow="microphone; autoplay" title="Softphone"></iframe>
+</div>
 
 <!-- ── HEADER ─────────────────────────────────────────────── -->
 <header>
@@ -2463,6 +2490,14 @@ function showScriptPopup() {
   setTimeout(function() { el.scrollTop = 0; if (window.updateScriptScrollBtns) window.updateScriptScrollBtns(); }, 50);
   scriptPopupShown = true;
 }
+
+function togglePhoneDock() {
+  document.body.classList.toggle('phone-dock-collapsed');
+  try { localStorage.setItem('phoneDockCollapsed', document.body.classList.contains('phone-dock-collapsed') ? '1' : '0'); } catch(e) {}
+}
+(function restorePhoneDockState() {
+  try { if (localStorage.getItem('phoneDockCollapsed') === '1') document.body.classList.add('phone-dock-collapsed'); } catch(e) {}
+})();
 
 function closeScriptPopup() {
   document.getElementById('scriptPopupModal').classList.remove('active');
