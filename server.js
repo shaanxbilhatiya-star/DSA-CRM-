@@ -3743,6 +3743,13 @@ app.delete('/api/agent/number/:numberId', (req, res) => {
   res.json({ success: true });
 });
 
+/* [DISABLED FEATURE: CALL_RECORDING] *************************************
+ * The entire call-recording backend (multer upload, duration calc, cleanup,
+ * REST endpoints for upload/list/talktime/toggle/delete/download) is
+ * disabled below. To re-enable, remove the opening and closing comment
+ * markers indicated by [DISABLED FEATURE: CALL_RECORDING].
+ ****************************************************************************/
+/*
 // ─── Call Recording Uploads ─────────────────────────────────────────────────────
 // Configure multer for recording uploads
 const recordingStorage = multer.diskStorage({
@@ -4113,6 +4120,17 @@ app.get('/api/recordings/:id/download', (req, res) => {
   res.sendFile(filePath);
 });
 
+
+*/ /* [END DISABLED FEATURE: CALL_RECORDING] */
+
+// Stub routes while CALL_RECORDING is disabled (return empty/no-op responses)
+app.post('/api/recordings/upload', (req, res) => res.json({ success: true, recordings: [], message: 'Recording feature is currently disabled' }));
+app.get('/api/recordings', (req, res) => res.json({ recordings: [], stats: { total: 0, today: 0, important: 0 } }));
+app.get('/api/recordings/talktime', (req, res) => res.json({ totalSeconds: 0, hours: 0, minutes: 0, recordingCount: 0, date: '', agent: 'all' }));
+app.patch('/api/recordings/:id/important', (req, res) => res.status(404).json({ error: 'Recording feature disabled' }));
+app.delete('/api/recordings/:id', (req, res) => res.status(404).json({ error: 'Recording feature disabled' }));
+app.get('/api/recordings/:id/download', (req, res) => res.status(404).json({ error: 'Recording feature disabled' }));
+app.use('/uploads/recordings', express.static(path.join(DATA_ROOT, 'uploads', 'recordings')));
 
 // ─── TTS Proxy ─────────────────────────────────────────────────────────────────
 // Proxies Google Translate TTS so announcements play in background browser tabs

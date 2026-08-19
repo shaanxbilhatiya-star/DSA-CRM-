@@ -1355,10 +1355,12 @@ function nextNumber() {
 
 function showNumber(numberId, phone, name, totalDialedToday, resumed) {
   // Don't allow showing numbers during restriction time
+  /* [DISABLED FEATURE: CALL_RECORDING] - dialer restriction check disabled
   if (dialingRestricted) {
     showToast('⏰ Dialing is restricted. Please upload recordings and logout.', 'error');
     return;
   }
+  */
 
   currentNumberId  = numberId;
   dialerWasActive  = true;
@@ -2470,7 +2472,7 @@ loadScript();
 
 function showScriptPopup() {
   // Don't show script popup during restriction time
-  if (dialingRestricted) return;
+  /* [DISABLED FEATURE: CALL_RECORDING] if (dialingRestricted) return; */
   if (!scriptContent) return; // No script uploaded
   var el = document.getElementById('scriptContent');
   el.textContent = scriptContent;
@@ -2791,6 +2793,12 @@ setInterval(tickLiveClock, 1000);
 })(); // end initCrossSync
 
 
+/* [DISABLED FEATURE: CALL_RECORDING] ******************************************
+ * The dialer time-restriction and recording-upload UI for agents is disabled
+ * below. To re-enable, remove the opening and closing comment markers
+ * indicated by [DISABLED FEATURE: CALL_RECORDING].
+ *****************************************************************************/
+/*
 // ── 11:50 PM IST Restriction & Recording Upload ────────────────────────────────
 let selectedRecordingFiles = [];
 let dialingRestricted = false;
@@ -3175,6 +3183,13 @@ function manualRecordingUpload() {
 // Check time restriction every minute
 setInterval(checkTimeRestriction, 60000);
 checkTimeRestriction(); // Initial check
+*/ /* [END DISABLED FEATURE: CALL_RECORDING] */
+
+// Stubs so the rest of the code doesn't crash when referencing these
+let selectedRecordingFiles = [];
+let dialingRestricted = false;
+function checkTimeRestriction() {}
+function manualRecordingUpload() { showToast('Recording upload is currently disabled', 'warn'); }
 
 
 // ══════════════════════════════════════════════════════════════════════════════
