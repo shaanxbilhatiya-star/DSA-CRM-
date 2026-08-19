@@ -603,9 +603,10 @@
   #scriptPopupModal > .modal-box { pointer-events:all; width:52vw !important; max-width:720px !important; height:100vh !important; max-height:100vh !important; border-radius:18px 0 0 18px !important; border-left:2px solid var(--border); box-shadow:-8px 0 40px rgba(0,0,0,.22); transform:translateX(110%); transition:transform .28s cubic-bezier(.4,0,.2,1) !important; padding:28px 32px !important; display:flex !important; flex-direction:column !important; }
   #scriptPopupModal.active > .modal-box { transform:translateX(0); }
   @media (max-width:900px) {
-    #scriptPopupModal > .modal-box { width:280px !important; max-width:80vw !important; padding:16px 14px !important; }
+    #scriptPopupModal > .modal-box { width:100vw !important; max-width:100vw !important; border-radius:0 !important; border-left:none !important; padding:14px 10px !important; font-size:14px !important; }
+    #scriptPopupModal > .modal-box h2, #scriptPopupModal > .modal-box h3 { font-size:16px !important; }
+    #scriptPopupModal > .modal-box p, #scriptPopupModal > .modal-box li, #scriptPopupModal > .modal-box span { font-size:13px !important; }
   }
-  @media (max-width:768px) { #scriptPopupModal > .modal-box { width:88vw !important; } }
 
 </style>
 
