@@ -511,21 +511,10 @@
   .rank-1-avatar { border-color: #f59e0b !important; box-shadow: 0 0 12px rgba(245,158,11,.4); }
 
 
-  /* ── Floating softphone widget: draggable, resizable, with fallback if iframe blocked ── */
+  /* ── Floating softphone launcher: opens the phone as a real popup window,
+     since the phone site blocks iframe embedding via X-Frame-Options/CSP ── */
   #phoneFab { position:fixed; bottom:24px; right:24px; z-index:1200; width:56px; height:56px; border-radius:50%; background:linear-gradient(135deg,#4c1d95,#6d28d9); color:#fff; border:none; box-shadow:0 6px 20px rgba(76,29,149,.4); font-size:24px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
   #phoneFab:hover { transform:scale(1.06); }
-  #phoneFloatPanel { position:fixed; top:90px; right:24px; width:340px; height:560px; min-width:280px; min-height:340px; max-width:92vw; max-height:88vh; background:#0b0f19; border-radius:14px; box-shadow:0 12px 48px rgba(0,0,0,.35); z-index:1300; display:none; flex-direction:column; overflow:hidden; border:1px solid rgba(255,255,255,.08); }
-  #phoneFloatPanel.open { display:flex; }
-  #phoneFloatHeader { flex-shrink:0; padding:8px 10px 8px 14px; background:linear-gradient(135deg,#4c1d95,#6d28d9); color:#fff; font-size:12px; font-weight:700; display:flex; align-items:center; justify-content:space-between; cursor:move; user-select:none; }
-  #phoneFloatHeader .dot { width:8px; height:8px; border-radius:50%; background:#22c55e; display:inline-block; margin-right:6px; box-shadow:0 0 6px #22c55e; }
-  #phoneFloatHeader .btns button { background:none; border:1px solid rgba(255,255,255,.5); color:#fff; border-radius:6px; font-size:11px; padding:2px 7px; cursor:pointer; font-family:inherit; margin-left:5px; }
-  #phoneFloatBody { position:relative; flex:1; background:#fff; }
-  #phoneFloatBody iframe { width:100%; height:100%; border:0; }
-  #phoneFloatFallback { position:absolute; inset:0; background:#fff; display:none; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:20px; text-align:center; font-size:13px; color:#444; }
-  #phoneFloatFallback.show { display:flex; }
-  #phoneFloatFallback a { background:#6d28d9; color:#fff; text-decoration:none; padding:8px 16px; border-radius:8px; font-weight:600; font-size:13px; }
-  #phoneFloatResize { position:absolute; bottom:0; right:0; width:16px; height:16px; cursor:nwse-resize; }
-  @media (max-width:768px) { #phoneFloatPanel { left:4vw; right:4vw; width:92vw; } }
 
   /* ── Script: right-side dock that PUSHES content (no overlap with Current Lead) ── */
   #scriptPopupModal { position:fixed !important; inset:0 !important; background:transparent !important; justify-content:flex-end !important; align-items:stretch !important; transition:none !important; display:flex !important; pointer-events:none !important; opacity:1 !important; z-index:900; }
@@ -543,26 +532,8 @@
 </head>
 <body>
 
-<!-- ── FLOATING SOFTPHONE (draggable/resizable, with fallback if site blocks embedding) ── -->
-<button id="phoneFab" onclick="openPhoneFloat()" title="Softphone">☎</button>
-<div id="phoneFloatPanel">
-  <div id="phoneFloatHeader">
-    <span><span class="dot"></span>Softphone</span>
-    <span class="btns">
-      <button onclick="reloadPhoneFloat()" title="Reload">⟳</button>
-      <a href="https://kenyavoice.rpdigitalphone.com/Browser-Phone/Phone/indexNew.php" target="_blank" rel="noopener" style="background:none;border:1px solid rgba(255,255,255,.5);color:#fff;border-radius:6px;font-size:11px;padding:2px 7px;margin-left:5px;text-decoration:none;">⧉</a>
-      <button onclick="closePhoneFloat()" title="Close">✕</button>
-    </span>
-  </div>
-  <div id="phoneFloatBody">
-    <iframe id="phoneFloatFrame" src="" allow="microphone; autoplay" title="Softphone"></iframe>
-    <div id="phoneFloatFallback">
-      <div>⚠️ Softphone site is not loading inside this panel (it may block embedding).</div>
-      <a href="https://kenyavoice.rpdigitalphone.com/Browser-Phone/Phone/indexNew.php" target="_blank" rel="noopener">Open Softphone in New Tab</a>
-    </div>
-    <div id="phoneFloatResize"></div>
-  </div>
-</div>
+<!-- ── FLOATING SOFTPHONE LAUNCHER (opens as a popup window, not an iframe) ── -->
+<button id="phoneFab" onclick="openPhoneFloat()" title="Open Softphone">☎</button>
 
 <!-- ── HEADER ─────────────────────────────────────────────── -->
 <header>
@@ -2509,111 +2480,45 @@ function showScriptPopup() {
   scriptPopupShown = true;
 }
 
-/* ── Floating softphone: open/close/drag/resize + embed-failure fallback ── */
+/* ── Floating softphone: real popup window (iframe embedding is blocked by
+   the phone site's own X-Frame-Options/CSP header — a popup sidesteps that
+   entirely, since that header only restricts framing, not top-level windows) ── */
 var PHONE_URL = 'https://kenyavoice.rpdigitalphone.com/Browser-Phone/Phone/indexNew.php';
-var phoneFloatLoaded = false;
-var phoneFloatWatchdog = null;
+var phoneWin = null;
 
 function openPhoneFloat() {
-  var panel = document.getElementById('phoneFloatPanel');
-  var frame = document.getElementById('phoneFloatFrame');
-  var fallback = document.getElementById('phoneFloatFallback');
-  panel.classList.add('open');
-  restorePhoneFloatGeometry();
-  if (!phoneFloatLoaded) {
-    fallback.classList.remove('show');
-    frame.src = PHONE_URL;
-    phoneFloatLoaded = true;
-    // Some sites block iframe embedding via X-Frame-Options/CSP; the iframe
-    // then stays blank with no JS error. Detect that with a short watchdog:
-    // if we can't read anything back from the frame after a few seconds,
-    // assume it's blocked and show the "open in new tab" fallback instead.
-    clearTimeout(phoneFloatWatchdog);
-    phoneFloatWatchdog = setTimeout(function () {
-      try {
-        // Cross-origin frame: this throws if it loaded fine, doesn't tell us
-        // much either way, so we rely on the frame's own error events too.
-        var doc = frame.contentDocument;
-        if (!doc) fallback.classList.add('show');
-      } catch (e) {
-        // Cross-origin access blocked = normal for a loaded external site.
-        // Do nothing here; onerror below handles the actual failure case.
-      }
-    }, 6000);
-    frame.onerror = function () { fallback.classList.add('show'); };
-  }
-}
-function closePhoneFloat() {
-  document.getElementById('phoneFloatPanel').classList.remove('open');
-}
-function reloadPhoneFloat() {
-  var frame = document.getElementById('phoneFloatFrame');
-  document.getElementById('phoneFloatFallback').classList.remove('show');
-  frame.src = PHONE_URL;
-}
-function savePhoneFloatGeometry() {
-  var p = document.getElementById('phoneFloatPanel');
+  var w = 360, h = 600;
+  var left = window.screenX + window.outerWidth - w - 20;
+  var top = window.screenY + 80;
   try {
-    localStorage.setItem('phoneFloatGeom', JSON.stringify({
-      top: p.style.top, left: p.style.left, right: p.style.right,
-      width: p.style.width, height: p.style.height
-    }));
+    var geom = JSON.parse(localStorage.getItem('phoneFloatGeom') || 'null');
+    if (geom) { w = geom.w || w; h = geom.h || h; left = geom.left != null ? geom.left : left; top = geom.top != null ? geom.top : top; }
   } catch (e) {}
-}
-function restorePhoneFloatGeometry() {
-  var p = document.getElementById('phoneFloatPanel');
-  try {
-    var g = JSON.parse(localStorage.getItem('phoneFloatGeom') || 'null');
-    if (g) {
-      if (g.top) p.style.top = g.top;
-      if (g.left) { p.style.left = g.left; p.style.right = 'auto'; }
-      else if (g.right) p.style.right = g.right;
-      if (g.width) p.style.width = g.width;
-      if (g.height) p.style.height = g.height;
-    }
-  } catch (e) {}
-}
-(function setupPhoneFloatDragResize() {
-  var panel = document.getElementById('phoneFloatPanel');
-  var header = document.getElementById('phoneFloatHeader');
-  var resizer = document.getElementById('phoneFloatResize');
-  if (!panel || !header || !resizer) return;
 
-    var drag = null;
-    header.addEventListener('mousedown', function (e) {
-      if (e.target.closest('button,a')) return;
-      var r = panel.getBoundingClientRect();
-      drag = { startX: e.clientX, startY: e.clientY, top: r.top, left: r.left };
-      e.preventDefault();
-    });
-    var resize = null;
-    resizer.addEventListener('mousedown', function (e) {
-      var r = panel.getBoundingClientRect();
-      resize = { startX: e.clientX, startY: e.clientY, w: r.width, h: r.height };
-      e.preventDefault();
-      e.stopPropagation();
-    });
-    document.addEventListener('mousemove', function (e) {
-      if (drag) {
-        var nx = drag.left + (e.clientX - drag.startX);
-        var ny = drag.top + (e.clientY - drag.startY);
-        nx = Math.max(0, Math.min(window.innerWidth - 80, nx));
-        ny = Math.max(0, Math.min(window.innerHeight - 40, ny));
-        panel.style.left = nx + 'px';
-        panel.style.right = 'auto';
-        panel.style.top = ny + 'px';
-      } else if (resize) {
-        var nw = Math.max(280, resize.w + (e.clientX - resize.startX));
-        var nh = Math.max(340, resize.h + (e.clientY - resize.startY));
-        panel.style.width = nw + 'px';
-        panel.style.height = nh + 'px';
-      }
-    });
-    document.addEventListener('mouseup', function () {
-      if (drag || resize) savePhoneFloatGeometry();
-      drag = null; resize = null;
-    });
-})();
+  if (phoneWin && !phoneWin.closed) {
+    phoneWin.focus();
+    return;
+  }
+  phoneWin = window.open(
+    PHONE_URL,
+    'ruraliftSoftphone',
+    'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top +
+    ',toolbar=no,location=no,menubar=no,status=no,resizable=yes,scrollbars=yes'
+  );
+  if (!phoneWin || phoneWin.closed || typeof phoneWin.closed === 'undefined') {
+    alert('Popup blocked. Please allow popups for this site (icon in the address bar) and click the softphone button again.');
+    return;
+  }
+  var watch = setInterval(function () {
+    if (!phoneWin || phoneWin.closed) { clearInterval(watch); return; }
+    try {
+      localStorage.setItem('phoneFloatGeom', JSON.stringify({
+        w: phoneWin.outerWidth, h: phoneWin.outerHeight,
+        left: phoneWin.screenX, top: phoneWin.screenY
+      }));
+    } catch (e) {}
+  }, 2000);
+}
 
 function closeScriptPopup() {
   document.getElementById('scriptPopupModal').classList.remove('active');
