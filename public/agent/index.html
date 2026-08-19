@@ -521,19 +521,25 @@
   body.phone-dock-collapsed #phoneDockPanel .phone-dock-header span.label { display:none; }
   body.phone-dock-collapsed header, body.phone-dock-collapsed #connBanner,
   body.phone-dock-collapsed #loginScreen, body.phone-dock-collapsed #dialerScreen { margin-left:44px !important; }
-  header, #connBanner, #loginScreen, #dialerScreen { margin-left:340px; transition:margin-left .2s; }
+  header, #connBanner, #loginScreen, #dialerScreen { margin-left:340px; transition:margin .2s; }
   @media (max-width:900px) {
     #phoneDockPanel { width:0; overflow:hidden; }
     header, #connBanner, #loginScreen, #dialerScreen { margin-left:0; }
     body.phone-dock-collapsed #phoneDockPanel { width:0; }
   }
 
-  /* ── Script: right-side slide panel; Current Lead panel stays fully visible ── */
-  #scriptPopupModal { background:transparent !important; justify-content:flex-end !important; align-items:stretch !important; transition:none !important; }
-  #scriptPopupModal.active { pointer-events:none !important; opacity:1 !important; }
-  #scriptPopupModal > .modal-box { pointer-events:all; width:52vw !important; max-width:720px !important; height:100vh !important; max-height:100vh !important; border-radius:18px 0 0 18px !important; border-left:2px solid var(--border); box-shadow:-8px 0 40px rgba(0,0,0,.22); transform:translateX(110%); transition:transform .28s cubic-bezier(.4,0,.2,1) !important; padding:28px 32px !important; display:flex !important; flex-direction:column !important; }
+  /* ── Script: right-side dock that PUSHES content (no overlap with Current Lead) ── */
+  #scriptPopupModal { position:fixed !important; inset:0 !important; background:transparent !important; justify-content:flex-end !important; align-items:stretch !important; transition:none !important; display:flex !important; pointer-events:none !important; opacity:1 !important; z-index:900; }
+  #scriptPopupModal > .modal-box { pointer-events:all; width:400px !important; max-width:38vw !important; height:100vh !important; max-height:100vh !important; border-radius:18px 0 0 18px !important; border-left:2px solid var(--border); box-shadow:-8px 0 40px rgba(0,0,0,.22); transform:translateX(110%); transition:transform .28s cubic-bezier(.4,0,.2,1) !important; padding:22px 24px !important; display:flex !important; flex-direction:column !important; }
   #scriptPopupModal.active > .modal-box { transform:translateX(0); }
-  @media (max-width:768px) { #scriptPopupModal > .modal-box { width:88vw !important; } }
+  body.script-dock-open header, body.script-dock-open #connBanner,
+  body.script-dock-open #loginScreen, body.script-dock-open #dialerScreen { margin-right:400px; }
+  @media (max-width:1200px) {
+    #scriptPopupModal > .modal-box { width:340px !important; max-width:70vw !important; }
+    body.script-dock-open header, body.script-dock-open #connBanner,
+    body.script-dock-open #loginScreen, body.script-dock-open #dialerScreen { margin-right:0; }
+  }
+  @media (max-width:768px) { #scriptPopupModal > .modal-box { width:88vw !important; max-width:88vw !important; } }
 </style>
 </head>
 <body>
@@ -2487,6 +2493,7 @@ function showScriptPopup() {
   var el = document.getElementById('scriptContent');
   el.textContent = scriptContent;
   document.getElementById('scriptPopupModal').classList.add('active');
+  document.body.classList.add('script-dock-open');
   setTimeout(function() { el.scrollTop = 0; if (window.updateScriptScrollBtns) window.updateScriptScrollBtns(); }, 50);
   scriptPopupShown = true;
 }
@@ -2501,6 +2508,8 @@ function togglePhoneDock() {
 
 function closeScriptPopup() {
   document.getElementById('scriptPopupModal').classList.remove('active');
+  document.body.classList.remove('script-dock-open');
+  document.body.classList.add('phone-dock-collapsed');
   scriptPopupShown = false;
   // Reveal disposition panel now that agent has read the script
   if (currentNumberId) {
