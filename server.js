@@ -3678,6 +3678,49 @@ app.get('/api/stats/daily-numbers', (req, res) => {
   });
 });
 
+// ─── Download Daily Dialed Numbers by Disposition as XLS ───────────────────────
+app.get('/api/stats/daily-numbers/download-dispo/:disposition', (req, res) => {
+  const disposition = req.params.disposition;
+  const now = new Date();
+  const istNow = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+  const istTodayStr = istNow.toISOString().slice(0, 10);
+
+  // Today start at 10:00 AM IST and end at 5:43 PM IST
+  const startIST = new Date(istTodayStr + 'T10:00:00.000+05:30');
+  const endIST = new Date(istTodayStr + 'T17:43:00.000+05:30');
+
+  // Filter dialed log for today between 10:00 AM and 5:43 PM
+  const filteredLogs = appState.dialedLog.filter(entry => {
+    if (!entry.timestamp) return false;
+    const entryDate = new Date(entry.timestamp);
+    return entryDate >= startIST && entryDate <= endIST;
+  });
+
+  // Get unique phones for the requested disposition
+  const phones = [];
+  filteredLogs.forEach(entry => {
+    const dispo = entry.disposition || 'unknown';
+    if (dispo === disposition && !phones.includes(entry.phone)) {
+      phones.push(entry.phone);
+    }
+  });
+
+  // Build XLS
+  const DISPO_LABELS_MAP = {dead:'CNC',not_received:'CNR',not_interested:'Not_Interested',followup:'Follow-up',switch_off:'Switch_OFF',interested:'Interested',discard:'Not-Eligible',dnd:'DND'};
+  const dispoLabel = DISPO_LABELS_MAP[disposition] || disposition;
+  const rows = [['Phone Number']];
+  phones.forEach(p => rows.push([p]));
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Numbers');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const filename = 'Daily_' + dispoLabel + '_' + istTodayStr + '.xlsx';
+  res.setHeader('Content-Disposition', 'attachment; filename=' + encodeURIComponent(filename));
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.send(buf);
+});
+
 // ─── Admin: Download uploaded numbers sheet back as Excel ──────────────────────
 app.get('/api/admin/download-numbers/:fileId', (req, res) => {
   const fid = req.params.fileId;

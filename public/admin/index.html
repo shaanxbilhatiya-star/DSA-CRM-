@@ -2502,6 +2502,7 @@ function renderDailyCopyPanel(data) {
     html += '<div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">';
     html += '<button onclick="copyText(\''+phoneStr.replace(/'/g,"\\'")+'\')" style="padding:4px 10px;border-radius:6px;border:1px solid var(--accent);background:rgba(124,58,237,.1);color:var(--accent);font-size:11px;font-weight:700;cursor:pointer">📋 Copy Numbers</button>';
     html += '<button onclick="copyWaMsg(\''+dispo+'\')" style="padding:4px 10px;border-radius:6px;border:1px solid #25D366;background:rgba(37,211,102,.08);color:#128C7E;font-size:11px;font-weight:700;cursor:pointer">💬 Copy WhatsApp Msg</button>';
+    html += '<a href="/api/stats/daily-numbers/download-dispo/'+encodeURIComponent(dispo)+'" style="padding:4px 10px;border-radius:6px;border:none;background:#111;color:#fff;font-size:11px;font-weight:700;cursor:pointer;text-decoration:none;margin-left:auto">XLX</a>';
     html += '</div>';
     html += '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-all;max-height:50px;overflow-y:auto">'+escapeHtml(phoneStr)+'</div></div>';
   });
