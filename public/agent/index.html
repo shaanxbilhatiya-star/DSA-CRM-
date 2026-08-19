@@ -531,6 +531,51 @@
     body.script-dock-open #loginScreen, body.script-dock-open #dialerScreen { margin-right:0; }
   }
   @media (max-width:768px) { #scriptPopupModal > .modal-box { width:88vw !important; max-width:88vw !important; } }
+
+  /* ── Unified In-Call Screen (3-panel layout) ── */
+  #unifiedCallScreen { display:none; grid-template-columns:25% 40% 35%; gap:16px; width:100%; min-height:60vh; margin-bottom:18px; }
+  #unifiedCallScreen.active { display:grid; }
+  #unifiedCallScreen .unified-col { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:20px; display:flex; flex-direction:column; overflow:hidden; }
+  #unifiedCallScreen .dialer-col { align-items:center; justify-content:center; text-align:center; }
+  #unifiedCallScreen .dialer-col .dial-phone-icon { font-size:48px; margin-bottom:12px; }
+  #unifiedCallScreen .dialer-col .dial-phone-number { font-size:22px; font-weight:700; font-family:var(--mono); color:var(--accent); cursor:pointer; position:relative; padding:8px 16px; border-radius:8px; background:var(--surface2); border:1px solid var(--border); margin-bottom:14px; transition:background .15s; display:inline-block; }
+  #unifiedCallScreen .dialer-col .dial-phone-number:hover { background:rgba(99,102,241,.08); }
+  #unifiedCallScreen .dialer-col .dial-phone-number .copy-tooltip { position:absolute; top:-28px; left:50%; transform:translateX(-50%); background:#1e293b; color:#fff; font-size:11px; padding:3px 10px; border-radius:5px; opacity:0; transition:opacity .2s; pointer-events:none; white-space:nowrap; }
+  #unifiedCallScreen .dialer-col .dial-phone-number .copy-tooltip.show { opacity:1; }
+  #unifiedCallScreen .dialer-col .dial-now-btn { display:inline-flex; align-items:center; gap:8px; padding:12px 28px; border-radius:10px; font-size:15px; font-weight:700; background:#22c55e; color:#fff; border:none; cursor:pointer; text-decoration:none; transition:background .15s, transform .1s; margin-bottom:16px; }
+  #unifiedCallScreen .dialer-col .dial-now-btn:hover { background:#16a34a; transform:scale(1.03); }
+  #unifiedCallScreen .dialer-col .call-timer { font-size:28px; font-weight:700; font-family:var(--mono); color:var(--muted); }
+  #unifiedCallScreen .lead-col .lead-col-header { margin-bottom:14px; }
+  #unifiedCallScreen .lead-col .lead-col-header h3 { font-size:18px; font-weight:700; margin-bottom:4px; }
+  #unifiedCallScreen .lead-col .lead-col-header .lead-col-phone { font-size:14px; color:var(--muted); font-family:var(--mono); }
+  #unifiedCallScreen .lead-col .unified-dispo-wrap { margin-top:auto; }
+  #unifiedCallScreen .lead-col .unified-dispo-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  #unifiedCallScreen .lead-col .unified-dispo-grid .dispo-btn { font-size:12px; padding:10px 8px; }
+  #unifiedCallScreen .lead-col .unified-dispo-locked { text-align:center; padding:24px 12px; color:var(--muted); font-size:14px; }
+  #unifiedCallScreen .lead-col .unified-dispo-locked .lock-icon { font-size:32px; margin-bottom:8px; }
+  #unifiedCallScreen .script-col { position:relative; }
+  #unifiedCallScreen .script-col .script-col-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; flex-shrink:0; }
+  #unifiedCallScreen .script-col .script-col-header h3 { font-size:16px; font-weight:700; }
+  #unifiedCallScreen .script-col .script-col-body { flex:1; min-height:0; overflow-y:hidden; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:18px 50px 18px 18px; font-size:15px; line-height:1.8; white-space:pre-wrap; position:relative; }
+  #unifiedCallScreen .script-col .script-scroll-controls { position:absolute; right:10px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:10px; z-index:5; }
+  #unifiedCallScreen .script-col .script-scroll-controls button { width:32px; height:32px; border-radius:50%; border:1px solid var(--border); background:var(--surface); cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; }
+  #unifiedCallScreen .script-col .script-scroll-controls button:hover { background:var(--surface2); }
+  #unifiedCallScreen .script-col .script-done-btn { margin-top:12px; flex-shrink:0; width:100%; padding:10px; border-radius:8px; font-size:13px; font-weight:700; background:#3b82f6; color:#fff; border:none; cursor:pointer; transition:background .15s; }
+  #unifiedCallScreen .script-col .script-done-btn:hover { background:#2563eb; }
+  #unifiedCallScreen .script-col.script-read .script-col-body { opacity:0.5; }
+  #unifiedCallScreen .script-col.script-read .script-done-btn { background:#94a3b8; cursor:default; }
+  #unifiedCallScreen.no-script .script-col { display:none; }
+  #unifiedCallScreen.no-script { grid-template-columns:30% 70%; }
+
+  @media (max-width:1200px) {
+    #unifiedCallScreen { grid-template-columns:1fr 1fr; }
+    #unifiedCallScreen .script-col { grid-column:1 / -1; max-height:300px; }
+    #unifiedCallScreen.no-script { grid-template-columns:1fr 1fr; }
+  }
+  @media (max-width:768px) {
+    #unifiedCallScreen, #unifiedCallScreen.no-script { grid-template-columns:1fr; }
+    #unifiedCallScreen .script-col { max-height:250px; }
+  }
 </style>
 </head>
 <body>
@@ -634,6 +679,62 @@
       <div class="stat-card">
         <span class="stat-label">Followups</span>
         <span class="stat-value accent" id="statFollowupsCount">0</span>
+      </div>
+    </div>
+
+    <!-- ── UNIFIED IN-CALL SCREEN (3-panel) ── -->
+    <div id="unifiedCallScreen">
+      <!-- LEFT: Dialer Column -->
+      <div class="unified-col dialer-col">
+        <div class="dial-phone-icon">📞</div>
+        <div class="dial-phone-number" id="unifiedPhoneNumber" onclick="copyUnifiedPhone()">
+          <span id="unifiedPhoneText">—</span>
+          <span class="copy-tooltip" id="unifiedCopyTooltip">Copied!</span>
+        </div>
+        <a class="dial-now-btn" id="unifiedDialBtn" href="https://kenyavoice.rpdigitalphone.com/Browser-Phone/Phone/indexNew.php" target="_blank" rel="noopener noreferrer">📞 Dial Now</a>
+        <div class="call-timer" id="unifiedCallTimer">0:00</div>
+      </div>
+
+      <!-- CENTER: Lead Info + Disposition Column -->
+      <div class="unified-col lead-col">
+        <div class="lead-col-header">
+          <h3 id="unifiedLeadName">—</h3>
+          <div class="lead-col-phone" id="unifiedLeadPhone">—</div>
+        </div>
+        <div id="unifiedRemoveBtn" style="margin-bottom:14px;">
+          <button onclick="removeCurrentLead()" style="padding:5px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid #ef4444;background:rgba(239,68,68,.08);color:#ef4444;font-family:inherit">🗑 Remove Lead</button>
+        </div>
+        <div class="unified-dispo-wrap">
+          <div id="unifiedDispoLocked" class="unified-dispo-locked">
+            <div class="lock-icon">🔒</div>
+            <p>Read the script first to unlock disposition</p>
+          </div>
+          <div id="unifiedDispoGrid" class="unified-dispo-grid" style="display:none;">
+            <button class="dispo-btn dispo-dead"          onclick="submitDisposition('dead')">☠️ Call Not Connected</button>
+            <button class="dispo-btn dispo-not-received"  onclick="submitDisposition('not_received')">📵 Call Not Received</button>
+            <button class="dispo-btn dispo-not-interested" onclick="submitDisposition('not_interested')">🚫 Not Interested</button>
+            <button class="dispo-btn dispo-followup"      onclick="submitDisposition('followup')">📅 Followup</button>
+            <button class="dispo-btn dispo-switch-off"    onclick="submitDisposition('switch_off')">📴 Switch OFF</button>
+            <button class="dispo-btn dispo-discard"       onclick="submitDisposition('discard')">🚫 Not-Eligible</button>
+            <button class="dispo-btn dispo-discard" style="background:#fce4ec;color:#c62828;border:1.5px solid #ef9a9a" onclick="submitDisposition('dnd')">🔕 DND</button>
+            <button class="dispo-btn dispo-interested"    onclick="submitDisposition('interested')">⭐ Interested</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Script Column -->
+      <div class="unified-col script-col" id="unifiedScriptCol">
+        <div class="script-col-header">
+          <h3>📋 Call Script</h3>
+        </div>
+        <div class="script-col-body" id="unifiedScriptBody" style="position:relative;">
+          <span id="unifiedScriptText"></span>
+          <div class="script-scroll-controls">
+            <button id="unifiedScrollUpBtn" type="button" aria-label="Scroll up">▲</button>
+            <button id="unifiedScrollDownBtn" type="button" aria-label="Scroll down">▼</button>
+          </div>
+        </div>
+        <button class="script-done-btn" id="unifiedScriptDoneBtn" onclick="unifiedScriptDone()">✅ Script Read - Done</button>
       </div>
     </div>
 
@@ -1142,6 +1243,9 @@ let agentId    = sessionStorage.getItem('agentId');
 let agentName  = sessionStorage.getItem('agentName');
 let empId      = sessionStorage.getItem('empId');
 let currentNumberId = null;
+let _unifiedCurrentPhone = null;
+let _unifiedTimerInterval = null;
+let _unifiedTimerSeconds = 0;
 let dialerWasActive  = false;
 let dialerWasOnBreak = false;
 
@@ -1417,6 +1521,7 @@ socket.on('no-numbers', (data) => {
   document.getElementById('btnWashroom').style.display        = 'none';
   document.getElementById('btnMeeting').style.display         = 'none';
   document.getElementById('noNumbers').style.display         = 'block';
+  hideUnifiedCallScreen();
   refreshLeadSections();
 });
 
@@ -2199,6 +2304,7 @@ async function removeCurrentLead() {
     if (d.error) { alert(d.error); return; }
     currentNumberId = null;
     document.getElementById('numberDisplay').style.display = 'none';
+    hideUnifiedCallScreen();
     showToast('Lead removed', 'success');
     startDialing();
   } catch (e) { alert('Failed to remove lead'); }
@@ -2456,21 +2562,42 @@ async function loadScript() {
     scriptContent = d.script;
     scriptLoaded = true;
     // Number may have arrived while script was still fetching — handle it now
-    if (scriptContent && currentNumberId && !scriptPopupShown) {
+    if (currentNumberId && !scriptPopupShown) {
       document.getElementById('dispositionPanel').style.display = 'none';
-      showScriptPopup();
+      // Update unified screen with script if it arrived late
+      var uEl = document.getElementById('unifiedCallScreen');
+      if (uEl && uEl.classList.contains('active')) {
+        updateUnifiedScript(scriptContent);
+      } else {
+        showUnifiedCallScreen(_unifiedCurrentPhone, document.getElementById('leadName').textContent.replace(/^\u{1F464}\s*/u,''), scriptContent);
+      }
     } else if (!scriptContent && currentNumberId) {
-      // No script configured — unlock disposition immediately
-      document.getElementById('dispositionPanel').style.display = 'block';
+      // No script configured — show unified with no script
+      var uEl2 = document.getElementById('unifiedCallScreen');
+      if (uEl2 && uEl2.classList.contains('active')) {
+        updateUnifiedScript(null);
+      } else {
+        document.getElementById('dispositionPanel').style.display = 'block';
+      }
     }
   } catch(e) {
     scriptContent = null; scriptLoaded = true;
-    if (currentNumberId) document.getElementById('dispositionPanel').style.display = 'block';
+    if (currentNumberId) {
+      var uEl3 = document.getElementById('unifiedCallScreen');
+      if (uEl3 && uEl3.classList.contains('active')) {
+        updateUnifiedScript(null);
+      } else {
+        document.getElementById('dispositionPanel').style.display = 'block';
+      }
+    }
   }
 }
 loadScript();
 
 function showScriptPopup() {
+  // Guard: if unified call screen is active, do NOT open old dock
+  var unifiedEl = document.getElementById('unifiedCallScreen');
+  if (unifiedEl && unifiedEl.classList.contains('active')) return;
   // Don't show script popup during restriction time
   /* [DISABLED FEATURE: CALL_RECORDING] if (dialingRestricted) return; */
   if (!scriptContent) return; // No script uploaded
@@ -2521,21 +2648,208 @@ function closeScriptPopup() {
   window.updateScriptScrollBtns = updateBtnStates;
 })();
 
-// Override showNumber to show script popup BEFORE disposition panel
+// Override showNumber to show unified in-call screen
 const _origShowNumber = showNumber;
 showNumber = function(numberId, phone, name, totalDialedToday, resumed) {
   _origShowNumber(numberId, phone, name, totalDialedToday, resumed);
-  // Always lock disposition when a new number arrives
+  _unifiedCurrentPhone = phone;
+  // Always lock disposition in original panel (unified screen handles it)
   document.getElementById('dispositionPanel').style.display = 'none';
-  if (scriptLoaded && scriptContent) {
-    // Script ready — show immediately
-    showScriptPopup();
-  } else if (scriptLoaded && !scriptContent) {
-    // No script configured — unlock disposition right away
-    document.getElementById('dispositionPanel').style.display = 'block';
-  }
-  // If !scriptLoaded: disposition stays hidden; loadScript() will handle when done
+  // Show unified call screen
+  showUnifiedCallScreen(phone, name, scriptLoaded ? scriptContent : null);
 };
+
+// ── Unified In-Call Screen Logic ──────────────────────────────────────────────
+function showUnifiedCallScreen(phone, name, script) {
+  var unified = document.getElementById('unifiedCallScreen');
+  var grid2 = document.querySelector('.grid-2');
+
+  // Populate dialer column
+  document.getElementById('unifiedPhoneText').textContent = formatPhone(phone || '');
+  // Populate lead column
+  var leadNameEl = document.getElementById('unifiedLeadName');
+  if (name && name.trim()) {
+    leadNameEl.textContent = '\u{1F464} ' + name.trim();
+  } else {
+    leadNameEl.textContent = 'Name not available';
+  }
+  document.getElementById('unifiedLeadPhone').textContent = formatPhone(phone || '');
+
+  // Handle script
+  updateUnifiedScript(script);
+
+  // Hide the old grid-2 layout
+  if (grid2) grid2.style.display = 'none';
+
+  // Show unified screen
+  unified.classList.add('active');
+
+  // Close old script dock if open
+  document.getElementById('scriptPopupModal').classList.remove('active');
+  document.body.classList.remove('script-dock-open');
+  scriptPopupShown = true; // Prevent old popup from opening
+
+  // Start call timer
+  startUnifiedTimer();
+}
+
+function updateUnifiedScript(script) {
+  var unified = document.getElementById('unifiedCallScreen');
+  var scriptCol = document.getElementById('unifiedScriptCol');
+  var scriptText = document.getElementById('unifiedScriptText');
+  var dispoLocked = document.getElementById('unifiedDispoLocked');
+  var dispoGrid = document.getElementById('unifiedDispoGrid');
+
+  if (script) {
+    // Has script - show script col, lock disposition
+    unified.classList.remove('no-script');
+    scriptCol.classList.remove('script-read');
+    scriptText.textContent = script;
+    dispoLocked.style.display = 'block';
+    dispoGrid.style.display = 'none';
+    // Reset scroll
+    var body = document.getElementById('unifiedScriptBody');
+    if (body) body.scrollTop = 0;
+  } else {
+    // No script - hide script col, unlock disposition immediately
+    unified.classList.add('no-script');
+    dispoLocked.style.display = 'none';
+    dispoGrid.style.display = 'grid';
+  }
+}
+
+function hideUnifiedCallScreen() {
+  var unified = document.getElementById('unifiedCallScreen');
+  if (!unified) return;
+  unified.classList.remove('active');
+  unified.classList.remove('no-script');
+  var grid2 = document.querySelector('.grid-2');
+  if (grid2) grid2.style.display = '';
+  // Stop timer
+  stopUnifiedTimer();
+}
+
+function unifiedScriptDone() {
+  var scriptCol = document.getElementById('unifiedScriptCol');
+  if (scriptCol.classList.contains('script-read')) return; // already done
+  scriptCol.classList.add('script-read');
+  // Reveal disposition buttons
+  document.getElementById('unifiedDispoLocked').style.display = 'none';
+  document.getElementById('unifiedDispoGrid').style.display = 'grid';
+}
+
+function copyUnifiedPhone() {
+  var phoneText = (_unifiedCurrentPhone || '').replace(/\D/g, '');
+  if (!phoneText) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(phoneText);
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = phoneText;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+  var tooltip = document.getElementById('unifiedCopyTooltip');
+  tooltip.classList.add('show');
+  setTimeout(function() { tooltip.classList.remove('show'); }, 1500);
+}
+
+function startUnifiedTimer() {
+  stopUnifiedTimer();
+  _unifiedTimerSeconds = 0;
+  updateUnifiedTimerDisplay();
+  _unifiedTimerInterval = setInterval(function() {
+    _unifiedTimerSeconds++;
+    updateUnifiedTimerDisplay();
+  }, 1000);
+}
+
+function stopUnifiedTimer() {
+  if (_unifiedTimerInterval) {
+    clearInterval(_unifiedTimerInterval);
+    _unifiedTimerInterval = null;
+  }
+  _unifiedTimerSeconds = 0;
+  var el = document.getElementById('unifiedCallTimer');
+  if (el) el.textContent = '0:00';
+}
+
+function updateUnifiedTimerDisplay() {
+  var mins = Math.floor(_unifiedTimerSeconds / 60);
+  var secs = _unifiedTimerSeconds % 60;
+  var el = document.getElementById('unifiedCallTimer');
+  if (el) el.textContent = mins + ':' + (secs < 10 ? '0' : '') + secs;
+}
+
+// Setup unified script scroll buttons
+(function setupUnifiedScriptScroll() {
+  var body = document.getElementById('unifiedScriptBody');
+  var upBtn = document.getElementById('unifiedScrollUpBtn');
+  var downBtn = document.getElementById('unifiedScrollDownBtn');
+  if (!body || !upBtn || !downBtn) return;
+  var holdTimer = null;
+  function stopHold() { if (holdTimer) { clearInterval(holdTimer); holdTimer = null; } }
+  function startHold(dir) {
+    stopHold();
+    body.scrollTop += dir * 90;
+    holdTimer = setInterval(function() { body.scrollTop += dir * 22; }, 50);
+  }
+  upBtn.addEventListener('mousedown', function(e) { e.preventDefault(); startHold(-1); });
+  downBtn.addEventListener('mousedown', function(e) { e.preventDefault(); startHold(1); });
+  upBtn.addEventListener('touchstart', function(e) { e.preventDefault(); startHold(-1); }, { passive:false });
+  downBtn.addEventListener('touchstart', function(e) { e.preventDefault(); startHold(1); }, { passive:false });
+  ['mouseup','mouseleave','touchend','touchcancel'].forEach(function(evt) {
+    upBtn.addEventListener(evt, stopHold);
+    downBtn.addEventListener(evt, stopHold);
+  });
+})();
+
+// Patch submitDisposition to also hide unified screen
+(function patchSubmitDisposition() {
+  var _origSubmitDisposition = window.submitDisposition;
+  if (!_origSubmitDisposition) return;
+  window.submitDisposition = function(disposition) {
+    // After disposition, hide unified screen
+    var result = _origSubmitDisposition(disposition);
+    // For non-modal dispositions, hide immediately
+    if (disposition !== 'followup' && disposition !== 'interested' && !window._CONFIRM_DISPO_CONFIG[disposition]) {
+      hideUnifiedCallScreen();
+    }
+    return result;
+  };
+})();
+
+// Patch confirmDispositionAction to hide unified screen
+(function patchConfirmDisposition() {
+  var _origConfirmAction = window.confirmDispositionAction;
+  if (!_origConfirmAction) return;
+  window.confirmDispositionAction = function() {
+    _origConfirmAction();
+    hideUnifiedCallScreen();
+  };
+})();
+
+// Patch confirmFollowup to hide unified screen
+(function patchConfirmFollowup() {
+  var _origConfirmFollowup = window.confirmFollowup;
+  if (!_origConfirmFollowup) return;
+  window.confirmFollowup = function() {
+    _origConfirmFollowup();
+    hideUnifiedCallScreen();
+  };
+})();
+
+// Patch confirmInterested to hide unified screen
+(function patchConfirmInterested() {
+  var _origConfirmInterested = window.confirmInterested;
+  if (!_origConfirmInterested) return;
+  window.confirmInterested = function() {
+    _origConfirmInterested();
+    hideUnifiedCallScreen();
+  };
+})();
 
 // ── DND Manual Management ─────────────────────────────────────────────────────
 async function loadDndNumbers() {
@@ -2842,6 +3156,9 @@ function restrictDialingShowRecordingUpload() {
     scriptModal.classList.remove('active');
     scriptPopupShown = false;
   }
+
+  // Hide unified call screen if active
+  hideUnifiedCallScreen();
 
   // COMPLETELY HIDE the entire dialer panel (📞 Current Lead section)
   const dialerPanel = document.querySelector('.panel.dialer-panel');
