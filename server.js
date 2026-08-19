@@ -14,10 +14,42 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const zlib = require('zlib');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+
+// ─── Softphone reverse proxy ────────────────────────────────────────────────
+// kenyavoice.rpdigitalphone.com sends X-Frame-Options/CSP headers that block
+// being loaded inside ANY iframe on ANY site — that's their server setting,
+// not something fixable from our page. Proxying it through our own backend
+// makes the browser see it as same-origin content (served from our own
+// domain under /phone-proxy/...), so those framing headers never apply, and
+// we can safely strip them from the proxied response as a second safety net.
+// `ws: true` + the server.on('upgrade', ...) hook below also relay the
+// softphone's WebSocket (SIP registration) connection through the same path.
+const phoneProxy = createProxyMiddleware({
+  target: 'https://kenyavoice.rpdigitalphone.com',
+  changeOrigin: true,
+  ws: true,
+  pathFilter: '/phone-proxy',
+  pathRewrite: { '^/phone-proxy': '' },
+  on: {
+    proxyRes: (proxyRes) => {
+      delete proxyRes.headers['x-frame-options'];
+      delete proxyRes.headers['content-security-policy'];
+      delete proxyRes.headers['content-security-policy-report-only'];
+    }
+  }
+});
+app.use(phoneProxy);
+server.on('upgrade', (req, socket, head) => {
+  if (req.url && req.url.startsWith('/phone-proxy')) {
+    phoneProxy.upgrade(req, socket, head);
+  }
+});
+
 
 // Map agentId -> socket.id so we can force-disconnect a specific agent server-side
 const agentSocketMap = new Map();

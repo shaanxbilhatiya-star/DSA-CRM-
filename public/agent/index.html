@@ -2480,44 +2480,76 @@ function showScriptPopup() {
   scriptPopupShown = true;
 }
 
-/* ── Floating softphone: real popup window (iframe embedding is blocked by
-   the phone site's own X-Frame-Options/CSP header — a popup sidesteps that
-   entirely, since that header only restricts framing, not top-level windows) ── */
-var PHONE_URL = 'https://kenyavoice.rpdigitalphone.com/Browser-Phone/Phone/indexNew.php';
-var phoneWin = null;
+/* ── Floating softphone: real Picture-in-Picture window (Chrome/Edge) ──
+   The phone site now loads through OUR backend's /phone-proxy route (see
+   server.js), which relays it same-origin and strips its X-Frame-Options/CSP
+   headers — so it's safe to iframe. That iframe is placed inside a Document
+   Picture-in-Picture window, which the OS keeps floating ABOVE every other
+   window/app (true always-on-top), unlike a normal popup. Browsers that
+   don't support PiP (Firefox, Safari) fall back to a normal popup window. */
+var PHONE_PROXY_URL = '/phone-proxy/Browser-Phone/Phone/indexNew.php';
+var phoneWin = null;       // fallback popup reference
+var pipWindow = null;      // Document PiP window reference
 
 function openPhoneFloat() {
+  if (window.documentPictureInPicture) {
+    openPhonePiP();
+  } else {
+    openPhonePopupFallback();
+  }
+}
+
+async function openPhonePiP() {
+  if (pipWindow && !pipWindow.closed) {
+    pipWindow.focus();
+    return;
+  }
+  try {
+    var w = 340, h = 560;
+    try {
+      var geom = JSON.parse(localStorage.getItem('phonePipGeom') || 'null');
+      if (geom) { w = geom.w || w; h = geom.h || h; }
+    } catch (e) {}
+
+    pipWindow = await window.documentPictureInPicture.requestWindow({ width: w, height: h });
+    pipWindow.document.title = 'Ruralift Softphone';
+    var style = pipWindow.document.createElement('style');
+    style.textContent = 'html,body{margin:0;padding:0;height:100%;background:#fff;} iframe{width:100%;height:100%;border:0;display:block;}';
+    pipWindow.document.head.appendChild(style);
+    var frame = pipWindow.document.createElement('iframe');
+    frame.src = PHONE_PROXY_URL;
+    frame.setAttribute('allow', 'microphone; autoplay');
+    pipWindow.document.body.appendChild(frame);
+
+    pipWindow.addEventListener('pagehide', function () {
+      try {
+        localStorage.setItem('phonePipGeom', JSON.stringify({ w: pipWindow.innerWidth, h: pipWindow.innerHeight }));
+      } catch (e) {}
+      pipWindow = null;
+    });
+  } catch (e) {
+    console.error('PiP failed, falling back to popup', e);
+    openPhonePopupFallback();
+  }
+}
+
+function openPhonePopupFallback() {
   var w = 360, h = 600;
   var left = window.screenX + window.outerWidth - w - 20;
   var top = window.screenY + 80;
-  try {
-    var geom = JSON.parse(localStorage.getItem('phoneFloatGeom') || 'null');
-    if (geom) { w = geom.w || w; h = geom.h || h; left = geom.left != null ? geom.left : left; top = geom.top != null ? geom.top : top; }
-  } catch (e) {}
-
   if (phoneWin && !phoneWin.closed) {
     phoneWin.focus();
     return;
   }
   phoneWin = window.open(
-    PHONE_URL,
+    PHONE_PROXY_URL,
     'ruraliftSoftphone',
     'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top +
     ',toolbar=no,location=no,menubar=no,status=no,resizable=yes,scrollbars=yes'
   );
   if (!phoneWin || phoneWin.closed || typeof phoneWin.closed === 'undefined') {
     alert('Popup blocked. Please allow popups for this site (icon in the address bar) and click the softphone button again.');
-    return;
   }
-  var watch = setInterval(function () {
-    if (!phoneWin || phoneWin.closed) { clearInterval(watch); return; }
-    try {
-      localStorage.setItem('phoneFloatGeom', JSON.stringify({
-        w: phoneWin.outerWidth, h: phoneWin.outerHeight,
-        left: phoneWin.screenX, top: phoneWin.screenY
-      }));
-    } catch (e) {}
-  }, 2000);
 }
 
 function closeScriptPopup() {
