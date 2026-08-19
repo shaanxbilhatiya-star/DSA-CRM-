@@ -604,7 +604,9 @@
     body.script-dock-open #loginScreen, body.script-dock-open #dialerScreen { margin-right:0; }
   }
   @media (max-width:900px) {
-    #scriptPopupModal > .modal-box { width:100vw !important; max-width:100vw !important; border-radius:0 !important; border-left:none !important; padding:14px 10px !important; font-size:14px !important; }
+    #scriptPopupModal { justify-content:flex-end !important; align-items:flex-end !important; }
+    #scriptPopupModal > .modal-box { width:100vw !important; max-width:100vw !important; height:auto !important; max-height:55vh !important; border-radius:18px 18px 0 0 !important; border-left:none !important; border-top:2px solid var(--border) !important; transform:translateY(110%) !important; padding:14px 10px !important; font-size:14px !important; overflow-y:auto !important; }
+    #scriptPopupModal.active > .modal-box { transform:translateY(0) !important; }
     #scriptPopupModal > .modal-box h2, #scriptPopupModal > .modal-box h3 { font-size:16px !important; }
     #scriptPopupModal > .modal-box p, #scriptPopupModal > .modal-box li, #scriptPopupModal > .modal-box span { font-size:13px !important; }
   }
