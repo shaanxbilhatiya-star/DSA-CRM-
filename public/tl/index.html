@@ -1547,6 +1547,15 @@ img[src="/logo-new.jpg"][style*="height:48px"] {
   top: 54px !important;
   margin-top: 0 !important;
 }
+/* True-center the TL-mode logo block regardless of unequal side widths */
+#tlModeScreen > header { position: sticky !important; }
+#tlModeScreen > header .logo {
+  position: absolute !important;
+  left: 50% !important; top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  flex-direction: row !important; gap: 10px !important;
+  margin: 0 !important;
+}
 /* TL-mode header quick-action button */
 #tlModeScreen .tl-webdialer-admin {
   display: inline-flex; align-items: center; gap: 6px;
