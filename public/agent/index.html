@@ -3392,6 +3392,7 @@ async function announceTargetAndRanking() {
       });
     }
 
+    /* [DISABLED FEATURE: RANKING_ANNOUNCEMENTS]
     if (idx <= 0 && me) {
       socket.emit('voice-announce-request', { text: 'आप ' + myCalls + ' कॉल के साथ कुल कॉल में सबसे आगे हैं। इसी तरह बनाए रखें।' });
     } else if (me) {
@@ -3408,6 +3409,7 @@ async function announceTargetAndRanking() {
       const order = list.map(x => (x.name || 'एजेंट') + ' ' + (x.totalCalls || 0) + ' कॉल के साथ');
       socket.emit('voice-announce-request', { text: 'कुल कॉल के अनुसार वर्तमान स्थिति: ' + order.join(', फिर ') + '।' });
     }
+    [END DISABLED FEATURE: RANKING_ANNOUNCEMENTS] */
   } catch (e) { /* ignore */ }
 }
 
