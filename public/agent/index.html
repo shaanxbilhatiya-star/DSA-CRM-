@@ -316,6 +316,14 @@
 
 
 
+  /* ── Responsive: Wide screen / zoomed-out (min-width: 1600px) ── */
+  @media(min-width:1600px){
+    .main{max-width:1800px;padding:28px 40px}
+    .grid-2{grid-template-columns:1.2fr 1fr;gap:26px}
+    .stats-grid{grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:18px}
+    .dispo-stats-grid{grid-template-columns:repeat(auto-fit, minmax(150px,1fr));gap:16px}
+  }
+
   /* ── Responsive: Tablet (max-width: 1024px) ── */
   @media(max-width:1024px){
     .main{padding:20px 16px}
