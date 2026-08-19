@@ -515,6 +515,8 @@
      since the phone site blocks iframe embedding via X-Frame-Options/CSP ── */
   #phoneFab { position:fixed; bottom:24px; right:24px; z-index:1200; width:56px; height:56px; border-radius:50%; background:linear-gradient(135deg,#4c1d95,#6d28d9); color:#fff; border:none; box-shadow:0 6px 20px rgba(76,29,149,.4); font-size:24px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
   #phoneFab:hover { transform:scale(1.06); }
+  #phoneFab.needs-tap { animation:phoneFabPulse 1s ease-in-out infinite; }
+  @keyframes phoneFabPulse { 0%,100%{box-shadow:0 6px 20px rgba(76,29,149,.4);} 50%{box-shadow:0 6px 32px rgba(220,38,38,.75);} }
 
   /* ── Script: right-side dock that PUSHES content (no overlap with Current Lead) ── */
   #scriptPopupModal { position:fixed !important; inset:0 !important; background:transparent !important; justify-content:flex-end !important; align-items:stretch !important; transition:none !important; display:flex !important; pointer-events:none !important; opacity:1 !important; z-index:900; }
@@ -2478,6 +2480,7 @@ function showScriptPopup() {
   document.body.classList.add('script-dock-open');
   setTimeout(function() { el.scrollTop = 0; if (window.updateScriptScrollBtns) window.updateScriptScrollBtns(); }, 50);
   scriptPopupShown = true;
+  tryAutoOpenPhoneFloat();
 }
 
 /* ── Floating softphone: real Picture-in-Picture window (Chrome/Edge) ──
@@ -2491,7 +2494,27 @@ var PHONE_PROXY_URL = '/phone-proxy/Browser-Phone/Phone/indexNew.php';
 var phoneWin = null;       // fallback popup reference
 var pipWindow = null;      // Document PiP window reference
 
+function tryAutoOpenPhoneFloat() {
+  // Browsers require a real click to open a popup or a PiP window — this call
+  // has no click behind it (it fires when a new lead arrives over the socket),
+  // so browsers will silently block it most of the time. We still attempt it
+  // (works if the browser is lenient / activation carried over), and if it's
+  // blocked we just pulse the ☎ button so the agent knows to tap it once.
+  try {
+    if (window.documentPictureInPicture && pipWindow && !pipWindow.closed) { pipWindow.focus(); return; }
+    if (phoneWin && !phoneWin.closed) { phoneWin.focus(); return; }
+    openPhoneFloat();
+    setTimeout(function () {
+      var opened = (pipWindow && !pipWindow.closed) || (phoneWin && !phoneWin.closed);
+      document.getElementById('phoneFab').classList.toggle('needs-tap', !opened);
+    }, 400);
+  } catch (e) {
+    document.getElementById('phoneFab').classList.add('needs-tap');
+  }
+}
+
 function openPhoneFloat() {
+  document.getElementById('phoneFab').classList.remove('needs-tap');
   if (window.documentPictureInPicture) {
     openPhonePiP();
   } else {
@@ -2552,10 +2575,17 @@ function openPhonePopupFallback() {
   }
 }
 
+function closePhoneFloat() {
+  try { if (pipWindow && !pipWindow.closed) pipWindow.close(); } catch (e) {}
+  try { if (phoneWin && !phoneWin.closed) phoneWin.close(); } catch (e) {}
+  pipWindow = null; phoneWin = null;
+}
+
 function closeScriptPopup() {
   document.getElementById('scriptPopupModal').classList.remove('active');
   document.body.classList.remove('script-dock-open');
   scriptPopupShown = false;
+  closePhoneFloat();
   // Reveal disposition panel now that agent has read the script
   if (currentNumberId) {
     document.getElementById('dispositionPanel').style.display = 'block';
