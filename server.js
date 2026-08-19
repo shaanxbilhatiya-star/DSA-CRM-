@@ -528,15 +528,23 @@ function getNextNumber(agentId) {
       if (dispoCount >= 2) return false;
       if (n.retryAfter && today < n.retryAfter) return false;
     }
-    // Skip retry numbers locked to a different agent
-    if (n.retryLockedBy && n.retryLockedBy !== agentId) return false;
+    // If retry is locked to a different agent, check if that agent still exists.
+    // If they've been deleted from allowedEids, release the lock so any agent can pick it up.
+    if (n.retryLockedBy && n.retryLockedBy !== agentId) {
+      const lockedEidMatch = n.retryLockedBy.match(/^emp_(.+)$/);
+      const lockedEid = lockedEidMatch ? lockedEidMatch[1] : null;
+      if (lockedEid && appState.allowedEids[lockedEid]) {
+        return false; // Agent still active — number is reserved for them
+      }
+      n.retryLockedBy = null; // Agent deleted — release lock so any agent can dial
+    }
     return true;
   }
 
-  // Pass 1: retry numbers locked to THIS agent come first
+  // Pass 1: retry numbers locked to THIS agent come first (pending retries take priority)
   let picked = appState.numbers.find(n => isEligible(n) && n.retryLockedBy === agentId);
 
-  // Pass 2: fresh numbers (no retry lock)
+  // Pass 2: fresh numbers (no retry lock, or lock was just released above)
   if (!picked) picked = appState.numbers.find(n => isEligible(n) && !n.retryLockedBy);
 
   if (!picked) return null;
@@ -637,6 +645,7 @@ function applyDisposition(agentId, numberId, disposition, extra) {
       num.disposition = 'not_interested';
       num.permanent = true;
       num.blockedUntil = null;
+      num.retryLockedBy = null;
       num.dialedBy = agentId;
       num.dialedAt = now;
       num.assignedTo = null;
@@ -711,6 +720,7 @@ function applyDisposition(agentId, numberId, disposition, extra) {
       num.permanent = true;
       num.retryAfter = null;
       num.blockedUntil = null;
+      num.retryLockedBy = null;
       num.dialedBy = agentId;
       num.dialedAt = now;
       num.assignedTo = null;
@@ -721,6 +731,7 @@ function applyDisposition(agentId, numberId, disposition, extra) {
       num.permanent = true;
       num.retryAfter = null;
       num.blockedUntil = null;
+      num.retryLockedBy = null;
       num.dialedBy = agentId;
       num.dialedAt = now;
       num.assignedTo = null;

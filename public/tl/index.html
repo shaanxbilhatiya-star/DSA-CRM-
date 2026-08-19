@@ -1328,6 +1328,16 @@
 <div id="agentToast"></div>
 
 <!-- ── FOLLOWUP MODAL ── -->
+<div class="modal-overlay" id="confirmDispositionModal">
+  <div class="modal-box" style="max-width:360px;text-align:center;">
+    <div id="confirmDispositionIcon" style="font-size:40px;margin-bottom:10px;"></div>
+    <h3 id="confirmDispositionTitle" style="margin-bottom:6px;"></h3>
+    <p class="modal-sub" id="confirmDispositionMsg" style="margin-bottom:22px;"></p>
+    <button class="btn-confirm" id="confirmDispositionBtn" onclick="confirmDispositionAction()" style="background:#dc2626;color:#fff;">Confirm</button>
+    <button class="btn-cancel-modal" onclick="closeConfirmDispositionModal()">Cancel — Go Back</button>
+  </div>
+</div>
+
 <div class="modal-overlay" id="followupModal">
   <div class="modal-box">
     <h3>Schedule Followup</h3>
@@ -2665,11 +2675,44 @@ function formatTimestamp(iso) {
 }
 
 // ── Disposition ───────────────────────────────────────────────────────────────
+let _pendingConfirmDisposition = null;
+const _CONFIRM_DISPO_CONFIG = {
+  not_interested: { icon: '🚫', title: 'Not Interested',             msg: 'This number will be permanently removed from the dialer and never called again.',           btn: 'Yes, Mark Not Interested', color: '#dc2626' },
+  discard:        { icon: '🗑️', title: 'Remove Lead (Not Eligible)', msg: 'This lead will be permanently discarded. It cannot be undone.',                              btn: 'Yes, Remove Lead',         color: '#7c3aed' },
+  dnd:            { icon: '🔕', title: 'Add to DND List',            msg: 'This number will be permanently added to Do Not Disturb. We will never contact them again.', btn: 'Yes, Add to DND',          color: '#b91c1c' }
+};
+
 function submitDisposition(disposition) {
   if (disposition === 'followup')   { showFollowupModal();   return; }
   if (disposition === 'interested') { showInterestedModal(); return; }
+  if (_CONFIRM_DISPO_CONFIG[disposition]) { showConfirmDispositionModal(disposition); return; }
   document.getElementById('dispositionPanel').style.display = 'none';
   socket.emit('agent-disposition', { agentId, numberId: currentNumberId, disposition });
+  currentNumberId = null;
+}
+
+function showConfirmDispositionModal(disposition) {
+  const c = _CONFIRM_DISPO_CONFIG[disposition];
+  if (!c) return;
+  _pendingConfirmDisposition = disposition;
+  document.getElementById('confirmDispositionIcon').textContent  = c.icon;
+  document.getElementById('confirmDispositionTitle').textContent = c.title;
+  document.getElementById('confirmDispositionMsg').textContent   = c.msg;
+  const btn = document.getElementById('confirmDispositionBtn');
+  btn.textContent = c.btn;
+  btn.style.background = c.color;
+  document.getElementById('confirmDispositionModal').classList.add('active');
+}
+function closeConfirmDispositionModal() {
+  document.getElementById('confirmDispositionModal').classList.remove('active');
+  _pendingConfirmDisposition = null;
+}
+function confirmDispositionAction() {
+  const disp = _pendingConfirmDisposition;
+  if (!disp) return;
+  closeConfirmDispositionModal();
+  document.getElementById('dispositionPanel').style.display = 'none';
+  socket.emit('agent-disposition', { agentId, numberId: currentNumberId, disposition: disp });
   currentNumberId = null;
 }
 
