@@ -41,10 +41,23 @@
   .newdoc-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
   .newdoc-row input[type=text]{flex:1;min-width:140px;padding:8px 11px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px}
 </style>
+<style id="rl-form-logo">
+.form-header-logo {
+  display: block;
+  height: 44px;
+  width: auto;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  filter: drop-shadow(0 2px 14px rgba(139,92,246,.55)) brightness(1.06);
+  position: relative; z-index: 1;
+}
+@media(max-width:600px){ .form-header-logo{ height:36px; } }
+</style>
 </head>
 <body>
 <div class="wrap">
   <div class="card head">
+    <img src="/logo-new.jpg" alt="Ruralift" class="form-header-logo" style="margin-bottom:.6rem">
     <h1 id="hdrName">Edit Lead</h1>
     <div class="pills" id="hdrPills"></div>
   </div>
