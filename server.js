@@ -2364,7 +2364,8 @@ app.get('/api/admin/completed', (req, res) => {
       shareToken: n.shareToken || null,
       docCount: (n.shareDocs || []).length,
       formType: (n.form && n.form.type) || n.loanType || '',
-      editorKind: ((n.form && n.form.data) || VALID_LOAN_TYPES.includes((n.form && n.form.type) || n.loanType || '')) ? 'form' : 'legacy'
+      editorKind: ((n.form && n.form.data) || VALID_LOAN_TYPES.includes((n.form && n.form.type) || n.loanType || '')) ? 'form' : 'legacy',
+      shareInfoText: n.shareInfoText || ''
     };
   });
   res.json(completed);
@@ -2400,7 +2401,8 @@ app.get('/api/agent/completed/:agentId', (req, res) => {
     shareToken: n.shareToken || null,
     docCount: (n.shareDocs || []).length,
     formType: (n.form && n.form.type) || n.loanType || '',
-    editorKind: ((n.form && n.form.data) || VALID_LOAN_TYPES.includes((n.form && n.form.type) || n.loanType || '')) ? 'form' : 'legacy'
+    editorKind: ((n.form && n.form.data) || VALID_LOAN_TYPES.includes((n.form && n.form.type) || n.loanType || '')) ? 'form' : 'legacy',
+    shareInfoText: n.shareInfoText || ''
   }));
   res.json(completed);
 });
