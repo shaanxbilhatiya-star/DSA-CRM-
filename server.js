@@ -14,80 +14,9 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const zlib = require('zlib');
-const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middleware');
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
-
-// ─── Softphone reverse proxy ────────────────────────────────────────────────
-// kenyavoice.rpdigitalphone.com sends X-Frame-Options/CSP headers that block
-// being loaded inside ANY iframe on ANY site — that's their server setting,
-// not something fixable from our page. Proxying it through our own backend
-// makes the browser see it as same-origin content (served from our own
-// domain under /phone-proxy/...), so those framing headers never apply, and
-// we can safely strip them from the proxied response as a second safety net.
-// `ws: true` + the server.on('upgrade', ...) hook below also relay the
-// softphone's WebSocket (SIP registration) connection through the same path.
-//
-// The Browser-Phone app auto-opens its "Account" settings popup on load
-// whenever no SIP account is saved yet. We inject a tiny script into the
-// proxied HTML that watches for that popup and clicks its own Cancel/close
-// control as soon as it appears, so agents never see it.
-const ACCOUNT_POPUP_DISMISS_SCRIPT = `
-<script>
-(function () {
-  function tryDismiss() {
-    document.querySelectorAll('div, section').forEach(function (el) {
-      if (el.offsetParent === null) return; // not visible
-      var txt = el.textContent || '';
-      if (txt.indexOf('Account') !== -1 && txt.indexOf('Audio & Video') !== -1) {
-        var btn = Array.prototype.find.call(
-          el.querySelectorAll('button, a, input[type=button]'),
-          function (b) { return /cancel|close/i.test(b.textContent || b.value || ''); }
-        );
-        if (btn) { btn.click(); return; }
-        var closeX = el.querySelector('.close, [aria-label="Close"]');
-        if (closeX) closeX.click();
-      }
-    });
-  }
-  document.addEventListener('DOMContentLoaded', function () {
-    tryDismiss();
-    var mo = new MutationObserver(tryDismiss);
-    mo.observe(document.body, { childList: true, subtree: true });
-    setTimeout(function () { mo.disconnect(); }, 15000);
-  });
-})();
-</script>
-</body>`;
-
-const phoneProxy = createProxyMiddleware({
-  target: 'https://kenyavoice.rpdigitalphone.com',
-  changeOrigin: true,
-  ws: true,
-  pathFilter: '/phone-proxy',
-  pathRewrite: { '^/phone-proxy': '' },
-  selfHandleResponse: true,
-  on: {
-    proxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
-      delete proxyRes.headers['x-frame-options'];
-      delete proxyRes.headers['content-security-policy'];
-      delete proxyRes.headers['content-security-policy-report-only'];
-      var contentType = proxyRes.headers['content-type'] || '';
-      if (contentType.indexOf('text/html') === -1) return responseBuffer;
-      var body = responseBuffer.toString('utf8');
-      if (body.indexOf('</body>') === -1) return body;
-      return body.replace('</body>', ACCOUNT_POPUP_DISMISS_SCRIPT);
-    })
-  }
-});
-app.use(phoneProxy);
-server.on('upgrade', (req, socket, head) => {
-  if (req.url && req.url.startsWith('/phone-proxy')) {
-    phoneProxy.upgrade(req, socket, head);
-  }
-});
 
 
 // Map agentId -> socket.id so we can force-disconnect a specific agent server-side

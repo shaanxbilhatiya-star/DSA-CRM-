@@ -511,13 +511,6 @@
   .rank-1-avatar { border-color: #f59e0b !important; box-shadow: 0 0 12px rgba(245,158,11,.4); }
 
 
-  /* ── Floating softphone launcher: opens the phone as a real popup window,
-     since the phone site blocks iframe embedding via X-Frame-Options/CSP ── */
-  #phoneFab { position:fixed; bottom:24px; right:24px; z-index:1200; width:56px; height:56px; border-radius:50%; background:linear-gradient(135deg,#4c1d95,#6d28d9); color:#fff; border:none; box-shadow:0 6px 20px rgba(76,29,149,.4); font-size:24px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
-  #phoneFab:hover { transform:scale(1.06); }
-  #phoneFab.needs-tap { animation:phoneFabPulse 1s ease-in-out infinite; }
-  @keyframes phoneFabPulse { 0%,100%{box-shadow:0 6px 20px rgba(76,29,149,.4);} 50%{box-shadow:0 6px 32px rgba(220,38,38,.75);} }
-
   /* ── Script: right-side dock that PUSHES content (no overlap with Current Lead) ── */
   #scriptPopupModal { position:fixed !important; inset:0 !important; background:transparent !important; justify-content:flex-end !important; align-items:stretch !important; transition:none !important; display:flex !important; pointer-events:none !important; opacity:1 !important; z-index:900; }
   #scriptPopupModal > .modal-box { pointer-events:all; width:400px !important; max-width:38vw !important; height:100vh !important; max-height:100vh !important; border-radius:18px 0 0 18px !important; border-left:2px solid var(--border); box-shadow:-8px 0 40px rgba(0,0,0,.22); transform:translateX(110%); transition:transform .28s cubic-bezier(.4,0,.2,1) !important; padding:22px 24px !important; display:flex !important; flex-direction:column !important; }
@@ -533,9 +526,6 @@
 </style>
 </head>
 <body>
-
-<!-- ── FLOATING SOFTPHONE LAUNCHER (opens as a popup window, not an iframe) ── -->
-<button id="phoneFab" onclick="openPhoneFloat()" title="Open Softphone">☎</button>
 
 <!-- ── HEADER ─────────────────────────────────────────────── -->
 <header>
@@ -2480,73 +2470,12 @@ function showScriptPopup() {
   document.body.classList.add('script-dock-open');
   setTimeout(function() { el.scrollTop = 0; if (window.updateScriptScrollBtns) window.updateScriptScrollBtns(); }, 50);
   scriptPopupShown = true;
-  tryAutoOpenPhoneFloat();
-}
-
-/* ── Floating softphone: real Picture-in-Picture window (Chrome/Edge) ──
-   The phone site now loads through OUR backend's /phone-proxy route (see
-   server.js), which relays it same-origin and strips its X-Frame-Options/CSP
-   headers — so it's safe to iframe. That iframe is placed inside a Document
-   Picture-in-Picture window, which the OS keeps floating ABOVE every other
-   window/app (true always-on-top), unlike a normal popup. Browsers that
-   don't support PiP (Firefox, Safari) fall back to a normal popup window. */
-var PHONE_PROXY_URL = '/phone-proxy/Browser-Phone/Phone/indexNew.php';
-var phoneWin = null;       // fallback popup reference
-var pipWindow = null;      // Document PiP window reference
-
-function tryAutoOpenPhoneFloat() {
-  // Browsers require a real click to open a popup or a PiP window — this call
-  // has no click behind it (it fires when a new lead arrives over the socket),
-  // so browsers will silently block it most of the time. We still attempt it
-  // (works if the browser is lenient / activation carried over), and if it's
-  // blocked we just pulse the ☎ button so the agent knows to tap it once.
-  try {
-    if (phoneWin && !phoneWin.closed) { phoneWin.focus(); return; }
-    openPhoneFloat();
-    setTimeout(function () {
-      var opened = (phoneWin && !phoneWin.closed);
-      document.getElementById('phoneFab').classList.toggle('needs-tap', !opened);
-    }, 400);
-  } catch (e) {
-    document.getElementById('phoneFab').classList.add('needs-tap');
-  }
-}
-
-function openPhoneFloat() {
-  document.getElementById('phoneFab').classList.remove('needs-tap');
-  openPhonePopupFallback();
-}
-
-function openPhonePopupFallback() {
-  var w = 360, h = 600;
-  var left = window.screenX + window.outerWidth - w - 20;
-  var top = window.screenY + 80;
-  if (phoneWin && !phoneWin.closed) {
-    phoneWin.focus();
-    return;
-  }
-  phoneWin = window.open(
-    PHONE_PROXY_URL,
-    'ruraliftSoftphone',
-    'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top +
-    ',toolbar=no,location=no,menubar=no,status=no,resizable=yes,scrollbars=yes'
-  );
-  if (!phoneWin || phoneWin.closed || typeof phoneWin.closed === 'undefined') {
-    alert('Popup blocked. Please allow popups for this site (icon in the address bar) and click the softphone button again.');
-  }
-}
-
-function closePhoneFloat() {
-  try { if (pipWindow && !pipWindow.closed) pipWindow.close(); } catch (e) {}
-  try { if (phoneWin && !phoneWin.closed) phoneWin.close(); } catch (e) {}
-  pipWindow = null; phoneWin = null;
 }
 
 function closeScriptPopup() {
   document.getElementById('scriptPopupModal').classList.remove('active');
   document.body.classList.remove('script-dock-open');
   scriptPopupShown = false;
-  closePhoneFloat();
   // Reveal disposition panel now that agent has read the script
   if (currentNumberId) {
     document.getElementById('dispositionPanel').style.display = 'block';
