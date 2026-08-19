@@ -81,9 +81,10 @@ const NUMBER_SHEETS_DIR  = path.join(UPLOADS_DIR, 'number_sheets');
 // Exploded (per-document) files for the shareable lead pages live here. Each lead
 // gets its own sub-folder keyed by an unguessable share token.
 const SHARES_DIR         = path.join(LEAD_DOCS_DIR, 'shares');
+const REPORTS_DIR        = path.join(DATA_ROOT, 'reports');
 
 // Ensure directories exist
-[path.dirname(DATA_FILE), UPLOADS_DIR, LEAD_DOCS_DIR, SHARES_DIR, AGENT_PHOTOS_DIR, SCRIPTS_DIR, BACKUPS_DIR, NUMBER_SHEETS_DIR].forEach(ensureDir);
+[path.dirname(DATA_FILE), UPLOADS_DIR, LEAD_DOCS_DIR, SHARES_DIR, AGENT_PHOTOS_DIR, SCRIPTS_DIR, BACKUPS_DIR, NUMBER_SHEETS_DIR, REPORTS_DIR].forEach(ensureDir);
 
 // ─── Minimal, dependency-free ZIP reader ──────────────────────────────────────
 // The network is locked down (no npm installs), so we parse ZIP archives with
@@ -4158,6 +4159,186 @@ app.get('/api/tts', (req, res) => {
   proxyReq.on('error', () => { try { res.status(502).end(); } catch(e){} });
   proxyReq.setTimeout(8000, () => { proxyReq.destroy(); try { res.status(504).end(); } catch(e){} });
 });
+
+
+// ─── Daily XLS Disposition Reports (per Agent) ────────────────────────────────
+// Auto-generates at 5:45 PM IST, resets (cleanup) at 2:00 AM IST.
+// Reports cover calls dialed between 10:00 AM and 5:43 PM IST.
+
+let lastReportGenDate = null;
+let lastReportCleanDate = null;
+
+function generateDailyReports() {
+  const now = new Date();
+  const istNow = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+  const istTodayStr = istNow.toISOString().slice(0, 10);
+
+  // Time window: 10:00 AM - 5:43 PM IST today
+  const startIST = new Date(istTodayStr + 'T10:00:00.000+05:30');
+  const endIST = new Date(istTodayStr + 'T17:43:00.000+05:30');
+
+  // Filter dialed log for today between 10:00 AM and 5:43 PM IST
+  const filteredLogs = (appState.dialedLog || []).filter(entry => {
+    if (!entry.timestamp) return false;
+    const entryDate = new Date(entry.timestamp);
+    return entryDate >= startIST && entryDate <= endIST;
+  });
+
+  // Group by agentId
+  const agentGroups = {};
+  filteredLogs.forEach(entry => {
+    const aid = entry.agentId || 'unknown';
+    if (!agentGroups[aid]) agentGroups[aid] = [];
+    agentGroups[aid].push(entry);
+  });
+
+  const generatedFiles = [];
+
+  Object.keys(agentGroups).forEach(agentId => {
+    const entries = agentGroups[agentId];
+    if (entries.length === 0) return;
+
+    // Determine agent name and EID
+    let agentName = entries[0].agentName || 'Unknown';
+    let eid = agentId.replace('emp_', '');
+    if (appState.agents && appState.agents[agentId]) {
+      agentName = appState.agents[agentId].name || agentName;
+      eid = appState.agents[agentId].employeeId || eid;
+    }
+
+    // Build rows: Phone, Lead Name, Disposition, Time of Call
+    const rows = [['Phone', 'Lead Name', 'Disposition', 'Time of Call']];
+    entries.forEach(entry => {
+      const phone = entry.phone || '';
+      // Look up lead name from appState.numbers
+      let leadName = '';
+      if (appState.numbers && Array.isArray(appState.numbers)) {
+        const lead = appState.numbers.find(n => n.phone === phone);
+        if (lead) leadName = lead.name || '';
+      }
+      const disposition = entry.disposition || 'Pending';
+      // Format timestamp in IST
+      let timeStr = '';
+      if (entry.timestamp) {
+        const t = new Date(entry.timestamp);
+        const istTime = new Date(t.getTime() + (5.5 * 60 * 60 * 1000));
+        timeStr = istTime.toISOString().slice(11, 19) + ' IST';
+      }
+      rows.push([phone, leadName, disposition, timeStr]);
+    });
+
+    // Create XLS workbook
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Disposition Report');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    // Sanitize agent name for filename (remove special chars)
+    const safeName = agentName.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_+/g, '_');
+    const filename = istTodayStr + '_' + safeName + '_' + eid + '.xlsx';
+    const filePath = path.join(REPORTS_DIR, filename);
+
+    fs.writeFileSync(filePath, buf);
+    generatedFiles.push({ filename, agentName, eid, date: istTodayStr });
+  });
+
+  lastReportGenDate = istTodayStr;
+  console.log('[DailyReports] Generated ' + generatedFiles.length + ' report(s) for ' + istTodayStr);
+  return generatedFiles;
+}
+
+function cleanupReports() {
+  try {
+    const files = fs.readdirSync(REPORTS_DIR);
+    files.forEach(file => {
+      const filePath = path.join(REPORTS_DIR, file);
+      try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
+    });
+    const now = new Date();
+    const istNow = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    lastReportCleanDate = istNow.toISOString().slice(0, 10);
+    console.log('[DailyReports] Cleanup complete - all reports removed');
+  } catch (e) {
+    console.error('[DailyReports] Cleanup error:', e.message);
+  }
+}
+
+// Scheduled: generate reports at 5:45 PM IST (check every 60s)
+setInterval(() => {
+  try {
+    const now = new Date();
+    const istNow = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    const istTodayStr = istNow.toISOString().slice(0, 10);
+    const hours = istNow.getUTCHours();
+    const minutes = istNow.getUTCMinutes();
+    // 5:45 PM IST = 17:45
+    if (hours === 17 && minutes === 45 && lastReportGenDate !== istTodayStr) {
+      generateDailyReports();
+    }
+  } catch (e) { console.error('[DailyReports] Scheduled generation error:', e.message); }
+}, 60000);
+
+// Scheduled: cleanup reports at 2:00 AM IST (check every 60s)
+setInterval(() => {
+  try {
+    const now = new Date();
+    const istNow = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    const istTodayStr = istNow.toISOString().slice(0, 10);
+    const hours = istNow.getUTCHours();
+    const minutes = istNow.getUTCMinutes();
+    // 2:00 AM IST
+    if (hours === 2 && minutes === 0 && lastReportCleanDate !== istTodayStr) {
+      cleanupReports();
+    }
+  } catch (e) { console.error('[DailyReports] Scheduled cleanup error:', e.message); }
+}, 60000);
+
+// API: List available daily reports
+app.get('/api/admin/daily-reports', (req, res) => {
+  try {
+    const files = fs.readdirSync(REPORTS_DIR).filter(f => f.endsWith('.xlsx'));
+    const reports = files.map(filename => {
+      const stats = fs.statSync(path.join(REPORTS_DIR, filename));
+      // Parse filename: YYYY-MM-DD_AgentName_EID.xlsx (date has hyphens, not underscores)
+      const parts = filename.replace('.xlsx', '').split('_');
+      // parts[0] = 'YYYY-MM-DD', parts[1..n-1] = agent name parts, parts[n] = EID
+      const date = parts.length >= 3 ? parts[0] : '';
+      const eid = parts.length >= 3 ? parts[parts.length - 1] : '';
+      const agentName = parts.length >= 3 ? parts.slice(1, parts.length - 1).join(' ') : filename;
+      return { filename, date, agentName, eid, size: stats.size };
+    });
+    res.json({ reports });
+  } catch (e) {
+    res.json({ reports: [] });
+  }
+});
+
+// API: Download a specific report file
+app.get('/api/admin/daily-reports/download/:filename', (req, res) => {
+  const filename = req.params.filename;
+  // Sanitize to prevent path traversal
+  if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+  const filePath = path.join(REPORTS_DIR, filename);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'Report not found' });
+  }
+  res.setHeader('Content-Disposition', 'attachment; filename=' + encodeURIComponent(filename));
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.download(filePath, filename);
+});
+
+// API: Manually trigger report generation
+app.post('/api/admin/daily-reports/generate', (req, res) => {
+  try {
+    const generated = generateDailyReports();
+    res.json({ success: true, generated });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to generate reports: ' + e.message });
+  }
+});
+
 
 // ─── Page Routes ──────────────────────────────────────────────────────────────
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/admin/index.html')));
