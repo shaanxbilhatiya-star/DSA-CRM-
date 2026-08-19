@@ -343,6 +343,79 @@
     .login-card{padding:28px 24px}
   }
 
+  /* ── Responsive: Split-screen / half-width (max-width: 900px) ── */
+  @media(max-width:900px){
+    .main{padding:16px 12px}
+    header{padding:10px 14px;flex-wrap:wrap;justify-content:center;gap:6px}
+    .header-left{min-width:auto}
+    .header-right{gap:8px;flex-wrap:wrap;justify-content:center}
+    .header-center{gap:3px}
+    .logo-img{height:40px;padding:4px 8px}
+    .header-brand{font-size:13px}
+    .today-badge{font-size:11px;padding:3px 8px}
+    .badge{font-size:10px;padding:2px 8px}
+    .agent-chip{padding:4px 8px}
+    .agent-chip .name{font-size:12px}
+    .agent-chip .eid{font-size:10px}
+
+    .grid-2{grid-template-columns:1fr;gap:14px}
+    .add-lead-form{grid-template-columns:1fr}
+    .stats-grid{grid-template-columns:repeat(auto-fit, minmax(100px, 1fr));gap:10px}
+    .stat-card{padding:12px 14px}
+    .stat-value{font-size:24px}
+    .stat-label{font-size:10px}
+
+    .phone-number{font-size:26px;letter-spacing:1.5px}
+    .lead-name{font-size:15px}
+    .number-block{padding:14px 12px}
+
+    .panel-header{padding:12px 14px;flex-wrap:wrap;gap:8px}
+    .panel-header h2{font-size:11px}
+    .panel-body{padding:14px}
+
+    .dispo-grid{grid-template-columns:1fr;gap:8px}
+    .dispo-btn{padding:12px 10px;font-size:13px}
+    .dispo-wrap{padding:0 14px 16px}
+    .dispo-stats-grid{grid-template-columns:repeat(auto-fit, minmax(90px, 1fr));gap:8px}
+    .dispo-stat-val{font-size:20px}
+    .dispo-stat-card.dispo-stat-total .dispo-stat-val{font-size:26px}
+
+    .btn-row{padding:0 14px 16px}
+    .action-btn{font-size:14px;padding:12px}
+
+    .leads-table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .leads-table th,.leads-table td{white-space:nowrap;padding:8px 10px;font-size:12px}
+
+    .leaderboard-panel{border-radius:14px}
+    .leaderboard-header{padding:14px 16px;gap:8px}
+    .leaderboard-header h2{font-size:16px}
+    .leaderboard-body{padding:14px 14px 18px}
+    .face-bar{gap:14px;padding:16px 0 14px}
+    .face-ring.r1{width:72px;height:72px}
+    .face-ring.r1 .face-letter{font-size:26px}
+    .face-ring.r2{width:58px;height:58px}
+    .face-ring.r2 .face-letter{font-size:20px}
+    .face-ring.r3{width:48px;height:48px}
+    .face-ring.r3 .face-letter{font-size:18px}
+    .face-name{font-size:11px;max-width:72px}
+    .face-score{font-size:11px}
+    .lb-period-tabs{flex-wrap:wrap;gap:3px}
+    .lb-period-tab{padding:5px 10px;font-size:11px}
+    .lb-row{padding:8px 10px;gap:8px}
+    .lb-row-avatar{width:40px;height:40px;font-size:13px}
+    .lb-row-name{font-size:12px}
+    .lb-row-score{font-size:14px}
+
+    .stats-panel-tabs{flex-wrap:wrap;gap:3px}
+    .stats-tab{padding:4px 10px;font-size:11px}
+
+    .modal-box{padding:22px 16px;max-width:95vw}
+    .reminder-popup{padding:22px 16px;width:95%}
+    .followup-due-popup{width:95%;padding:22px 16px}
+
+    #toast{right:12px;left:12px;bottom:16px;font-size:13px;padding:10px 14px}
+  }
+
   /* ── Responsive: Phone (max-width: 767px) ── */
   @media(max-width:767px){
     .main{padding:12px 10px}
@@ -529,6 +602,9 @@
     #scriptPopupModal > .modal-box { width:340px !important; max-width:70vw !important; }
     body.script-dock-open header, body.script-dock-open #connBanner,
     body.script-dock-open #loginScreen, body.script-dock-open #dialerScreen { margin-right:0; }
+  }
+  @media (max-width:900px) {
+    #scriptPopupModal > .modal-box { width:280px !important; max-width:80vw !important; padding:16px 14px !important; }
   }
   @media (max-width:768px) { #scriptPopupModal > .modal-box { width:88vw !important; max-width:88vw !important; } }
 </style>
