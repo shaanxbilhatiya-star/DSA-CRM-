@@ -1462,6 +1462,21 @@ header::after {
   box-shadow: 0 4px 28px rgba(76,29,149,.5) !important;
 }
 </style>
+
+<style id="rl-gap-fix">
+/* FIX: The 44px padding-top on each mode screen exposed the body bg as a white gap.
+   Fill that gap area with the same dark colour as the header. */
+#agentModeScreen {
+  background: linear-gradient(to bottom,
+    #0d071e 0px, #0d071e 44px,
+    transparent 44px) !important;
+}
+#tlModeScreen {
+  background: linear-gradient(to bottom,
+    #050310 0px, #050310 44px,
+    transparent 44px) !important;
+}
+</style>
 </head>
 <body style="margin:0;padding:0;">
 
