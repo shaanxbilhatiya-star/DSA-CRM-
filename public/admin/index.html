@@ -391,6 +391,61 @@
   .btn-remove-tl:hover { background:rgba(76,175,80,.2); }
 </style>
 
+<!-- ═══════════════════════════════════════════════════════════════════
+     RURALIFT PREMIUM UI REFRESH — brand-aligned violet glow-up
+     Additive override layer. No HTML/JS changes. Matches Ruralift logo.
+     ═══════════════════════════════════════════════════════════════════ -->
+<style>
+  :root{
+    --accent:#7c3aed; --accent2:#6d28d9; --accent3:#a78bfa;
+    --accent-glow:rgba(124,58,237,.18); --brand-navy:#1e1b4b;
+    --grad-brand:linear-gradient(135deg,#6d28d9 0%,#7c3aed 55%,#8b5cf6 100%);
+    --grad-brand-deep:linear-gradient(135deg,#4c1d95 0%,#6d28d9 55%,#7c3aed 100%);
+    --shadow-sm:0 1px 3px rgba(76,29,149,.08),0 1px 2px rgba(76,29,149,.06);
+    --shadow-md:0 6px 22px rgba(76,29,149,.12),0 2px 6px rgba(76,29,149,.07);
+    --shadow-lg:0 14px 40px rgba(76,29,149,.18),0 4px 12px rgba(76,29,149,.10);
+    --ring:0 0 0 4px rgba(124,58,237,.14);
+  }
+  /* Ambient lavender canvas */
+  body{
+    background:linear-gradient(135deg,#f5f2ff 0%,#faf9ff 42%,#eef1ff 100%) !important;
+    background-attachment:fixed !important;
+  }
+  /* Header — frosted glass with brand glow */
+  header{
+    background:linear-gradient(120deg,rgba(255,255,255,.9),rgba(245,240,255,.9)) !important;
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    border-bottom:1px solid rgba(124,58,237,.14) !important;
+    box-shadow:0 6px 26px rgba(76,29,149,.10),0 1px 0 rgba(124,58,237,.08) !important;
+  }
+  /* Logo — refined frame */
+  .logo-img{
+    border:1.5px solid rgba(124,58,237,.35) !important; border-radius:14px !important;
+    background:linear-gradient(135deg,#fff,#f6f2ff) !important;
+    box-shadow:0 8px 24px rgba(124,58,237,.22),0 1px 4px rgba(0,0,0,.05) !important;
+  }
+  .logo h1{ color:#6d28d9 !important; font-weight:700 !important; letter-spacing:-.4px !important; }
+  .badge{ background:var(--grad-brand) !important; color:#fff !important;
+    box-shadow:0 3px 12px rgba(124,58,237,.38) !important; }
+  /* Panels & cards — soft depth, rounded */
+  .panel{ border-radius:16px !important; border:1px solid rgba(124,58,237,.12) !important;
+    box-shadow:var(--shadow-md) !important; }
+  .panel-header{ background:linear-gradient(90deg,#faf7ff,#f3eefc) !important; }
+  .stat-card{ border-radius:16px !important; border:1px solid rgba(124,58,237,.12) !important;
+    box-shadow:var(--shadow-md) !important; transition:transform .22s ease,box-shadow .22s ease !important; }
+  .stat-card:hover{ transform:translateY(-3px) !important; box-shadow:var(--shadow-lg) !important; }
+  .login-card{ border-radius:20px !important; border:1px solid rgba(124,58,237,.12) !important;
+    box-shadow:var(--shadow-lg) !important; }
+  /* Inputs — brand focus ring */
+  input:focus,select:focus,textarea:focus{ border-color:var(--accent) !important; box-shadow:var(--ring) !important; }
+  /* Tables — subtle brand sheen */
+  .agents-table th,.leads-table th{ background:linear-gradient(90deg,#f5f2ff,#faf7ff) !important; color:#6d28d9 !important; }
+  .agents-table tr:hover td,.leads-table tr:hover td{ background:rgba(124,58,237,.05) !important; }
+  /* Leaderboard header — deeper brand gradient */
+  .leaderboard-header{ background:linear-gradient(120deg,#4c1d95 0%,#6d28d9 45%,#7c3aed 100%) !important;
+    box-shadow:inset 0 -1px 0 rgba(255,255,255,.08) !important; }
+</style>
+
 </head>
 <body>
 <!-- Admin Password Gate -->

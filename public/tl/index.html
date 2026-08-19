@@ -981,6 +981,97 @@
   #globalToast.success { border-color: #7c3aed; }
   #globalToast.error { border-color: #F44336; }
 </style>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     RURALIFT PREMIUM UI REFRESH — brand-aligned violet glow-up (DUAL MODE)
+     Light overrides scoped to #agentModeScreen, dark to #tlModeScreen.
+     Additive layer. No HTML/JS changes. Matches Ruralift logo.
+     ═══════════════════════════════════════════════════════════════════ -->
+<style>
+  :root{
+    --accent:#7c3aed; --accent2:#6d28d9; --accent3:#a78bfa;
+    --grad-brand:linear-gradient(135deg,#6d28d9 0%,#7c3aed 55%,#8b5cf6 100%);
+    --grad-brand-deep:linear-gradient(135deg,#4c1d95 0%,#6d28d9 55%,#7c3aed 100%);
+    --shadow-md:0 6px 22px rgba(76,29,149,.12),0 2px 6px rgba(76,29,149,.07);
+    --shadow-lg:0 14px 40px rgba(76,29,149,.18),0 4px 12px rgba(76,29,149,.10);
+    --ring:0 0 0 4px rgba(124,58,237,.14);
+  }
+
+  /* ── Mode toggle bar — premium brand gradient ── */
+  #modeToggleBar{ background:linear-gradient(120deg,#1a0a2e 0%,#4a1d96 55%,#6d28d9 100%) !important;
+    box-shadow:0 4px 18px rgba(0,0,0,.5) !important; }
+  .mode-toggle-btn.active{ background:var(--grad-brand) !important;
+    box-shadow:0 3px 12px rgba(124,58,237,.55) !important; }
+
+  /* ── Shared login screen (light) ── */
+  .login-card{ border-radius:20px !important; border:1px solid rgba(124,58,237,.12) !important;
+    box-shadow:var(--shadow-lg) !important; }
+  .btn-login{ background:var(--grad-brand) !important;
+    box-shadow:0 8px 20px rgba(124,58,237,.34),inset 0 1px 0 rgba(255,255,255,.18) !important; letter-spacing:.2px !important; }
+  .btn-login:hover{ background:var(--grad-brand-deep) !important; transform:translateY(-2px) !important;
+    box-shadow:0 12px 28px rgba(124,58,237,.44) !important; }
+
+  /* ════════════ AGENT MODE (LIGHT) ════════════ */
+  #agentModeScreen{
+    min-height:100vh;
+    background:linear-gradient(135deg,#f5f2ff 0%,#faf9ff 42%,#eef1ff 100%) !important;
+  }
+  #agentModeScreen header{
+    background:linear-gradient(120deg,rgba(255,255,255,.9),rgba(245,240,255,.9)) !important;
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    border-bottom:1px solid rgba(124,58,237,.14) !important;
+    box-shadow:0 6px 26px rgba(76,29,149,.10),0 1px 0 rgba(124,58,237,.08) !important;
+  }
+  #agentModeScreen .logo-img{
+    border:1.5px solid rgba(124,58,237,.35) !important; border-radius:14px !important;
+    background:linear-gradient(135deg,#fff,#f6f2ff) !important;
+    box-shadow:0 8px 24px rgba(124,58,237,.22),0 1px 4px rgba(0,0,0,.05) !important;
+  }
+  #agentModeScreen .header-brand{ color:#6d28d9 !important; font-weight:700 !important; }
+  #agentModeScreen .badge{ background:var(--grad-brand) !important; color:#fff !important;
+    box-shadow:0 3px 12px rgba(124,58,237,.38) !important; }
+  #agentModeScreen #btnStart{ background:var(--grad-brand) !important;
+    box-shadow:0 8px 20px rgba(124,58,237,.34),inset 0 1px 0 rgba(255,255,255,.18) !important; }
+  #agentModeScreen #btnStart:hover{ background:var(--grad-brand-deep) !important; transform:translateY(-2px) !important; }
+  #agentModeScreen .panel{ border-radius:16px !important; border:1px solid rgba(124,58,237,.12) !important; box-shadow:var(--shadow-md) !important; }
+  #agentModeScreen .stat-card{ border-radius:16px !important; border:1px solid rgba(124,58,237,.12) !important;
+    box-shadow:var(--shadow-md) !important; transition:transform .22s ease,box-shadow .22s ease !important; }
+  #agentModeScreen .stat-card:hover{ transform:translateY(-3px) !important; box-shadow:var(--shadow-lg) !important; }
+  #agentModeScreen .dialer-panel{ border:2px solid rgba(124,58,237,.45) !important; box-shadow:0 12px 34px rgba(124,58,237,.16) !important; }
+  #agentModeScreen .phone-number{ color:#6d28d9 !important; }
+  #agentModeScreen input:focus,#agentModeScreen select:focus,#agentModeScreen textarea:focus{ border-color:var(--accent) !important; box-shadow:var(--ring) !important; }
+  #agentModeScreen .leaderboard-header{ background:linear-gradient(120deg,#4c1d95 0%,#6d28d9 45%,#7c3aed 100%) !important; }
+
+  /* ════════════ TL MODE (DARK) ════════════ */
+  #tlModeScreen{
+    --accent:#8b5cf6; --accent2:#7c3aed; --accent3:#a78bfa;
+    min-height:100vh;
+    background:
+      radial-gradient(1200px 420px at 12% -6%, rgba(109,40,217,.22), transparent 60%),
+      radial-gradient(1000px 520px at 100% 0%, rgba(124,58,237,.14), transparent 55%),
+      #080610 !important;
+  }
+  #tlModeScreen header{
+    background:linear-gradient(120deg,#140d29 0%,#0d0a1a 60%,#0a0818 100%) !important;
+    border-bottom:1px solid rgba(139,92,246,.22) !important;
+    box-shadow:0 6px 30px rgba(0,0,0,.55),0 1px 0 rgba(139,92,246,.15) !important;
+  }
+  #tlModeScreen .logo-img{
+    border:1.5px solid rgba(139,92,246,.45) !important; border-radius:14px !important;
+    background:linear-gradient(135deg,rgba(139,92,246,.10),rgba(255,255,255,.02)) !important;
+    box-shadow:0 8px 26px rgba(124,58,237,.42) !important;
+  }
+  #tlModeScreen .logo h1{ color:#c4b5fd !important; }
+  #tlModeScreen .badge{ background:linear-gradient(135deg,#7c3aed,#9333ea) !important; box-shadow:0 3px 14px rgba(124,58,237,.5) !important; }
+  #tlModeScreen .panel{ border-radius:16px !important; border:1px solid rgba(139,92,246,.16) !important;
+    background:linear-gradient(180deg,#12102a,#100f1e) !important; box-shadow:0 12px 34px rgba(0,0,0,.5),inset 0 1px 0 rgba(139,92,246,.05) !important; }
+  #tlModeScreen .panel-header{ background:linear-gradient(90deg,#17162a,#1b1836) !important; }
+  #tlModeScreen .stat-card{ border-radius:16px !important; border:1px solid rgba(139,92,246,.16) !important;
+    background:linear-gradient(180deg,#161334,#100f1e) !important; box-shadow:0 8px 28px rgba(0,0,0,.5) !important; transition:transform .22s ease,box-shadow .22s ease !important; }
+  #tlModeScreen .stat-card:hover{ transform:translateY(-3px) !important; box-shadow:0 14px 40px rgba(124,58,237,.3) !important; }
+  #tlModeScreen .agents-table th,#tlModeScreen .leads-table th{ background:linear-gradient(90deg,#17142e,#1b1738) !important; color:#c4b5fd !important; }
+  #tlModeScreen input:focus,#tlModeScreen select:focus,#tlModeScreen textarea:focus{ border-color:var(--accent) !important; box-shadow:0 0 0 4px rgba(139,92,246,.18) !important; }
+</style>
 </head>
 <body style="margin:0;padding:0;">
 
