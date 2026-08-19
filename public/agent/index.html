@@ -2501,11 +2501,10 @@ function tryAutoOpenPhoneFloat() {
   // (works if the browser is lenient / activation carried over), and if it's
   // blocked we just pulse the ☎ button so the agent knows to tap it once.
   try {
-    if (window.documentPictureInPicture && pipWindow && !pipWindow.closed) { pipWindow.focus(); return; }
     if (phoneWin && !phoneWin.closed) { phoneWin.focus(); return; }
     openPhoneFloat();
     setTimeout(function () {
-      var opened = (pipWindow && !pipWindow.closed) || (phoneWin && !phoneWin.closed);
+      var opened = (phoneWin && !phoneWin.closed);
       document.getElementById('phoneFab').classList.toggle('needs-tap', !opened);
     }, 400);
   } catch (e) {
@@ -2515,45 +2514,7 @@ function tryAutoOpenPhoneFloat() {
 
 function openPhoneFloat() {
   document.getElementById('phoneFab').classList.remove('needs-tap');
-  if (window.documentPictureInPicture) {
-    openPhonePiP();
-  } else {
-    openPhonePopupFallback();
-  }
-}
-
-async function openPhonePiP() {
-  if (pipWindow && !pipWindow.closed) {
-    pipWindow.focus();
-    return;
-  }
-  try {
-    var w = 340, h = 560;
-    try {
-      var geom = JSON.parse(localStorage.getItem('phonePipGeom') || 'null');
-      if (geom) { w = geom.w || w; h = geom.h || h; }
-    } catch (e) {}
-
-    pipWindow = await window.documentPictureInPicture.requestWindow({ width: w, height: h });
-    pipWindow.document.title = 'Ruralift Softphone';
-    var style = pipWindow.document.createElement('style');
-    style.textContent = 'html,body{margin:0;padding:0;height:100%;background:#fff;} iframe{width:100%;height:100%;border:0;display:block;}';
-    pipWindow.document.head.appendChild(style);
-    var frame = pipWindow.document.createElement('iframe');
-    frame.src = PHONE_PROXY_URL;
-    frame.setAttribute('allow', 'microphone; autoplay');
-    pipWindow.document.body.appendChild(frame);
-
-    pipWindow.addEventListener('pagehide', function () {
-      try {
-        localStorage.setItem('phonePipGeom', JSON.stringify({ w: pipWindow.innerWidth, h: pipWindow.innerHeight }));
-      } catch (e) {}
-      pipWindow = null;
-    });
-  } catch (e) {
-    console.error('PiP failed, falling back to popup', e);
-    openPhonePopupFallback();
-  }
+  openPhonePopupFallback();
 }
 
 function openPhonePopupFallback() {
