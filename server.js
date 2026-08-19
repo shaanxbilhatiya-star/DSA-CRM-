@@ -1914,7 +1914,7 @@ app.get('/share/:token', (req, res) => {
   <div class="card head">
     <div class="head-inner">
       <div class="logo-bar">
-        <img src="/logo.jpg" alt="Ruralift">
+        <img src="/logo-new.jpg" alt="Ruralift">
         <span class="brand">Ruralift CRM</span>
       </div>
       <h1>${esc(name)}</h1>
@@ -1940,7 +1940,7 @@ app.get('/share/:token', (req, res) => {
   </div>
 
   <p class="foot">
-    <img src="/logo.jpg" alt="Ruralift">
+    <img src="/logo-new.jpg" alt="Ruralift">
     Secure document link
     <span class="foot-dot">&middot;</span>
     Ruralift CRM
