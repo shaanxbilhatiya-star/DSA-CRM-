@@ -506,7 +506,8 @@ function getNextNumber(agentId) {
   const today = getTodayStr();
   // Collect all DND phones to exclude
   const dndPhones = new Set((appState.dndNumbers || []).map(d => d.phone));
-  const undialed = appState.numbers.find(n => {
+
+  function isEligible(n) {
     if (n.dialedBy || n.assignedTo) return false;
     if (n.disposition === 'discard') return false;
     if (n.disposition === 'not_interested') return false;
@@ -518,7 +519,7 @@ function getNextNumber(agentId) {
       const deadCount = (n.retryCounts && n.retryCounts.dead) || n.retryCount || 0;
       if (deadCount >= 2) return false;
       if (!n.retryAfter) return false;
-      if (n.retryAfter && today < n.retryAfter) return false;
+      if (today < n.retryAfter) return false;
     }
     if (n.disposition === 'followup' && n.followupLockedBy && n.followupLockedBy !== agentId) return false;
     if (n.disposition === 'interested') return false;
@@ -527,12 +528,21 @@ function getNextNumber(agentId) {
       if (dispoCount >= 2) return false;
       if (n.retryAfter && today < n.retryAfter) return false;
     }
+    // Skip retry numbers locked to a different agent
+    if (n.retryLockedBy && n.retryLockedBy !== agentId) return false;
     return true;
-  });
-  if (!undialed) return null;
-  undialed.assignedTo = agentId;
+  }
+
+  // Pass 1: retry numbers locked to THIS agent come first
+  let picked = appState.numbers.find(n => isEligible(n) && n.retryLockedBy === agentId);
+
+  // Pass 2: fresh numbers (no retry lock)
+  if (!picked) picked = appState.numbers.find(n => isEligible(n) && !n.retryLockedBy);
+
+  if (!picked) return null;
+  picked.assignedTo = agentId;
   saveState(appState);
-  return undialed;
+  return picked;
 }
 
 function markDialed(agentId, numberId) {
@@ -590,9 +600,11 @@ function applyDisposition(agentId, numberId, disposition, extra) {
         num.disposition = 'dead';
         num.permanent = true;
         num.retryAfter = null;
+        num.retryLockedBy = null;
       } else {
         num.disposition = 'dead';
         num.retryAfter = getTomorrowStr();
+        num.retryLockedBy = agentId;
       }
       num.dialedBy = agentId;
       num.dialedAt = now;
@@ -610,9 +622,11 @@ function applyDisposition(agentId, numberId, disposition, extra) {
         num.disposition = 'not_received';
         num.permanent = true;
         num.retryAfter = null;
+        num.retryLockedBy = null;
       } else {
         num.disposition = 'not_received';
         num.retryAfter = getTomorrowStr();
+        num.retryLockedBy = agentId;
       }
       num.dialedBy = agentId;
       num.dialedAt = now;
@@ -663,9 +677,11 @@ function applyDisposition(agentId, numberId, disposition, extra) {
         num.disposition = 'switch_off';
         num.permanent = true;
         num.retryAfter = null;
+        num.retryLockedBy = null;
       } else {
         num.disposition = 'switch_off';
         num.retryAfter = getTomorrowStr();
+        num.retryLockedBy = agentId;
       }
       num.dialedBy = agentId;
       num.dialedAt = now;
