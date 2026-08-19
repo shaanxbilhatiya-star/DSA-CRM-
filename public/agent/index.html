@@ -2509,7 +2509,6 @@ function togglePhoneDock() {
 function closeScriptPopup() {
   document.getElementById('scriptPopupModal').classList.remove('active');
   document.body.classList.remove('script-dock-open');
-  document.body.classList.add('phone-dock-collapsed');
   scriptPopupShown = false;
   // Reveal disposition panel now that agent has read the script
   if (currentNumberId) {
