@@ -2791,7 +2791,7 @@ setInterval(tickLiveClock, 1000);
 })(); // end initCrossSync
 
 
-// ── 5:45 PM IST Restriction & Recording Upload ────────────────────────────────
+// ── 11:50 PM IST Restriction & Recording Upload ────────────────────────────────
 let selectedRecordingFiles = [];
 let dialingRestricted = false;
 
@@ -2801,8 +2801,8 @@ function checkTimeRestriction() {
   const hours = istTime.getHours();
   const minutes = istTime.getMinutes();
 
-  // Restrict dialing from 5:45 PM (17:45) until 2:00 AM (02:00) next day
-  let isRestricted = (hours === 17 && minutes >= 45) || hours >= 18 || hours < 2;
+  // Restrict dialing from 11:50 PM (23:50) until 2:00 AM (02:00) next day
+  let isRestricted = (hours === 23 && minutes >= 50) || hours < 2;
 
   // ── TEMP TEST BYPASS — REMOVE AFTER TESTING ────────────────────────────────
   // Exempts ONLY an agent literally named "Test User" from the dialer time
@@ -2853,7 +2853,7 @@ function restrictDialingShowRecordingUpload() {
     recordingPanel.innerHTML = `
       <div class="panel-header accent-h">
         <h2>🎙️ Upload Call Recordings</h2>
-        <span style="font-size:11px;color:var(--muted)">Dialing Restricted: 5:45 PM - 2:00 AM IST</span>
+        <span style="font-size:11px;color:var(--muted)">Dialing Restricted: 11:50 PM - 2:00 AM IST</span>
       </div>
       <div class="panel-body" style="padding: 30px 20px; text-align: center;">
         <div style="font-size: 48px; margin-bottom: 12px;">🎙️</div>
@@ -2904,12 +2904,12 @@ function restrictDialingShowRecordingUpload() {
     grid2.appendChild(recordingPanel);
   }
 
-  showToast('⏰ Dialing restricted (5:45 PM - 2:00 AM IST). Please upload today\'s recordings and logout.', 'warn');
+  showToast('⏰ Dialing restricted (11:50 PM - 2:00 AM IST). Please upload today\'s recordings and logout.', 'warn');
 
-  // ── 5:45 PM audio announcement ───────────────────────────────────────────
+  // ── 11:50 PM audio announcement ───────────────────────────────────────────
   try {
     var nm = (typeof agentName !== 'undefined' && agentName) ? agentName : 'एजेंट';
-    socket.emit('voice-announce-request', { text: 'सभी एजेंट्स ध्यान दें। ' + nm + ', शाम के 5:45 बज चुके हैं। कृपया अपनी कॉल रिकॉर्डिंग अभी अपलोड करें।' });
+    socket.emit('voice-announce-request', { text: 'सभी एजेंट्स ध्यान दें। ' + nm + ', रात के 11:50 बज चुके हैं। कृपया अपनी कॉल रिकॉर्डिंग अभी अपलोड करें।' });
   } catch (e) {}
 }
 
@@ -3097,7 +3097,7 @@ async function submitRecordings() {
   setTimeout(() => { if (progressContainer) progressContainer.style.display = 'none'; }, 3000);
 }
 
-// Manual upload button trigger (can be called before 5:45 PM)
+// Manual upload button trigger (can be called before 11:50 PM)
 function manualRecordingUpload() {
   if (dialingRestricted) {
     // Already showing upload interface
