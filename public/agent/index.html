@@ -3440,11 +3440,10 @@ async function showJustificationPopup() {
         'style="width:100%;padding:12px;border:1px solid var(--border-strong);border-radius:10px;font-family:inherit;font-size:14px;resize:vertical;box-sizing:border-box;"></textarea>' +
       '<div style="display:flex;gap:10px;margin-top:16px;">' +
         '<button onclick="submitJustification()" class="action-btn" style="flex:1;background:var(--accent);color:#fff;">स्पष्टीकरण भेजें</button>' +
-        '<button onclick="(function(){var m=document.getElementById(\'justificationModal\');if(m)m.remove();})()" ' +
-          'style="flex:0 0 auto;padding:12px 16px;border:1px solid var(--border);background:#fff;border-radius:10px;cursor:pointer;font-weight:600;">बाद में</button>' +
       '</div>' +
     '</div>';
   document.body.appendChild(modal);
+  modal.addEventListener('keydown', function(e) { if (e.key === 'Escape') e.preventDefault(); });
 }
 
 async function submitJustification() {
