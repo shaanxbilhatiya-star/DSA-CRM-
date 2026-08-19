@@ -2486,7 +2486,7 @@ function renderCompletedTable(leads) {
       elapsedCell = `<span class="dc-elapsed ${eCls}" title="Time elapsed since documentation was completed">&#9201; ${elapsedDays}d ${elapsedHrs}h</span>`;
     }
     const shareCell = l.shareToken
-      ? `<div class="dc-cell"><a href="/share/${escapeHtml(l.shareToken)}" target="_blank" rel="noopener" class="dc-open" title="View shared documents">${_svgFile}<span>View File</span></a><button class="dc-ico" onclick="copyShareLink('${escapeHtml(l.shareToken)}')" title="Copy share link">${_svgCopy}</button><button class="dc-edit" onclick="openLoanForm('${escapeHtml(l.id)}','${escapeHtml(l.formType||'')}','${escapeHtml(l.editorKind||'')}')" title="Edit lead file">&#9999;&#65039; Edit File</button></div>`
+      ? `<div class="dc-cell"><a href="/share/${escapeHtml(l.shareToken)}" target="_blank" rel="noopener" class="dc-open" title="View shared documents">${_svgFile}<span>View File</span></a><button class="dc-ico" onclick="copyShareLink('${escapeHtml(l.shareToken)}','${escapeHtml(l.name || "")}')" title="Copy WhatsApp message">${_svgCopy}</button><button class="dc-edit" onclick="openLoanForm('${escapeHtml(l.id)}','${escapeHtml(l.formType||'')}','${escapeHtml(l.editorKind||'')}')" title="Edit lead file">&#9999;&#65039; Edit File</button></div>`
       : `<button class="dc-edit" onclick="openLoanForm('${escapeHtml(l.id)}','${escapeHtml(l.formType||'')}','${escapeHtml(l.editorKind||'')}')" title="Edit lead file">&#9999;&#65039; Edit File</button>`;
     return `<tr>
       <td><span class="phone-mono">${escapeHtml(formatPhone(l.phone))}</span></td>
@@ -2517,18 +2517,30 @@ function openLoanForm(numberId, formType, editorKind) {
     : (editorKind === 'legacy' ? '/forms/PLJOB-main/edit-lead.html' : '/forms/PLJOB-main/' + loanFormFile(formType));
   window.open(base + '?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId), '_blank');
 }
-function copyShareLink(token) {
+function copyShareLink(token, applicantName) {
+  var name = applicantName || '';
   function showToastMsg(msg) {
     var t = document.createElement('div');
     t.textContent = msg;
     t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#16a34a;color:#fff;padding:10px 20px;border-radius:30px;font-size:13px;z-index:99999;box-shadow:0 4px 20px rgba(0,0,0,.25)';
     document.body.appendChild(t); setTimeout(function(){ t.remove(); }, 2400);
   }
-  function writeToClipboard(url, label) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(function(){ showToastMsg(label); }).catch(function(){ window.prompt('Copy this link:', url); });
-    } else { window.prompt('Copy this link:', url); }
+  function formatMessage(url) {
+    return '\u{1F4CB} *PERSONAL DETAILS*\n' +
+      (name ? 'Applicant: ' + name + '\n' : '') +
+      'Note: \u092A\u094D\u0930\u093F\u092F \u0906\u0935\u0947\u0926\u0915,\n' +
+      '\u0906\u092A\u0915\u0947 \u0906\u0935\u0947\u0926\u0928 \u0938\u0947 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u094D\u092F\u0915\u094D\u0924\u093F\u0917\u0924 \u0935\u093F\u0935\u0930\u0923 \u090F\u0935\u0902 \u0905\u0928\u094D\u092F \u0906\u0935\u0936\u094D\u092F\u0915 \u091C\u093E\u0928\u0915\u093E\u0930\u0940/\u0926\u0938\u094D\u0924\u093E\u0935\u0947\u091C\u093C \u0926\u0947\u0916\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0915\u0943\u092A\u092F\u093E \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u0917\u090F \u0932\u093F\u0902\u0915 \u092A\u0930 \u0915\u094D\u0932\u093F\u0915 \u0915\u0930\u0947\u0902\u0964\n' +
+      '\u{1F517} Link: ' + url + '\n\n' +
+      '\u2014 *Ruralift*\n' +
+      '\u0906\u092A\u0915\u0940 \u0935\u093F\u0924\u094D\u0924\u0940\u092F \u0906\u0935\u0936\u094D\u092F\u0915\u0924\u093E\u0913\u0902 \u0915\u0947 \u0932\u093F\u090F \u0935\u093F\u0936\u094D\u0935\u0938\u0928\u0940\u092F \u0938\u0939\u092F\u094B\u0917\u0940';
   }
+  function writeToClipboard(url, label) {
+    var msg = formatMessage(url);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(msg).then(function(){ showToastMsg(label); }).catch(function(){ window.prompt('Copy this message:', msg); });
+    } else { window.prompt('Copy this message:', msg); }
+  }
+  // Try to get a short link; fall back to full URL on any error
   fetch('/api/shorten', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2536,10 +2548,10 @@ function copyShareLink(token) {
   })
   .then(function(r){ return r.json(); })
   .then(function(d){
-    if (d.url) { writeToClipboard(d.url, '\u26A1 Short link copied!'); }
-    else { writeToClipboard(location.origin + '/share/' + token, '\uD83D\uDD17 Link copied!'); }
+    if (d.url) { writeToClipboard(d.url, '\u26A1 WhatsApp message copied!'); }
+    else { writeToClipboard(location.origin + '/share/' + token, '\uD83D\uDD17 WhatsApp message copied!'); }
   })
-  .catch(function(){ writeToClipboard(location.origin + '/share/' + token, '\uD83D\uDD17 Link copied!'); });
+  .catch(function(){ writeToClipboard(location.origin + '/share/' + token, '\uD83D\uDD17 WhatsApp message copied!'); });
 }
 // ── Doc ZIP upload state ─────────────────────────────────────────────────────
 let docZipTargetNumberId = null;
