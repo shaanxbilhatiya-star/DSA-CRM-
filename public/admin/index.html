@@ -842,6 +842,9 @@ function adminLogout(){
   <div class="panel" style="margin-bottom:20px">
     <div class="panel-header" style="background:rgba(244,67,54,.06)">
       <h2 style="color:#c62828">&#128172; Today's Justifications</h2>
+      <select id="justificationAgentFilter" style="margin-left:auto;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);cursor:pointer;">
+        <option value="">All Agents</option>
+      </select>
       <span id="justificationCount" style="font-size:12px;color:var(--muted)">0 remarks</span>
     </div>
     <div class="panel-body" style="padding:12px;overflow-x:auto">
@@ -1032,17 +1035,41 @@ socket.on('stats-update', renderStats);
 // ── Today's Justifications (grouped by agent) ──────────────────────────────
 function escapeHtmlJ(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 
+var _justificationsList = [];
+
 function renderJustifications(list) {
+  _justificationsList = list || [];
+  var filterEl = document.getElementById('justificationAgentFilter');
   var container = document.getElementById('justificationContainer');
   var countEl = document.getElementById('justificationCount');
   if (!container) return;
-  if (!list || !list.length) {
+
+  // Populate filter dropdown
+  if (filterEl) {
+    var prevVal = filterEl.value;
+    var uniqueAgents = [];
+    var seen = {};
+    (_justificationsList).forEach(function(j) {
+      var n = j.name || 'Unknown';
+      if (!seen[n]) { seen[n] = true; uniqueAgents.push(n); }
+    });
+    uniqueAgents.sort();
+    var opts = '<option value="">All Agents</option>';
+    uniqueAgents.forEach(function(n) { opts += '<option value="' + escapeHtmlJ(n) + '">' + escapeHtmlJ(n) + '</option>'; });
+    filterEl.innerHTML = opts;
+    filterEl.value = prevVal;
+  }
+
+  var selectedAgent = filterEl ? filterEl.value : '';
+  var filtered = selectedAgent ? _justificationsList.filter(function(j) { return (j.name || 'Unknown') === selectedAgent; }) : _justificationsList;
+
+  if (!filtered.length) {
     container.innerHTML = '<p class="empty" style="text-align:center;padding:18px;color:var(--muted)">No justifications submitted yet today</p>';
     if (countEl) countEl.textContent = '0 remarks';
     return;
   }
   var grouped = {};
-  list.forEach(function(j) {
+  filtered.forEach(function(j) {
     var key = j.name || 'Unknown';
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(j);
@@ -1068,8 +1095,13 @@ function renderJustifications(list) {
     html += '</div></div>';
   });
   container.innerHTML = html;
-  if (countEl) countEl.textContent = list.length + ' remark' + (list.length === 1 ? '' : 's') + ' from ' + agentNames.length + ' agent' + (agentNames.length === 1 ? '' : 's');
+  if (countEl) countEl.textContent = filtered.length + ' remark' + (filtered.length === 1 ? '' : 's') + (selectedAgent ? ' from ' + selectedAgent : ' from ' + agentNames.length + ' agent' + (agentNames.length === 1 ? '' : 's'));
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+  var filterEl = document.getElementById('justificationAgentFilter');
+  if (filterEl) filterEl.addEventListener('change', function() { renderJustifications(_justificationsList); });
+});
 
 async function loadJustifications() {
   try {
