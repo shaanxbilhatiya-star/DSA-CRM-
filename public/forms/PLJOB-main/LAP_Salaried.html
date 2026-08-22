@@ -1119,6 +1119,7 @@ async function saveFile(){
   const btn=g('submitBtn');btn.disabled=true;
   g('progBox').style.display='block';g('doneBox').style.display='none';
   setProgress(5,'Starting...');
+  try {
 
   // ── FOIR calculation ──
   const income=parseFloat(val('f_income'))||0;
@@ -1324,9 +1325,11 @@ async function saveFile(){
         g('doneSub').textContent='You can close this tab or continue editing.';
       } else {
         alert('Upload failed: ' + (d.error || 'Unknown error'));
+        g('progBox').style.display='none';
       }
     } catch(e) {
       alert('Upload error: ' + e.message);
+      g('progBox').style.display='none';
     }
   } else if (window.showSaveFilePicker) {
     try {
@@ -1349,6 +1352,8 @@ async function saveFile(){
         g('doneBox').style.display='block';
         g('doneMsg').textContent='ZIP downloaded!';
         g('doneSub').textContent=zipName;
+      } else {
+        g('progBox').style.display='none';
       }
     }
   } else {
@@ -1358,7 +1363,13 @@ async function saveFile(){
     g('doneMsg').textContent='ZIP downloaded!';
     g('doneSub').textContent=zipName;
   }
-  btn.disabled = false;
+  } catch(err) {
+    console.error('saveFile error:', err);
+    g('progBox').style.display='none';
+    alert('Error saving file: ' + (err.message || err));
+  } finally {
+    btn.disabled = false;
+  }
 }
 </script>
 </body>
