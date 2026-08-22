@@ -851,6 +851,7 @@ async function saveFile(){
   const btn=g('submitBtn');btn.disabled=true;
   g('progBox').style.display='block';g('doneBox').style.display='none';
   setProgress(5,'Starting...');
+  try {
 
   const applicantName = name.replace(/\s+/g,'_');
   const folderName = 'BL_BIZ_' + applicantName + '_' + new Date().toISOString().slice(0,10);
@@ -1033,12 +1034,17 @@ async function saveFile(){
       const d = await resp.json();
       if (d.success) {
         setProgress(100, 'Uploaded successfully!');
-        alert('Documents uploaded successfully! You can close this tab.');
+        g('progBox').style.display='none';
+        g('doneBox').style.display='block';
+        g('doneMsg').textContent='Documents uploaded successfully!';
+        g('doneSub').textContent='You can close this tab or continue editing.';
       } else {
         alert('Upload failed: ' + (d.error || 'Unknown error'));
+        g('progBox').style.display='none';
       }
     } catch(e) {
       alert('Upload error: ' + e.message);
+      g('progBox').style.display='none';
     }
   } else if (window.showSaveFilePicker) {
     try {
@@ -1050,13 +1056,35 @@ async function saveFile(){
       const writable = await handle.createWritable();
       await writable.write(zipBlob);
       await writable.close();
+      g('progBox').style.display='none';
+      g('doneBox').style.display='block';
+      g('doneMsg').textContent='ZIP saved to desktop!';
+      g('doneSub').textContent=zipName;
     } catch(e) {
-      if (e.name !== 'AbortError') saveAs(zipBlob, zipName);
+      if (e.name !== 'AbortError') {
+        saveAs(zipBlob, zipName);
+        g('progBox').style.display='none';
+        g('doneBox').style.display='block';
+        g('doneMsg').textContent='ZIP downloaded!';
+        g('doneSub').textContent=zipName;
+      } else {
+        g('progBox').style.display='none';
+      }
     }
   } else {
     saveAs(zipBlob, zipName);
+    g('progBox').style.display='none';
+    g('doneBox').style.display='block';
+    g('doneMsg').textContent='ZIP downloaded!';
+    g('doneSub').textContent=zipName;
   }
-  btn.disabled = false;
+  } catch(err) {
+    console.error('saveFile error:', err);
+    g('progBox').style.display='none';
+    alert('Error saving file: ' + (err.message || err));
+  } finally {
+    btn.disabled = false;
+  }
 }
 </script>
 </body>
