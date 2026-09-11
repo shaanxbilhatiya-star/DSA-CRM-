@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BL — Business Loan Application</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="lead-shared.js?v=20260911f"></script>
+<script src="lead-shared.js?v=20260911g"></script>
 <style>/* All fields & documents are optional */ .fi label .r,.sec-err-banner,.err{display:none!important}</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -83,6 +83,9 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
 .ub-icon{width:36px;height:36px;border-radius:8px;background:var(--ind-mid);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background 0.15s}
 .ub.uploaded .ub-icon{background:var(--green-mid)}
 .ub-icon svg{width:18px;height:18px;color:#4338ca}
+/* Bare upload icon + caption (used by the Other Documents and video slots). */
+.ub-i{width:20px;height:20px;flex-shrink:0;color:#4338ca}
+.ub-text{font-size:13px;font-weight:600;color:#374151}
 .ub.uploaded .ub-icon svg{color:var(--green)}
 .ul strong{display:block;font-size:13px;color:var(--gray-700);font-weight:600}
 .tag{display:inline-block;font-size:10.5px;background:var(--ind-mid);color:#3730a3;padding:2px 7px;border-radius:20px;margin-top:4px;font-weight:600;margin-right:3px}
