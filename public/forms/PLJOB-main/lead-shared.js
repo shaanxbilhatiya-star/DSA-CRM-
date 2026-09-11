@@ -1496,8 +1496,10 @@
       partyPeriods[inputId][i] = {};
       var row = document.createElement('div');
       row.style.cssText = 'padding:9px;background:#fff;border:1px solid #bfdbfe;border-radius:7px;margin-bottom:7px';
-      var head = '<div style="font-size:12.5px;font-weight:700;color:#0c4a6e;margin-bottom:7px;' +
-        'overflow:hidden;text-overflow:ellipsis">\uD83D\uDCC4 ' + escapeHtml(f.name) + '</div>';
+      var head = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">' +
+        '<div style="flex:1;font-size:12.5px;font-weight:700;color:#0c4a6e;overflow:hidden;' +
+        'text-overflow:ellipsis">\uD83D\uDCC4 ' + escapeHtml(f.name) + '</div>' +
+        selectedFileRemoveBtn(inputId, i) + '</div>';
       if (meta.doc.period === 'month') {
         var thisYear = new Date().getFullYear();
         var years = '';
@@ -1904,6 +1906,35 @@
      change beyond swapping their SOA line in the ZIP builder.
      ═══════════════════════════════════════════════════════════════════════════ */
 
+  /* ── Dropping one wrongly-picked file ──────────────────────────────────────
+     A file input's FileList is read-only, so removing a single selection means
+     rebuilding the list through a DataTransfer and assigning it back. Dispatching
+     'change' afterwards lets whatever rendered the metadata rows redraw itself. If
+     the browser has no DataTransfer, clearing the field is the honest fallback. */
+  window.__removeSelectedFile = function (inputId, index) {
+    var inp = document.getElementById(inputId);
+    if (!inp || !inp.files || !inp.files.length) return;
+    var keep = Array.prototype.filter.call(inp.files, function (f, i) { return i !== index; });
+    try {
+      var dt = new DataTransfer();
+      keep.forEach(function (f) { dt.items.add(f); });
+      inp.files = dt.files;
+    } catch (e) {
+      if (!confirm('This browser cannot drop a single file. Clear all selected files instead?')) return;
+      inp.value = '';
+    }
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  // Small ✕ for a row that represents one selected (not yet saved) file.
+  function selectedFileRemoveBtn(inputId, index, extraStyle) {
+    return '<button type="button" onclick="window.__removeSelectedFile(\'' + inputId + '\',' + index + ')" ' +
+      'title="Remove this file" style="flex:0 0 auto;width:26px;height:26px;border:none;border-radius:7px;' +
+      'background:#fee2e2;color:#dc2626;font-size:14px;font-weight:700;cursor:pointer;padding:0;line-height:1;' +
+      (extraStyle || '') + '">\u2715</button>';
+  }
+  window.__fileRemoveBtnHtml = selectedFileRemoveBtn;
+
   var soaLenders = {};   // file index -> lender typed for that file
 
   function renderSoaLenders() {
@@ -1927,8 +1958,11 @@
       var row = document.createElement('div');
       row.style.cssText = 'padding:10px;background:#fff;border:1.5px solid #bfdbfe;border-radius:8px;margin-bottom:8px';
       row.innerHTML =
-        '<div style="font-size:12.5px;font-weight:700;color:#0c4a6e;margin-bottom:6px;overflow:hidden;' +
-          'text-overflow:ellipsis">\uD83D\uDCC4 ' + escapeHtml(f.name) + '</div>' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+          '<div style="flex:1;font-size:12.5px;font-weight:700;color:#0c4a6e;overflow:hidden;' +
+            'text-overflow:ellipsis">\uD83D\uDCC4 ' + escapeHtml(f.name) + '</div>' +
+          selectedFileRemoveBtn('up_soa', i) +
+        '</div>' +
         '<input type="text" data-soa-lender="' + i + '" placeholder="Bank / NBFC name (e.g. HDFC Bank, Bajaj Finance)" ' +
           'style="width:100%;padding:8px 11px;border:2px solid #38bdf8;border-radius:8px;font-size:13px;' +
           'font-weight:600;font-family:inherit;box-sizing:border-box">';

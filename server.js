@@ -1440,6 +1440,51 @@ function reconstructFormDataFromInfoText(shareInfoText) {
  *   PL_Salaried / PL_Business : "Loan 1          : Car Loan  |  ICICI  |  EMI Rs. 15,000"
  *   LAP_* / BL_Business       : "  1. Car Loan - ICICI - EMI ₹15,000"
  */
+/**
+ * Recover the two button-driven selections — salary type and property type — from an
+ * Applicant_Info.txt.
+ *
+ * Both are chosen with buttons rather than form controls, so like obligations they
+ * were absent from older JSON snapshots. 'Salary type' was already in the label map,
+ * but that map is only consulted when a lead has NO usable stored data, so for a
+ * normal lead it never ran and both came back unselected. Merged in separately at the
+ * endpoint instead — see /api/lead-form/:numberId.
+ *
+ * Property type is stored as a human label ("Sirf Zameen (Residential Plot)"), so it
+ * is matched back to the key selectProp() expects; a raw key is accepted too, in case
+ * the label lookup had already failed when the text was written.
+ */
+function parseSelectionsFromInfoText(shareInfoText) {
+  if (!shareInfoText || typeof shareInfoText !== 'string') return {};
+  const out = {};
+
+  const sal = shareInfoText.match(/^\s*Salary type\s*:\s*(.+)$/mi);
+  if (sal) {
+    const v = sal[1].trim();
+    if (v && v !== '—' && v !== '-') {
+      out.salaryType = /govt|government|psu/i.test(v) ? 'govt' : 'private';
+    }
+  }
+
+  const prop = shareInfoText.match(/^\s*Property type\s*:\s*(.+)$/mi);
+  if (prop) {
+    const v = prop[1].trim();
+    if (v && !/^not selected$/i.test(v) && v !== '—' && v !== '-') {
+      const PROP_KEYS = [
+        [/pakka\s*ghar|residential\s*house/i, 'house'],
+        [/sirf\s*zameen|residential\s*plot/i, 'plot'],
+        [/kheti|agricultur/i,                 'agri'],
+        [/dukaan|commercial/i,                'shop'],
+        [/gram\s*panchayat|village/i,         'village']
+      ];
+      const hit = PROP_KEYS.find(([re]) => re.test(v));
+      if (hit) out.propType = hit[1];
+      else if (/^(house|plot|agri|shop|village)$/i.test(v)) out.propType = v.toLowerCase();
+    }
+  }
+  return out;
+}
+
 function parseObligationsFromInfoText(shareInfoText) {
   if (!shareInfoText || typeof shareInfoText !== 'string') return [];
   const obMatch = shareInfoText.match(/CURRENT OBLIGATIONS\s*\n-{10,}\n([\s\S]*?)(?:\n\s*-{10,}|\n\s*={10,}|$)/i);
@@ -1505,6 +1550,17 @@ app.get('/api/lead-form/:numberId', (req, res) => {
   if (num.shareInfoText && !(Array.isArray(formData['__obligations']) && formData['__obligations'].length)) {
     const obligations = parseObligationsFromInfoText(num.shareInfoText);
     if (obligations.length > 0) formData['__obligations'] = obligations;
+  }
+
+  // Salary type and property type need the same treatment and for the same reason:
+  // both are button-driven, so neither was captured in snapshots written before the
+  // forms started mirroring them, and the label map that could recover them is only
+  // consulted for leads with no stored data at all. Without this a lead that plainly
+  // has a property type still opens with none selected.
+  if (num.shareInfoText) {
+    const picked = parseSelectionsFromInfoText(num.shareInfoText);
+    if (!formData['__salaryType'] && picked.salaryType) formData['__salaryType'] = picked.salaryType;
+    if (!formData['__propType'] && picked.propType) formData['__propType'] = picked.propType;
   }
 
   if (!formData['f_name']   && (num.leadName || num.name)) formData['f_name']   = num.leadName || num.name;
