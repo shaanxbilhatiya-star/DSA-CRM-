@@ -565,6 +565,22 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
     <div class="fi"><label>Notes / Remarks</label><textarea id="f_notes" placeholder="Any special remarks about the case..."></textarea></div>
   </div>
 
+  <!-- ⑧.5 OTHER DOCUMENTS -->
+  <div class="sec" id="sec-other-docs">
+    <div class="sec-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      Other Documents
+      <span style="font-size:12px;font-weight:400;color:var(--gray-400);margin-left:8px">— Upload any additional documents not listed above</span>
+    </div>
+    
+    <div id="other-docs-container"></div>
+    
+    <button type="button" class="add-other-doc-btn" onclick="addOtherDocSlot()" style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;margin-top:12px;box-shadow:0 2px 8px rgba(16,185,129,.25);font-family:inherit">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Another Document
+    </button>
+  </div>
+
   <!-- ⑨ REFERENCES -->
   <div class="sec" id="sec-refs">
     <div class="sec-title">
@@ -630,6 +646,246 @@ const _numberId = _urlParams.get('numberId');
 const _agentId = _urlParams.get('agentId');
 let obCount = 1;
 let salaryType = 'private';
+let otherDocsCount = 0;
+const otherDocsData = []; // {id, name, files: FileList, confirmed: bool}
+
+// ── OTHER DOCUMENTS MANAGEMENT ─────────────────────────────────────────
+function addOtherDocSlot() {
+  const id = ++otherDocsCount;
+  const container = document.getElementById('other-docs-container');
+  const div = document.createElement('div');
+  div.id = 'other-doc-' + id;
+  div.className = 'other-doc-item';
+  div.style.cssText = 'background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:12px;position:relative';
+  
+  div.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px">
+      <div style="flex:1">
+        <label style="display:block;font-size:13px;font-weight:600;color:#1e293b;margin-bottom:6px">Document Name <span style="color:#ef4444">*</span></label>
+        <input type="text" id="other-doc-name-${id}" placeholder="e.g. Property Tax Receipt, Affidavit, etc." 
+               style="width:100%;padding:10px 12px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:13px;font-family:inherit"
+               onchange="validateOtherDocName(${id})">
+        <div id="other-doc-name-error-${id}" style="color:#ef4444;font-size:11px;margin-top:4px;display:none"></div>
+      </div>
+      <button type="button" onclick="removeOtherDoc(${id})" 
+              style="padding:8px;background:#fee2e2;border:none;border-radius:8px;cursor:pointer;color:#dc2626;flex-shrink:0"
+              title="Remove this document">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    
+    <div class="ub" id="other-doc-ub-${id}" style="border-color:#94a3b8;background:#f1f5f9;margin-bottom:8px">
+      <svg class="ub-i" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12l-3-3m0 0l-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+      <input type="file" id="other-doc-file-${id}" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" multiple
+             onchange="handleOtherDocFileSelect(${id})">
+      <span class="ub-text">Click to attach files</span>
+    </div>
+    <div class="fn" id="other-doc-fn-${id}"></div>
+    
+    <div id="other-doc-confirm-${id}" style="display:none;background:#fef3c7;border:1.5px solid #fbbf24;border-radius:8px;padding:12px;margin-top:12px">
+      <div style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:8px">
+        ⚠️ Confirm document name
+      </div>
+      <div style="font-size:12px;color:#78350f;margin-bottom:10px">
+        Document name: <strong id="other-doc-confirm-name-${id}"></strong><br>
+        Files: <span id="other-doc-confirm-count-${id}"></span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button type="button" onclick="confirmOtherDoc(${id})" 
+                style="padding:8px 16px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">
+          ✓ Confirm
+        </button>
+        <button type="button" onclick="cancelOtherDocConfirm(${id})"
+                style="padding:8px 16px;background:#fff;color:#64748b;border:1px solid#d1d5db;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">
+          Edit Name
+        </button>
+      </div>
+    </div>
+  `;
+  
+  container.appendChild(div);
+  otherDocsData.push({id, name: '', files: null, confirmed: false});
+}
+
+function validateOtherDocName(id) {
+  const input = document.getElementById('other-doc-name-' + id);
+  const error = document.getElementById('other-doc-name-error-' + id);
+  const name = input.value.trim();
+  
+  if (!name) {
+    error.textContent = 'Document name is required';
+    error.style.display = 'block';
+    input.style.borderColor = '#ef4444';
+    return false;
+  }
+  
+  // Check for duplicates
+  const existing = otherDocsData.find(d => d.id !== id && d.name.toLowerCase() === name.toLowerCase() && d.confirmed);
+  if (existing) {
+    error.textContent = 'A document with this name already exists';
+    error.style.display = 'block';
+    input.style.borderColor = '#ef4444';
+    return false;
+  }
+  
+  error.style.display = 'none';
+  input.style.borderColor = '#10b981';
+  return true;
+}
+
+function handleOtherDocFileSelect(id) {
+  const input = document.getElementById('other-doc-file-' + id);
+  const nameInput = document.getElementById('other-doc-name-' + id);
+  const fnDiv = document.getElementById('other-doc-fn-' + id);
+  const ubDiv = document.getElementById('other-doc-ub-' + id);
+  const confirmDiv = document.getElementById('other-doc-confirm-' + id);
+  
+  if (!input.files || input.files.length === 0) return;
+  
+  const name = nameInput.value.trim();
+  if (!name) {
+    alert('⚠️ Please enter a document name first');
+    input.value = '';
+    return;
+  }
+  
+  if (!validateOtherDocName(id)) {
+    input.value = '';
+    return;
+  }
+  
+  // Show files selected
+  const fileNames = Array.from(input.files).map(f => f.name).join(', ');
+  fnDiv.innerHTML = `<span style="color:#059669;font-weight:600">${input.files.length} file(s) selected</span>: ${fileNames}`;
+  ubDiv.classList.add('uploaded');
+  
+  // Show confirmation panel
+  document.getElementById('other-doc-confirm-name-' + id).textContent = name;
+  document.getElementById('other-doc-confirm-count-' + id).textContent = input.files.length + ' file(s) — ' + fileNames;
+  confirmDiv.style.display = 'block';
+  
+  // Update data (not confirmed yet)
+  const docData = otherDocsData.find(d => d.id === id);
+  if (docData) {
+    docData.name = name;
+    docData.files = input.files;
+    docData.confirmed = false;
+  }
+}
+
+function confirmOtherDoc(id) {
+  const docData = otherDocsData.find(d => d.id === id);
+  if (!docData || !docData.files) return;
+  
+  docData.confirmed = true;
+  const confirmDiv = document.getElementById('other-doc-confirm-' + id);
+  confirmDiv.style.background = '#d1fae5';
+  confirmDiv.style.borderColor = '#10b981';
+  confirmDiv.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      <span style="color:#065f46;font-size:13px;font-weight:600">Document confirmed and ready for upload</span>
+    </div>
+  `;
+  
+  // Lock the name input
+  const nameInput = document.getElementById('other-doc-name-' + id);
+  nameInput.readOnly = true;
+  nameInput.style.background = '#f0fdf4';
+  nameInput.style.borderColor = '#10b981';
+}
+
+function cancelOtherDocConfirm(id) {
+  const confirmDiv = document.getElementById('other-doc-confirm-' + id);
+  confirmDiv.style.display = 'none';
+  
+  const docData = otherDocsData.find(d => d.id === id);
+  if (docData) docData.confirmed = false;
+  
+  // Focus on name input for editing
+  document.getElementById('other-doc-name-' + id).focus();
+}
+
+function removeOtherDoc(id) {
+  if (!confirm('Remove this document slot?')) return;
+  
+  const div = document.getElementById('other-doc-' + id);
+  if (div) div.remove();
+  
+  const idx = otherDocsData.findIndex(d => d.id === id);
+  if (idx !== -1) otherDocsData.splice(idx, 1);
+}
+
+async function addOtherDocsToZip(zip) {
+  for (const doc of otherDocsData) {
+    if (!doc.confirmed || !doc.files) continue;
+    
+    for (let i = 0; i < doc.files.length; i++) {
+      const file = doc.files[i];
+      const ext = file.name.substring(file.name.lastIndexOf('.'));
+      const safeName = doc.name.replace(/[^a-zA-Z0-9_\-\s]/g, '').replace(/\s+/g, '_');
+      const finalName = doc.files.length > 1 
+        ? `${safeName}_${i+1}${ext}`
+        : `${safeName}${ext}`;
+      
+      const arrayBuffer = await file.arrayBuffer();
+      zip.file(finalName, arrayBuffer);
+    }
+  }
+}
+
+// Load existing "Other Documents" from the server when editing a lead
+window.loadExistingOtherDocs = function(docs, shareToken) {
+  if (!docs || docs.length === 0) return;
+  
+  const container = document.getElementById('other-docs-container');
+  if (!container) return;
+  
+  docs.forEach(doc => {
+    const id = ++otherDocsCount;
+    const viewUrl = '/share/' + encodeURIComponent(shareToken) + '/doc/' + encodeURIComponent(doc.id);
+    
+    const div = document.createElement('div');
+    div.id = 'other-doc-' + id;
+    div.className = 'other-doc-item';
+    div.style.cssText = 'background:#f0fdf4;border:1.5px solid#86efac;border-radius:12px;padding:16px;margin-bottom:12px;position:relative';
+    
+    div.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          <span style="font-size:14px;font-weight:700;color:#166534">${escapeHtml(doc.label || doc.filename)}</span>
+        </div>
+        <button type="button" onclick="window.__removeDoc('${escapeHtml(doc.id)}',this)" 
+                style="padding:6px 12px;background:#fee2e2;border:none;border-radius:6px;cursor:pointer;color:#dc2626;font-size:12px;font-weight:600;font-family:inherit"
+                title="Delete this document from server">
+          🗑️ Delete
+        </button>
+      </div>
+      <div style="font-size:12px;color:#065f46;margin-bottom:8px">
+        📎 <strong>${escapeHtml(doc.filename)}</strong> (${(doc.size/1024).toFixed(1)} KB)
+      </div>
+      <div style="display:flex;gap:8px">
+        <a href="${escapeHtml(viewUrl)}" target="_blank" rel="noopener"
+           style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#fff;border:1.5px solid #86efac;border-radius:8px;color:#059669;text-decoration:none;font-size:12px;font-weight:600;font-family:inherit">
+          👁️ View Document
+        </a>
+        <a href="${escapeHtml(viewUrl)}?dl=1" download
+           style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#fff;border:1.5px solid #86efac;border-radius:8px;color:#059669;text-decoration:none;font-size:12px;font-weight:600;font-family:inherit">
+          ⬇️ Download
+        </a>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:#16a34a;font-style:italic">
+        This document is already on file. Click Delete to remove it, or upload a new document with the same name to replace it.
+      </div>
+    `;
+    
+    container.appendChild(div);
+    
+    // Track as existing (not editable)
+    otherDocsData.push({id, name: doc.label || doc.filename, files: null, confirmed: true, existing: true, serverId: doc.id});
+  });
+};
 
 function setSalaryType(type) {
   salaryType = type;
@@ -1040,8 +1296,10 @@ async function saveFile() {
   setProgress(80,'Adding SOA (always)...');           await addFiles('up_soa_always','SOA_Statement_Always');
   setProgress(81,'Adding appointment letter...');      await addFiles('up_appt','Appointment_Letter_ID');
 
+  setProgress(82,'Adding other documents...');         await addOtherDocsToZip(zip);
+
   zip.file('Applicant_Info.txt', txt);
-  setProgress(82, 'Compressing ZIP...');
+  setProgress(85, 'Compressing ZIP...');
   const zipBlob = await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
   const zipName = folderName + '.zip';
   // ── SAVE ZIP TO DESKTOP ────────────────────────────────────────────

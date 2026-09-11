@@ -711,10 +711,17 @@
       }
     });
 
-    // Show unmatched docs in the banner
+    // Show unmatched docs in the "Other Documents" section
     var unmatchedDocs = docs.filter(function (doc) {
       return !findUploadInput(doc.label, doc.filename);
     });
+    
+    if (unmatchedDocs.length > 0 && typeof window.loadExistingOtherDocs === 'function') {
+      // Let the form handle loading these as "Other Documents"
+      try { window.loadExistingOtherDocs(unmatchedDocs, shareToken); } catch (e) {}
+    }
+    
+    // Also show in banner as fallback
     if (unmatchedDocs.length > 0) {
       var bannerEl = document.getElementById('editModeBanner');
       if (bannerEl) {
