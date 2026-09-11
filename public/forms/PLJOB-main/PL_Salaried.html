@@ -111,7 +111,7 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
 .foir-card.danger .foir-pct{color:var(--red)}
 .foir-bar-track{width:100%;height:10px;background:var(--gray-200);border-radius:10px;overflow:hidden;position:relative}
 .foir-bar-fill{height:100%;border-radius:10px;transition:width 0.4s,background 0.4s}
-.foir-bar-line{position:absolute;top:-2px;bottom:-2px;width:2px;background:rgba(0,0,0,0.25);border-radius:2px;left:65%}
+.foir-bar-line{position:absolute;top:-2px;bottom:-2px;width:2px;background:rgba(0,0,0,0.25);border-radius:2px;left:50%}
 .foir-meta{display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--gray-500)}
 .foir-verdict{margin-top:10px;font-size:13px;font-weight:600;padding:8px 12px;border-radius:7px;text-align:center}
 .foir-card.safe .foir-verdict{background:var(--green-mid);color:#14532d}
@@ -832,7 +832,7 @@ async function saveFile() {
   const emis     = Array.from(document.querySelectorAll('.ob-emi')).map(e=>parseFloat(e.value)||0);
   const totalEmi = emis.reduce((a,b)=>a+b,0);
   const foir     = income ? ((totalEmi/income)*100).toFixed(1)+'%' : 'N/A';
-  const foirStatus = income ? (totalEmi/income > 0.65 ? 'ABOVE 65% LIMIT ⚠' : 'Within 65% limit ✓') : 'N/A';
+  const foirStatus = income ? (totalEmi/income > 0.50 ? 'ABOVE 50% LIMIT ⚠' : 'Within 50% limit ✓') : 'N/A';
   const pwSalary = val('pw_salary');
   const pwBank   = val('pw_bank');
 

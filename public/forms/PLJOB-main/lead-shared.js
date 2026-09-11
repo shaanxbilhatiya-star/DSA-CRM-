@@ -21,6 +21,7 @@
     var data = {};
     document.querySelectorAll('input, select, textarea').forEach(function (el) {
       if (el.type === 'file' || el.type === 'button' || el.type === 'submit') return;
+      if (el.type === 'password') return;  // SECURITY: never persist passwords
       if (el.type === 'radio') {
         if (el.checked && (el.name || el.id)) data[el.name || el.id] = el.value;
         return;
@@ -29,6 +30,25 @@
       if (el.type === 'checkbox') { data[el.id] = !!el.checked; return; }
       data[el.id] = el.value;
     });
+    
+    // Capture obligation rows (they use classes, not IDs, so the above loop missed them)
+    var obligations = [];
+    document.querySelectorAll('.ob-row').forEach(function (row) {
+      var type = row.querySelector('.ob-type');
+      var bank = row.querySelector('.ob-bank');
+      var emi = row.querySelector('.ob-emi');
+      if (type && bank && emi) {
+        obligations.push({
+          type: type.value || '',
+          bank: bank.value || '',
+          emi: emi.value || ''
+        });
+      }
+    });
+    if (obligations.length > 0) {
+      data['__obligations'] = obligations;
+    }
+    
     // Embed prefill status so the server can also verify this was a safe submission
     data['__prefillStatus'] = window.__leadPrefillStatus || 'not_needed';
     return data;
@@ -39,12 +59,19 @@
   window.applyFormSnapshot = function applyFormSnapshot(data) {
     if (!data || typeof data !== 'object') return;
     Object.keys(data).forEach(function (key) {
+      // Skip internal tracking keys
+      if (key.indexOf('__') === 0) return;
+      
       var val = data[key];
       var el = document.getElementById(key);
-      if (el && el.type !== 'radio') {
-        if (el.type === 'checkbox') el.checked = !!val;
-        else el.value = val;
-        fire(el);
+      if (el) {
+        if (el.type === 'file') return;  // SAFETY: never try to set file input values
+        if (el.type === 'radio') return; // radios handled below
+        try {
+          if (el.type === 'checkbox') el.checked = !!val;
+          else el.value = val;
+          fire(el);
+        } catch (e) { /* ignore write errors for readonly/disabled fields */ }
         return;
       }
       // Radios (and anything keyed by name)
@@ -56,6 +83,32 @@
         });
       }
     });
+    
+    // Restore obligations (call addOb() for each row, then populate)
+    if (data['__obligations'] && Array.isArray(data['__obligations'])) {
+      var obligations = data['__obligations'];
+      var existingRows = document.querySelectorAll('.ob-row').length;
+      // Add missing rows
+      for (var i = existingRows; i < obligations.length; i++) {
+        if (typeof window.addOb === 'function') window.addOb();
+      }
+      // Populate all rows
+      var rows = document.querySelectorAll('.ob-row');
+      obligations.forEach(function (ob, idx) {
+        if (idx >= rows.length) return;
+        var row = rows[idx];
+        var typeEl = row.querySelector('.ob-type');
+        var bankEl = row.querySelector('.ob-bank');
+        var emiEl = row.querySelector('.ob-emi');
+        if (typeEl) typeEl.value = ob.type || '';
+        if (bankEl) bankEl.value = ob.bank || '';
+        if (emiEl) emiEl.value = ob.emi || '';
+      });
+      // Recalculate total
+      if (typeof window.calcTotal === 'function') {
+        setTimeout(function() { window.calcTotal(); }, 100);
+      }
+    }
   };
 
   function fire(el) {
@@ -196,6 +249,7 @@
 
   // Prefill this form's fields from a legacy lead's parsed "label : value" list by
   // matching each saved label to the closest field label on the form.
+  // IMPORTANT: Does NOT overwrite fields that already have values (from snapshot).
   function prefillFromInfoFields(fields) {
     var entries = [];
     document.querySelectorAll('.fi').forEach(function (fi) {
@@ -206,7 +260,18 @@
     });
     var used = [];
     function take(el) { used.push(el); }
-    function free(el) { return used.indexOf(el) === -1; }
+    function free(el) {
+      if (used.indexOf(el) !== -1) return false;
+      // Also skip fields that already have meaningful values (from snapshot)
+      if (el.type === 'checkbox') return false; // checkboxes are always set (true/false)
+      var val = el.value || '';
+      if (el.tagName === 'SELECT') {
+        // Skip selects that aren't at their default option
+        var firstOpt = el.querySelector('option');
+        return !val || (firstOpt && val === firstOpt.value);
+      }
+      return val.trim() === '';
+    }
 
     // Pass 1 — exact normalised label match.
     fields.forEach(function (f) {
@@ -217,12 +282,13 @@
       if (hit) { setFieldValue(hit.el, f.value); take(hit.el); }
     });
     // Pass 2 — one label is contained in the other (e.g. "Mobile" vs "Mobile number").
+    // Require at least 4 chars to avoid "Name" matching "Full name" + "Father's name" + etc.
     fields.forEach(function (f) {
       if (f.heading || !f.value) return;
       var fn = normLabel(f.label);
-      if (fn.length < 3) return;
+      if (fn.length < 4) return;
       var hit = entries.find(function (e) {
-        return free(e.el) && e.n.length >= 3 && (e.n.indexOf(fn) !== -1 || fn.indexOf(e.n) !== -1);
+        return free(e.el) && e.n.length >= 4 && (e.n.indexOf(fn) !== -1 || fn.indexOf(e.n) !== -1);
       });
       if (hit) { setFieldValue(hit.el, f.value); take(hit.el); }
     });
@@ -340,12 +406,14 @@
       sessionStorage.setItem('__formSwitch_snapshot', JSON.stringify(snapshot));
       sessionStorage.setItem('__formSwitch_from', FORM_TYPE);
     } catch (e) {}
+    // Wait for the POST to complete before navigating (prevents race condition)
     fetch('/api/agent/switch-form-type/' + encodeURIComponent(numberId), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ numberId: numberId, agentId: agentId, loanType: targetForm })
-    }).catch(function () {});
-    location.href = '/forms/PLJOB-main/' + targetForm + '.html?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId);
+    }).finally(function () {
+      location.href = '/forms/PLJOB-main/' + targetForm + '.html?numberId=' + encodeURIComponent(numberId) + '&agentId=' + encodeURIComponent(agentId);
+    });
   }
 
   // On load: check if we arrived via a form switch and apply carried-over data
@@ -360,15 +428,47 @@
         setTimeout(function () {
           if (data && typeof data === 'object') {
             Object.keys(data).forEach(function (key) {
+              // Skip internal tracking keys
+              if (key.indexOf('__') === 0) return;
+              
               var val = data[key];
-              if (!val || (typeof val === 'string' && !val.trim())) return;
+              // Don't skip falsy values — 0 and false are legitimate!
+              if (val === null || val === undefined) return;
+              if (typeof val === 'string' && !val.trim()) return;
+              
               var el = document.getElementById(key);
               if (!el || el.type === 'file') return;
-              if (el.value && el.value.trim()) return;
+              
+              // Skip readonly/disabled fields (they're form-specific)
+              if (el.readOnly || el.disabled) return;
+              
+              // Don't skip fields with values — selects and pre-filled fields should update too
               if (el.type === 'checkbox') el.checked = !!val;
               else el.value = val;
               fire(el);
             });
+            
+            // Restore obligations
+            if (data['__obligations'] && Array.isArray(data['__obligations'])) {
+              var obligations = data['__obligations'];
+              for (var i = 0; i < obligations.length; i++) {
+                if (typeof window.addOb === 'function') window.addOb();
+              }
+              setTimeout(function() {
+                var rows = document.querySelectorAll('.ob-row');
+                obligations.forEach(function (ob, idx) {
+                  if (idx >= rows.length) return;
+                  var row = rows[idx];
+                  var typeEl = row.querySelector('.ob-type');
+                  var bankEl = row.querySelector('.ob-bank');
+                  var emiEl = row.querySelector('.ob-emi');
+                  if (typeEl) typeEl.value = ob.type || '';
+                  if (bankEl) bankEl.value = ob.bank || '';
+                  if (emiEl) emiEl.value = ob.emi || '';
+                });
+                if (typeof window.calcTotal === 'function') window.calcTotal();
+              }, 200);
+            }
           }
           var toast = document.createElement('div');
           toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#4f46e5,#6366f1);color:#fff;font-size:14px;font-weight:600;border-radius:12px;padding:12px 24px;z-index:9999;box-shadow:0 8px 30px rgba(99,102,241,.35)';
@@ -485,28 +585,58 @@
     'namantaran':             'up_namantaran',
     'ptax':                   'up_ptax',
     'property tax':           'up_ptax',
+    // ── Explicit prefix mappings (match addFiles() calls exactly) ──
+    'itr 3years':             'up_itr',          // PL_Business uses this prefix
+    'owner 1 aadhaar':        'up_owner1_aadhaar',
+    'owner 1 pan':            'up_owner1_pan',
+    'owner 2 aadhaar':        'up_owner2_aadhaar',
+    'owner 2 pan':            'up_owner2_pan',
+    'owner other aadhaar':    'up_owner_other_aadhaar',
+    'owner other pan':        'up_owner_other_pan',
+    'soa statement always':   'up_soa_always',
+    'permanent address proof':'up_perm_proof',
   };
 
   function normDocLabel(s) {
     return String(s || '').toLowerCase()
       .replace(/[_\-]+/g, ' ')
       .replace(/\.[a-z]{2,5}$/, '')   // strip file extension
-      .replace(/\s*\d+$/, '')          // strip trailing number (e.g. "Bank Statement 1")
+      .replace(/\s+\d+$/, '')          // strip trailing number ONLY if preceded by space (multi-file suffix)
       .replace(/[^a-z0-9 ]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
   }
 
   function findUploadInput(docLabel, docFilename) {
-    var candidates = [normDocLabel(docLabel), normDocLabel(docFilename)];
+    // Try candidates in order: label as-is, label without trailing digits, filename as-is, filename without digits
+    var candidates = [
+      normDocLabel(docLabel),
+      normDocLabel(docLabel).replace(/\s*\d+$/, ''),
+      normDocLabel(docFilename),
+      normDocLabel(docFilename).replace(/\s*\d+$/, '')
+    ];
+    
     for (var c = 0; c < candidates.length; c++) {
       var norm = candidates[c];
       if (!norm) continue;
-      if (DOC_TO_INPUT[norm]) return DOC_TO_INPUT[norm];
-      var keys = Object.keys(DOC_TO_INPUT);
+      
+      // 1. Exact match
+      if (DOC_TO_INPUT[norm]) {
+        var inputId = DOC_TO_INPUT[norm];
+        if (document.getElementById(inputId)) return inputId;
+      }
+    }
+    
+    // 2. Fuzzy substring match (longest key first to prefer specific matches)
+    var keys = Object.keys(DOC_TO_INPUT).sort(function(a, b) { return b.length - a.length; });
+    for (var c = 0; c < candidates.length; c++) {
+      var norm = candidates[c];
+      if (!norm) continue;
       for (var i = 0; i < keys.length; i++) {
-        if (norm.indexOf(keys[i]) !== -1 || keys[i].indexOf(norm) !== -1) {
-          return DOC_TO_INPUT[keys[i]];
+        var key = keys[i];
+        if (norm.indexOf(key) !== -1 || key.indexOf(norm) !== -1) {
+          var inputId = DOC_TO_INPUT[key];
+          if (document.getElementById(inputId)) return inputId;
         }
       }
     }

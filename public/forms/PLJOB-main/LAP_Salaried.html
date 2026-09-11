@@ -1126,7 +1126,7 @@ async function saveFile(){
   const emisArr=Array.from(document.querySelectorAll('.ob-emi')).map(e=>parseFloat(e.value)||0);
   const totalEmi=emisArr.reduce((a,b)=>a+b,0);
   const foir=income?((totalEmi/income)*100).toFixed(1)+'%':'N/A';
-  const foirStatus=income?(totalEmi/income>0.65?'ABOVE 65% LIMIT ⚠':'Within 65% limit ✓'):'N/A';
+  const foirStatus=income?(totalEmi/income>0.50?'ABOVE 50% LIMIT ⚠':'Within 50% limit ✓'):'N/A';
 
   // ── Property owner + property type labels ──
   const ownerTypeLabel={
@@ -1160,7 +1160,18 @@ async function saveFile(){
   setProgress(58,'Adding SOA...');         await addFiles(docs,'up_soa','SOA_Statement');
   setProgress(60,'Adding SOA (always)...'); await addFiles(docs,'up_soa_always','SOA_Statement_Always');
   setProgress(63,'Adding property video...');  await addFiles(docs,'up_prop_video','Property_Video');
-  setProgress(67,'Adding property docs...');
+  setProgress(67,'Adding owner docs & property docs...');
+  
+  // Owner KYC documents
+  await addFiles(docs,'up_cheque','Cancelled_Cheque');
+  await addFiles(docs,'up_owner1_aadhaar','Owner_1_Aadhaar');
+  await addFiles(docs,'up_owner1_pan','Owner_1_PAN');
+  await addFiles(docs,'up_owner2_aadhaar','Owner_2_Aadhaar');
+  await addFiles(docs,'up_owner2_pan','Owner_2_PAN');
+  await addFiles(docs,'up_owner_other_aadhaar','Owner_Other_Aadhaar');
+  await addFiles(docs,'up_owner_other_pan','Owner_Other_PAN');
+  
+  // Property documents
   await addFiles(docs,'up_registry','Registry');
   await addFiles(docs,'up_patta','Patta');
   await addFiles(docs,'up_diversion','Diversion');

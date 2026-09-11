@@ -1210,18 +1210,46 @@ async function saveFile(){
   setProgress(62,'Adding SOA...');         await addFiles(docs,'up_soa','SOA_Statement');
   setProgress(64,'Adding SOA (always)...'); await addFiles(docs,'up_soa_always','SOA_Statement_Always');
   setProgress(67,'Adding property video...');  await addFiles(docs,'up_prop_video','Property_Video');
-  setProgress(70,'Adding property docs...');
+  setProgress(70,'Adding owner docs & property docs...');
+  
+  // Owner KYC documents
+  await addFiles(docs,'up_cheque','Cancelled_Cheque');
+  await addFiles(docs,'up_owner1_aadhaar','Owner_1_Aadhaar');
+  await addFiles(docs,'up_owner1_pan','Owner_1_PAN');
+  await addFiles(docs,'up_owner2_aadhaar','Owner_2_Aadhaar');
+  await addFiles(docs,'up_owner2_pan','Owner_2_PAN');
+  await addFiles(docs,'up_owner_other_aadhaar','Owner_Other_Aadhaar');
+  await addFiles(docs,'up_owner_other_pan','Owner_Other_PAN');
+  
+  // House property documents
   await addFiles(docs,'up_registry','Registry');
   await addFiles(docs,'up_patta','Patta');
   await addFiles(docs,'up_khasra_agri','Khasra_Agri');
   await addFiles(docs,'up_rin','Rin_Pustika');
   await addFiles(docs,'up_khatauni','Khatauni');
   await addFiles(docs,'up_b1_agri','B1_Agri');
+  
+  // Plot documents
+  await addFiles(docs,'up_diversion','Diversion');
+  await addFiles(docs,'up_naksha','Naksha');
+  await addFiles(docs,'up_khasra','Khasra_B1');
+  await addFiles(docs,'up_b1','B1');
+  await addFiles(docs,'up_ptax','Property_Tax');
+  await addFiles(docs,'up_namantaran','Namantaran');
+  await addFiles(docs,'up_tnc','TNC');
+  await addFiles(docs,'up_registry_plot','Registry_Plot');
+  await addFiles(docs,'up_div_plot','Diversion_Plot');
+  await addFiles(docs,'up_khasra_plot','Khasra_Plot');
+  await addFiles(docs,'up_b1_plot','B1_Plot');
+  
+  // Shop documents
   await addFiles(docs,'up_registry_shop','Registry_Shop');
   await addFiles(docs,'up_div_shop','Diversion_Shop');
   await addFiles(docs,'up_khasra_shop','Khasra_Shop');
   await addFiles(docs,'up_shop_naksha','Shop_Naksha');
   await addFiles(docs,'up_trade','Trade_License');
+  
+  // Village documents
   await addFiles(docs,'up_patta_v','Patta_Village');
   await addFiles(docs,'up_khasra_v','Khasra_Village');
   await addFiles(docs,'up_noc','NOC');

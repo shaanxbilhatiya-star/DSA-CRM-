@@ -431,16 +431,16 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
     <!-- ITR 3 years -->
     <div class="fi" style="margin-top:1rem">
       <label>ITR — Last 3 Years <span class="r">*</span></label>
-      <div class="ub" id="ub-salary">
-        <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple id="up_salary" onchange="mark(this,'sal-fn','ub-salary')">
+      <div class="ub" id="ub-itr">
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple id="up_itr" onchange="mark(this,'itr-fn','ub-itr')">
         <div class="ub-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
         <div class="ul"><strong>Upload ITR — 3 years (with computation sheets)</strong><span class="tag">Multi-select · PDF preferred</span></div>
       </div>
-      <div class="fn" id="sal-fn"></div>
+      <div class="fn" id="itr-fn"></div>
       <div class="err" id="sal-err">⚠ ITR (3 years) is required</div>
       <div class="pw-row" style="margin-top:10px">
         <label>🔐 ITR PDF password (if any):</label>
-        <input type="password" id="pw_salary" placeholder="Leave blank if no password">
+        <input type="password" id="pw_itr" placeholder="Leave blank if no password">
       </div>
     </div>
 
@@ -636,7 +636,7 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
       <div class="doc-item" id="chk-gst"><div class="doc-status" id="chk-gst-icon">✕</div>GST Certificate</div>
       <div class="doc-item" id="chk-udhyam"><div class="doc-status" id="chk-udhyam-icon">✕</div>Udhyam Certificate <span style="font-size:11px;color:var(--amber);margin-left:4px">(Min. one of Udhyam/Gumastha)</span></div>
       <div class="doc-item" id="chk-gumastha"><div class="doc-status" id="chk-gumastha-icon">✕</div>Gumastha / Shop Act License <span style="font-size:11px;color:var(--amber);margin-left:4px">(Min. one of Udhyam/Gumastha)</span></div>
-      <div class="doc-item" id="chk-salary"><div class="doc-status" id="chk-salary-icon">✕</div>ITR — Last 3 Years</div>
+      <div class="doc-item" id="chk-itr"><div class="doc-status" id="chk-itr-icon">✕</div>ITR — Last 3 Years</div>
       <div class="doc-item" id="chk-bank"><div class="doc-status" id="chk-bank-icon">✕</div>Bank Statement (last 6 months)</div>
       <div class="doc-item" id="chk-soa" style="display:none"><div class="doc-status" id="chk-soa-icon">✕</div>Statement of Account (SOA)</div>
       <div class="doc-item" id="chk-vintage"><div class="doc-status" id="chk-vintage-icon">✕</div>Shop Video</div>
@@ -753,7 +753,7 @@ const chkMap = {
   'up_gst':'chk-gst',
   'up_udhyam':'chk-udhyam',
   'up_gumastha':'chk-gumastha',
-  'up_salary':'chk-salary',
+  'up_itr':'chk-itr',
   'up_bank':'chk-bank',
   'up_vintage':'chk-vintage',
 };
@@ -787,7 +787,7 @@ function mark(inp, fnId, ubId) {
     'ub-aadhaar':'aadh-err','ub-pan':'pan-err','ub-photo':'photo-err',
     'ub-elec':'elec-err','ub-cibil':'cibil-err',
     'ub-gst':'gst-err',
-    'ub-salary':'sal-err','ub-bank':'bank-err',
+    'ub-itr':'itr-err','ub-bank':'bank-err',
     'ub-vintage':'vintage-err'
   };
   if (ubId && errMap[ubId] && names) g(errMap[ubId]).style.display = 'none';
@@ -848,7 +848,7 @@ async function saveFile() {
   const totalEmi = emis.reduce((a,b)=>a+b,0);
   const foir     = income ? ((totalEmi/income)*100).toFixed(1)+'%' : 'N/A';
   const foirStatus = income ? (totalEmi/income > 0.65 ? 'ABOVE 65% LIMIT ⚠' : 'Within 65% limit ✓') : 'N/A';
-  const pwSalary = val('pw_salary');
+  const pwItr = val('pw_itr');
   const pwBank   = val('pw_bank');
 
   const txt = [
@@ -951,7 +951,7 @@ async function saveFile() {
     docStatusLine('GST Certificate',        'up_gst'),
     docStatusLine('Udhyam Certificate',     'up_udhyam'),
     docStatusLine('Gumastha / Shop Act',    'up_gumastha'),
-    docStatusLine('ITR (3 Years)',          'up_salary'),
+    docStatusLine('ITR (3 Years)',          'up_itr'),
     docStatusLine('Bank Statement',         'up_bank'),
     docStatusLine('Business Vintage Proof', 'up_vintage'),
     '',
@@ -1057,9 +1057,10 @@ async function saveFile() {
   setProgress(50,'Adding GST...');         await addFiles('up_gst','GST_Certificate');
   setProgress(55,'Adding Udhyam...');      await addFiles('up_udhyam','Udhyam_Certificate');
   setProgress(58,'Adding Gumastha...');    await addFiles('up_gumastha','Gumastha_Shop_Act');
-  setProgress(63,'Unlocking & adding ITR...'); await addFiles('up_salary','ITR_3Years', val('pw_salary'));
+  setProgress(63,'Unlocking & adding ITR...'); await addFiles('up_itr','ITR_3Years', val('pw_itr'));
   setProgress(73,'Unlocking & adding bank stmt...');   await addFiles('up_bank','Bank_Statement', val('pw_bank'));
   setProgress(75,'Adding SOA...');            await addFiles('up_soa','SOA_Statement');
+  setProgress(76,'Adding SOA (always)...');   await addFiles('up_soa_always','SOA_Statement_Always');
   setProgress(77,'Adding vintage proof...'); await addFiles('up_vintage','Business_Vintage_Proof');
 
   zip.file('Applicant_Info.txt', txt);

@@ -451,7 +451,7 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
       <div class="rs-prefix"><input type="number" id="f_income" placeholder="e.g. 50000" oninput="updateFoir()"></div>
     </div>
     <div class="fi"><label>Monthly Net Income / Profit (₹) <span class="r">*</span></label>
-      <div class="rs-prefix"><input type="number" id="f_net_income" placeholder="e.g. 35000"></div>
+      <div class="rs-prefix"><input type="number" id="f_net_income" placeholder="e.g. 35000" oninput="updateFoir()"></div>
     </div>
   </div>
 
@@ -549,6 +549,12 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
     <div class="fi" style="margin-top:1.2rem;padding-top:1.2rem;border-top:1.5px dashed var(--ind-mid)">
       <label>Shop / Business Video <span class="r">*</span> <span class="opt">— Walk-through, all sides clearly visible</span></label>
       <div class="ub" id="ub-shop-video" style="border-color:#818cf8;background:var(--ind-light)">
+        <svg class="ub-i" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"/></svg>
+        <input type="file" accept=".mp4,.mov,.avi,.mkv,.webm" id="up_shop_video" onchange="mark(this,'shop-video-fn','ub-shop-video')">
+        <span class="ub-text">Click to attach video</span>
+      </div>
+      <div class="fn" id="shop-video-fn"></div>
+    </div>
 
   <!-- ⑥ LOAN DETAILS -->
   <div class="sec" id="sec-loan">
@@ -863,6 +869,7 @@ async function saveFile(){
   setProgress(29,'Adding photo...');       await addFiles(docs,'up_photo','Passport_Photo');
   setProgress(33,'Adding cheque...');      await addFiles(docs,'up_cheque','Cancelled_Cheque');
   setProgress(36,'Adding elec bill...');   await addFiles(docs,'up_elec','Electricity_Bill');
+  setProgress(40,'Adding perm addr proof...'); await addFiles(docs,'up_perm_proof','Permanent_Address_Proof');
   setProgress(43,'Adding CIBIL...');       await addFiles(docs,'up_cibil','CIBIL_Report');
   setProgress(48,'Adding GST...');         await addFiles(docs,'up_gst','GST_Certificate');
   setProgress(52,'Adding Udhyam...');      await addFiles(docs,'up_udhyam','Udhyam_Certificate');
