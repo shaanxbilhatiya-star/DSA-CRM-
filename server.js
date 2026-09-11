@@ -1888,6 +1888,10 @@ app.get('/share/:token', (req, res) => {
     if (dmy) return dmy[3] + dmy[2] + dmy[1];
     const iso = text.match(/(\d{4})-(\d{2})-(\d{2})/);
     if (iso) return iso[1] + iso[2] + iso[3];
+    // A return carries only a year. Matched narrowly so an unrelated four-digit run
+    // in some other document's name cannot be mistaken for a date.
+    const itr = text.match(/\bITR[_ ]+((?:19|20)\d{2})\b/i);
+    if (itr) return itr[1] + '00';
     return '';
   }
 

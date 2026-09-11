@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Personal Loan Application</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="lead-shared.js?v=20260911m"></script>
+<script src="lead-shared.js?v=20260911n"></script>
 <style>/* All fields & documents are optional */ .fi label .r,.sec-err-banner,.err{display:none!important}</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -442,6 +442,19 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
         <input type="password" id="pw_bank" placeholder="Leave blank if no password">
       </div>
     </div>
+    <!-- SOA — appears only when obligations are filled -->
+    <div id="fi-soa" style="display:none;margin-top:14px;border-top:1px dashed #e5e7eb;padding-top:14px">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">
+        📄 Statement of Account (SOA)
+        <span style="font-size:11px;font-weight:400;color:#6b7280;margin-left:6px">— for each active loan above</span>
+      </label>
+      <div class="ub" id="ub-soa">
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple id="up_soa" onchange="mark(this,'soa-fn','ub-soa')">
+        <div class="ub-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>
+        <div class="ul"><strong>Upload SOA for existing loans</strong><span class="tag">Multi-select</span></div>
+      </div>
+      <div class="fn" id="soa-fn"></div>
+    </div>
 
 
 
@@ -457,6 +470,25 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
       <div class="fn" id="appt-fn"></div>
     </div>
   </div>
+
+  <!-- ⑧.5 OTHER DOCUMENTS -->
+  <div class="sec" id="sec-other-docs">
+    <div class="sec-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      Other Documents
+      <span style="font-size:12px;font-weight:400;color:var(--gray-400);margin-left:8px">— Upload any additional documents not listed above</span>
+    </div>
+    
+    <div id="other-docs-container"></div>
+    
+    <button type="button" class="add-other-doc-btn" onclick="addOtherDocSlot()" style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;margin-top:12px;box-shadow:0 2px 8px rgba(16,185,129,.25);font-family:inherit">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Another Document
+    </button>
+  </div>
+
+  <!-- CO-APPLICANT / GUARANTOR — built by lead-shared.js so all five forms match -->
+  <div id="party-section"></div>
 
   <!-- ⑤ REQUIRED AMOUNT -->
   <div class="sec" id="sec-reqamt">
@@ -497,19 +529,6 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
       <strong id="ob-total-val">₹ 0</strong>
     </div>
 
-    <!-- SOA — appears only when obligations are filled -->
-    <div id="fi-soa" style="display:none;margin-top:14px;border-top:1px dashed #e5e7eb;padding-top:14px">
-      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">
-        📄 Statement of Account (SOA)
-        <span style="font-size:11px;font-weight:400;color:#6b7280;margin-left:6px">— for each active loan above</span>
-      </label>
-      <div class="ub" id="ub-soa">
-        <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple id="up_soa" onchange="mark(this,'soa-fn','ub-soa')">
-        <div class="ub-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>
-        <div class="ul"><strong>Upload SOA for existing loans</strong><span class="tag">Multi-select</span></div>
-      </div>
-      <div class="fn" id="soa-fn"></div>
-    </div>
   </div>
 
   <!-- ⑦ FOIR ANALYSIS (new section below obligations) -->
@@ -560,25 +579,8 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
     <div class="fi"><label>Notes / Remarks</label><textarea id="f_notes" placeholder="Any special remarks about the case..."></textarea></div>
   </div>
 
-  <!-- ⑧.5 OTHER DOCUMENTS -->
-  <div class="sec" id="sec-other-docs">
-    <div class="sec-title">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-      Other Documents
-      <span style="font-size:12px;font-weight:400;color:var(--gray-400);margin-left:8px">— Upload any additional documents not listed above</span>
-    </div>
-    
-    <div id="other-docs-container"></div>
-    
-    <button type="button" class="add-other-doc-btn" onclick="addOtherDocSlot()" style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;margin-top:12px;box-shadow:0 2px 8px rgba(16,185,129,.25);font-family:inherit">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      Add Another Document
-    </button>
-  </div>
 
   <!-- ⑨ REFERENCES -->
-  <!-- CO-APPLICANT / GUARANTOR — built by lead-shared.js so all five forms match -->
-  <div id="party-section"></div>
 
   <div class="sec" id="sec-refs">
     <div class="sec-title">

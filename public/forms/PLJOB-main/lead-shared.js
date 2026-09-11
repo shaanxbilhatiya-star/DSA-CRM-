@@ -771,7 +771,17 @@
   // 'lender' for Statement of Account: an SOA is meaningless without knowing which
   // bank or NBFC the loan is with, and new lenders appear constantly so it has to be
   // typed in rather than picked from a list.
-  var META_INPUT_KIND = { up_salary: 'month', up_bank: 'range', up_soa: 'lender' };
+  // 'year' for ITR: three years are usually uploaded together and, numbered, there is
+  // no way to tell which return is which.
+  var META_INPUT_KIND = { up_salary: 'month', up_bank: 'range', up_soa: 'lender', up_itr: 'year' };
+
+  // Assessment years offered for an ITR: this year back ten.
+  function itrYearList() {
+    var y = new Date().getFullYear();
+    var out = [];
+    for (var i = 0; i <= 10; i++) out.push(String(y - i));
+    return out;
+  }
 
   var MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
                      'July', 'August', 'September', 'October', 'November', 'December'];
@@ -797,6 +807,11 @@
       var t = s.replace(/^SOA\b/i, '').replace(/\bstatement\b/i, '').replace(/\s+/g, ' ').trim();
       if (!t || /^\d+$/.test(t)) return null;
       return { lender: t };
+    }
+    if (kind === 'year') {
+      // "ITR 2024" -> 2024. The old default "ITR 3Years" carries no year.
+      var y = s.match(/\b(19|20)\d{2}\b/);
+      return y ? { year: y[0] } : null;
     }
     if (kind === 'month') {
       var m = s.match(new RegExp('(' + MONTH_NAMES.join('|') + ')\\s+(\\d{4})', 'i'));
@@ -846,7 +861,15 @@
       (isSet ? '\u2705 period set' : '\u26A0 no period set') + '</span>';
 
     var controls;
-    if (kind === 'lender') {
+    if (kind === 'year') {
+      controls = '<label style="font-size:11.5px;font-weight:700;color:#0369a1">Year of this return' +
+        '<select class="docmeta-year" style="display:block;margin-top:3px;padding:7px 10px;border:2px solid #38bdf8;' +
+        'border-radius:8px;font-size:13px;font-weight:600;background:#fff;color:#0369a1;min-width:120px">' +
+        '<option value="">Select year</option>' +
+        itrYearList().map(function (y) {
+          return '<option value="' + y + '"' + (current && current.year === y ? ' selected' : '') + '>' + y + '</option>';
+        }).join('') + '</select></label>';
+    } else if (kind === 'lender') {
       controls = '<label style="font-size:11.5px;font-weight:700;color:#0369a1;flex:1;min-width:200px">' +
         'Bank / NBFC this loan is with' +
         '<input type="text" class="docmeta-lender" value="' + escapeHtml(current ? current.lender : '') + '" ' +
@@ -898,7 +921,11 @@
     var prefix = ownerPrefix || '';
 
     var label;
-    if (kind === 'lender') {
+    if (kind === 'year') {
+      var yr1 = wrap.querySelector('.docmeta-year').value;
+      if (!yr1) { alert('Pick the year this return is for.'); return; }
+      label = prefix + 'ITR_' + yr1;
+    } else if (kind === 'lender') {
       var lender = wrap.querySelector('.docmeta-lender').value.trim();
       if (!lender) { alert('Enter the bank or NBFC this statement belongs to.'); return; }
       if (/[<>:"/\\|?*]/.test(lender)) { alert('Avoid these characters: < > : " / \\ | ? *'); return; }
@@ -2009,6 +2036,101 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () { watchSoaField(); });
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     ITR -> WHICH YEAR
+
+     "ITR — Last 3 Years" means three returns are normally attached at once, and
+     numbered ITR_3Years_1/_2/_3 there is no way to tell which year each one covers.
+     A year is chosen per file, so each lands as ITR_<year>. Same field is offered on
+     returns already on file (META_INPUT_KIND marks up_itr as 'year'). Business forms
+     only — the salaried forms have no ITR field, and this simply does nothing there.
+     ═══════════════════════════════════════════════════════════════════════════ */
+
+  var itrYears = {};   // file index -> year picked for that file
+
+  function renderItrYears() {
+    var inp = document.getElementById('up_itr');
+    var box = document.getElementById('itr-year-container');
+    if (!inp || !box) return;
+    var files = inp.files ? Array.prototype.slice.call(inp.files) : [];
+    itrYears = {};
+    box.innerHTML = '';
+    if (!files.length) return;
+
+    var years = itrYearList();
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-top:10px;padding:13px;background:#eff6ff;border:2px solid #3b82f6;border-radius:10px';
+    wrap.innerHTML = '<div style="font-size:13px;font-weight:700;color:#1e40af;margin-bottom:4px">' +
+      '\uD83D\uDCC5 Which year is each return for?</div>' +
+      '<p style="margin:0 0 10px;font-size:11.5px;color:#1e3a8a">' +
+      'Pick the year for each file so the three returns are told apart.</p>';
+
+    files.forEach(function (f, i) {
+      itrYears[i] = '';
+      var row = document.createElement('div');
+      row.style.cssText = 'padding:10px;background:#fff;border:1.5px solid #bfdbfe;border-radius:8px;margin-bottom:8px';
+      row.innerHTML =
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+          '<div style="flex:1;font-size:12.5px;font-weight:700;color:#0c4a6e;overflow:hidden;' +
+            'text-overflow:ellipsis">\uD83D\uDCC4 ' + escapeHtml(f.name) + '</div>' +
+          selectedFileRemoveBtn('up_itr', i) +
+        '</div>' +
+        '<select data-itr-year="' + i + '" style="width:100%;padding:8px 11px;border:2px solid #38bdf8;' +
+          'border-radius:8px;font-size:13px;font-weight:600;font-family:inherit;background:#fff;color:#0369a1;' +
+          'box-sizing:border-box"><option value="">Select year</option>' +
+          years.map(function (y) { return '<option value="' + y + '">' + y + '</option>'; }).join('') +
+        '</select>';
+      var field = row.querySelector('[data-itr-year]');
+      if (field) field.addEventListener('change', function () { itrYears[i] = field.value; });
+      wrap.appendChild(row);
+    });
+    box.appendChild(wrap);
+  }
+
+  function watchItrField() {
+    var inp = document.getElementById('up_itr');
+    if (!inp || inp.getAttribute('data-itr-watch')) return;
+    inp.setAttribute('data-itr-watch', '1');
+    if (!document.getElementById('itr-year-container')) {
+      var box = document.createElement('div');
+      box.id = 'itr-year-container';
+      var anchor = inp.closest('.ub') || inp;
+      if (anchor.parentNode) anchor.parentNode.insertBefore(box, anchor.nextSibling);
+    }
+    inp.addEventListener('change', renderItrYears);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () { watchItrField(); });
+
+  // Writes the ITR files under their years. Replaces the plain addFiles call the
+  // business forms used to make for up_itr.
+  window.__addItrDocsToZip = async function (zip, unlockPdf, password) {
+    var inp = document.getElementById('up_itr');
+    if (!zip || !inp || !inp.files || !inp.files.length) return 0;
+    var folder = (typeof zip.folder === 'function') ? zip.folder('Documents') : zip;
+    var used = {};
+    var written = 0;
+
+    for (var i = 0; i < inp.files.length; i++) {
+      var f = inp.files[i];
+      var dot = f.name.lastIndexOf('.');
+      var ext = dot > 0 ? f.name.slice(dot).toLowerCase() : '';
+      var year = safeFileStem(itrYears[i] || '');
+      var stem = year ? 'ITR_' + year : 'ITR_3Years';
+      used[stem] = (used[stem] || 0) + 1;
+      if (used[stem] > 1) stem += '_' + used[stem];
+      else if (!year && inp.files.length > 1) stem += '_' + (i + 1);
+
+      var out = f;
+      if (password && ext === '.pdf' && typeof unlockPdf === 'function') {
+        try { out = await unlockPdf(f, password); } catch (e) { out = f; }
+      }
+      folder.file(stem + ext, out);
+      written++;
+    }
+    return written;
+  };
 
   // Writes the SOA files under their lender names. Replaces the plain addFiles call
   // each form used to make for up_soa.

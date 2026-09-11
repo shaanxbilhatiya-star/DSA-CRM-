@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LAP — Salaried Application</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="lead-shared.js?v=20260911m"></script>
+<script src="lead-shared.js?v=20260911n"></script>
 <style>/* All fields & documents are optional */ .fi label .r,.sec-err-banner,.err{display:none!important}</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -783,29 +783,6 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#ccfbf1 0%
       <div class="err" id="bank-err">⚠ Bank statements are required</div>
       <div class="pw-row"><label>🔐 Bank PDF password:</label><input type="password" id="pw_bank" placeholder="Leave blank if no password"></div>
     </div>
-
-    <!-- Appointment / ID Card -->
-    <div class="fi" style="margin-top:1rem">
-      <label>Appointment Letter / Employee ID <span class="opt">(if available)</span></label>
-      <div class="ub" id="ub-appt">
-        <input type="file" accept=".pdf,.jpg,.jpeg,.png" id="up_appt" onchange="mark(this,'appt-fn','ub-appt')" multiple>
-        <div class="ub-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-        <div class="ul"><strong>Upload Appointment Letter / Employee ID</strong><span class="tag-opt">Optional</span><span class="tag">PDF / JPG / PNG</span></div>
-      </div>
-      <div class="fn" id="appt-fn"></div>
-    </div>
-  </div>
-
-  <!-- ⑥ REQUIRED AMOUNT -->
-  <div class="sec" id="sec-reqamt">
-    <div class="sec-title">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-      Required Amount
-    </div>
-    <div class="fi"><label>Required loan amount (₹) <span class="r">*</span></label><input type="text" id="f_lamount" placeholder="e.g. 10,00,000"></div>
-    <div class="fi"><label>Loan Facilitator</label><input type="text" id="f_lender" placeholder="e.g. Jagdish sir / SBI Bank"></div>
-  </div>
-
     <!-- SOA — appears only when obligations are filled -->
     <div id="fi-soa" style="display:none;margin-top:14px;border-top:1px dashed #e5e7eb;padding-top:14px">
       <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">
@@ -819,6 +796,50 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#ccfbf1 0%
       </div>
       <div class="fn" id="soa-fn"></div>
     </div>
+
+    <!-- Appointment / ID Card -->
+    <div class="fi" style="margin-top:1rem">
+      <label>Appointment Letter / Employee ID <span class="opt">(if available)</span></label>
+      <div class="ub" id="ub-appt">
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png" id="up_appt" onchange="mark(this,'appt-fn','ub-appt')" multiple>
+        <div class="ub-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+        <div class="ul"><strong>Upload Appointment Letter / Employee ID</strong><span class="tag-opt">Optional</span><span class="tag">PDF / JPG / PNG</span></div>
+      </div>
+      <div class="fn" id="appt-fn"></div>
+    </div>
+  </div>
+
+  <!-- ⑨½ OTHER DOCUMENTS -->
+  <div class="sec">
+    <div class="sec-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+      Other Documents
+    </div>
+    <p style="margin: 0 0 1rem 0; color: var(--gray-600); font-size: 0.95rem;">
+      Upload any additional documents not covered above (e.g., Property Papers, NOC, Partnership Deed). Each document can have a custom name.
+    </p>
+    <div id="other-docs-wrapper" style="display:flex;flex-direction:column;gap:0.75rem;margin-bottom:1rem">
+      <!-- Dynamic other doc slots appear here -->
+    </div>
+    <button type="button" class="other-doc-btn-add" onclick="addOtherDocSlot()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Other Document
+    </button>
+  </div>
+
+  <!-- CO-APPLICANT / GUARANTOR — built by lead-shared.js so all five forms match -->
+  <div id="party-section"></div>
+
+  <!-- ⑥ REQUIRED AMOUNT -->
+  <div class="sec" id="sec-reqamt">
+    <div class="sec-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      Required Amount
+    </div>
+    <div class="fi"><label>Required loan amount (₹) <span class="r">*</span></label><input type="text" id="f_lamount" placeholder="e.g. 10,00,000"></div>
+    <div class="fi"><label>Loan Facilitator</label><input type="text" id="f_lender" placeholder="e.g. Jagdish sir / SBI Bank"></div>
+  </div>
+
 
   <!-- ⑦S -->
 
@@ -886,27 +907,8 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#ccfbf1 0%
     <div class="fi"><label>Notes / Remarks</label><textarea id="f_notes" placeholder="Any special remarks about the case or property..."></textarea></div>
   </div>
 
-  <!-- ⑨½ OTHER DOCUMENTS -->
-  <div class="sec">
-    <div class="sec-title">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-      Other Documents
-    </div>
-    <p style="margin: 0 0 1rem 0; color: var(--gray-600); font-size: 0.95rem;">
-      Upload any additional documents not covered above (e.g., Property Papers, NOC, Partnership Deed). Each document can have a custom name.
-    </p>
-    <div id="other-docs-wrapper" style="display:flex;flex-direction:column;gap:0.75rem;margin-bottom:1rem">
-      <!-- Dynamic other doc slots appear here -->
-    </div>
-    <button type="button" class="other-doc-btn-add" onclick="addOtherDocSlot()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      Add Other Document
-    </button>
-  </div>
 
   <!-- ⑩ REFERENCES -->
-  <!-- CO-APPLICANT / GUARANTOR — built by lead-shared.js so all five forms match -->
-  <div id="party-section"></div>
 
   <div class="sec" id="sec-refs">
     <div class="sec-title">
