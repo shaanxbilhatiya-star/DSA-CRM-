@@ -2532,7 +2532,8 @@ app.get('/share/:token', (req, res) => {
   .doc-empty{padding:14px 16px;border:1.5px dashed #cbd5e1;border-radius:12px;background:#f8fafc;
     color:#64748b;font-size:12.5px;font-style:italic;text-align:center}
   /* CIBIL deep analysis */
-  .cibil-card{border:2px solid #c7d2fe;border-radius:14px;overflow:hidden;margin-bottom:16px}
+  /* Sits below the applicant details, so the gap belongs above it. */
+  .cibil-card{border:2px solid #c7d2fe;border-radius:14px;overflow:hidden;margin-top:16px}
   .cibil-head{padding:12px 15px;background:linear-gradient(135deg,#eef2ff,#e0e7ff);font-size:14px;
     font-weight:800;color:#3730a3;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
   .cibil-verdict{margin-left:auto;font-size:11px;font-weight:700;background:#fff;color:#4338ca;
@@ -2681,11 +2682,12 @@ app.get('/share/:token', (req, res) => {
     ${docCardsHTML}
   </div>
 
-  <!-- Applicant info card -->
+  <!-- Applicant info card. The CIBIL analysis sits below the applicant's own details,
+       so the page reads as the form was filled in and the bureau read comes after. -->
   <div class="card">
     <h2>Applicant Information</h2>
-    ${cibilHTML}
     ${infoBlock}
+    ${cibilHTML}
   </div>
 
   <p class="foot">
