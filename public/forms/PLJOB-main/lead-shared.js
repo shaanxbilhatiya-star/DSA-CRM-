@@ -71,6 +71,12 @@
       }
     }
 
+    // Salary type and property type are picked with buttons, not form controls, so
+    // the loop above never saw them and both came back unselected on reopening even
+    // though they were already decided. The forms mirror the choice onto window.
+    if (typeof window.salaryType === 'string' && window.salaryType) data['__salaryType'] = window.salaryType;
+    if (typeof window.selectedProp === 'string' && window.selectedProp) data['__propType'] = window.selectedProp;
+
     // Capture co-applicants / guarantors. Their individual field inputs are also
     // picked up by the id loop above, but this records the roles and slot numbers
     // that the rows have to be rebuilt from before those values mean anything.
@@ -97,14 +103,25 @@
       try { window.__restoreParties(data['__parties']); }
       catch (e) { console.warn('Could not restore co-applicant/guarantor rows', e); }
     }
+
+    // Re-apply the button-driven choices. Both also reveal their dependent sections
+    // (property paperwork, Form 16), so they run before any field values are set.
+    if (data['__salaryType'] && typeof window.setSalaryType === 'function') {
+      try { window.setSalaryType(data['__salaryType']); } catch (e) {}
+    }
+    if (data['__propType'] && typeof window.selectProp === 'function') {
+      try { window.selectProp(data['__propType']); } catch (e) {}
+    }
     
     // ── PHASE 1: Identify and trigger conditional visibility controls FIRST ──
     // These fields control which sections are visible. Set them before other fields
     // so that hidden fields become visible and can receive their values.
+    // NOTE: property type is NOT listed here. It is chosen with buttons and has no
+    // f_prop_type element, so the entry that used to sit here could never fire; it
+    // is restored from __propType in phase 0 below instead.
     var visibilityTriggers = {
       'f_owner_type': 'toggleOwnerKyc',        // LAP forms: Father/Mother owner KYC
-      'f_perm_same': 'togglePermanent',        // BL_Business: Permanent address
-      'f_prop_type': 'selectProp'              // LAP forms: Property type sections
+      'f_perm_same': 'togglePermanent'         // BL_Business: Permanent address
     };
     
     Object.keys(visibilityTriggers).forEach(function(fieldId) {
@@ -751,7 +768,10 @@
   // Upload fields whose documents only make sense with a period attached.
   // 'month' → a single month/year (salary slips). 'range' → a from–to span
   // (bank statements). Anything not listed here keeps the plain chip display.
-  var META_INPUT_KIND = { up_salary: 'month', up_bank: 'range' };
+  // 'lender' for Statement of Account: an SOA is meaningless without knowing which
+  // bank or NBFC the loan is with, and new lenders appear constantly so it has to be
+  // typed in rather than picked from a list.
+  var META_INPUT_KIND = { up_salary: 'month', up_bank: 'range', up_soa: 'lender' };
 
   var MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
                      'July', 'August', 'September', 'October', 'November', 'December'];
@@ -772,6 +792,12 @@
   // form shows what was set before instead of resetting the inputs to blank.
   function readPeriodFromLabel(label, kind) {
     var s = String(label || '').replace(/[_\s]+/g, ' ');
+    if (kind === 'lender') {
+      // "SOA HDFC Bank" -> "HDFC Bank". A bare "SOA Statement 2" has no lender yet.
+      var t = s.replace(/^SOA\b/i, '').replace(/\bstatement\b/i, '').replace(/\s+/g, ' ').trim();
+      if (!t || /^\d+$/.test(t)) return null;
+      return { lender: t };
+    }
     if (kind === 'month') {
       var m = s.match(new RegExp('(' + MONTH_NAMES.join('|') + ')\\s+(\\d{4})', 'i'));
       if (!m) return null;
@@ -820,7 +846,14 @@
       (isSet ? '\u2705 period set' : '\u26A0 no period set') + '</span>';
 
     var controls;
-    if (kind === 'month') {
+    if (kind === 'lender') {
+      controls = '<label style="font-size:11.5px;font-weight:700;color:#0369a1;flex:1;min-width:200px">' +
+        'Bank / NBFC this loan is with' +
+        '<input type="text" class="docmeta-lender" value="' + escapeHtml(current ? current.lender : '') + '" ' +
+        'placeholder="e.g. HDFC Bank, Bajaj Finance" ' +
+        'style="display:block;margin-top:3px;width:100%;padding:7px 10px;border:2px solid #38bdf8;' +
+        'border-radius:8px;font-size:13px;font-weight:600;font-family:inherit"></label>';
+    } else if (kind === 'month') {
       var monthOpts = '<option value="">Select Month</option>' + MONTH_NAMES.map(function (m) {
         return '<option value="' + m + '"' + (current && current.month === m ? ' selected' : '') + '>' + m + '</option>';
       }).join('');
@@ -865,7 +898,12 @@
     var prefix = ownerPrefix || '';
 
     var label;
-    if (kind === 'month') {
+    if (kind === 'lender') {
+      var lender = wrap.querySelector('.docmeta-lender').value.trim();
+      if (!lender) { alert('Enter the bank or NBFC this statement belongs to.'); return; }
+      if (/[<>:"/\\|?*]/.test(lender)) { alert('Avoid these characters: < > : " / \\ | ? *'); return; }
+      label = prefix + 'SOA_' + lender.replace(/\s+/g, '_');
+    } else if (kind === 'month') {
       var mo = wrap.querySelector('.docmeta-month').value;
       var yr = wrap.querySelector('.docmeta-year').value;
       if (!mo || !yr) { alert('Pick both a month and a year first.'); return; }
@@ -1852,6 +1890,103 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () { watchOtherDocRows(); });
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     STATEMENT OF ACCOUNT -> WHICH LENDER
+
+     An SOA only means something next to the loan it belongs to, and several can be
+     uploaded at once for different lenders. New banks and NBFCs appear constantly,
+     so the lender is typed in per file rather than chosen from a list that would go
+     stale. Each file lands in the ZIP as SOA_<Lender>, and the same lender field is
+     offered on documents already on file (META_INPUT_KIND marks up_soa as 'lender').
+
+     Wired up from here, listening on the field, so the five forms need no markup
+     change beyond swapping their SOA line in the ZIP builder.
+     ═══════════════════════════════════════════════════════════════════════════ */
+
+  var soaLenders = {};   // file index -> lender typed for that file
+
+  function renderSoaLenders() {
+    var inp = document.getElementById('up_soa');
+    var box = document.getElementById('soa-lender-container');
+    if (!inp || !box) return;
+    var files = inp.files ? Array.prototype.slice.call(inp.files) : [];
+    soaLenders = {};
+    box.innerHTML = '';
+    if (!files.length) return;
+
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-top:10px;padding:13px;background:#eff6ff;border:2px solid #3b82f6;border-radius:10px';
+    wrap.innerHTML = '<div style="font-size:13px;font-weight:700;color:#1e40af;margin-bottom:4px">' +
+      '\uD83C\uDFE6 Which lender does each statement belong to?</div>' +
+      '<p style="margin:0 0 10px;font-size:11.5px;color:#1e3a8a">' +
+      'Type the bank or NBFC for each file so every SOA is identifiable.</p>';
+
+    files.forEach(function (f, i) {
+      soaLenders[i] = '';
+      var row = document.createElement('div');
+      row.style.cssText = 'padding:10px;background:#fff;border:1.5px solid #bfdbfe;border-radius:8px;margin-bottom:8px';
+      row.innerHTML =
+        '<div style="font-size:12.5px;font-weight:700;color:#0c4a6e;margin-bottom:6px;overflow:hidden;' +
+          'text-overflow:ellipsis">\uD83D\uDCC4 ' + escapeHtml(f.name) + '</div>' +
+        '<input type="text" data-soa-lender="' + i + '" placeholder="Bank / NBFC name (e.g. HDFC Bank, Bajaj Finance)" ' +
+          'style="width:100%;padding:8px 11px;border:2px solid #38bdf8;border-radius:8px;font-size:13px;' +
+          'font-weight:600;font-family:inherit;box-sizing:border-box">';
+      var field = row.querySelector('[data-soa-lender]');
+      if (field) {
+        field.addEventListener('input', function () { soaLenders[i] = field.value.trim(); });
+      }
+      wrap.appendChild(row);
+    });
+    box.appendChild(wrap);
+  }
+
+  function watchSoaField() {
+    var inp = document.getElementById('up_soa');
+    if (!inp || inp.getAttribute('data-soa-watch')) return;
+    inp.setAttribute('data-soa-watch', '1');
+    // A container is created next to the field rather than added to five templates.
+    if (!document.getElementById('soa-lender-container')) {
+      var box = document.createElement('div');
+      box.id = 'soa-lender-container';
+      var anchor = inp.closest('.ub') || inp;
+      if (anchor.parentNode) anchor.parentNode.insertBefore(box, anchor.nextSibling);
+    }
+    // Added alongside the form's own inline onchange, which still runs.
+    inp.addEventListener('change', renderSoaLenders);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () { watchSoaField(); });
+
+  // Writes the SOA files under their lender names. Replaces the plain addFiles call
+  // each form used to make for up_soa.
+  window.__addSoaDocsToZip = async function (zip, unlockPdf, password) {
+    var inp = document.getElementById('up_soa');
+    if (!zip || !inp || !inp.files || !inp.files.length) return 0;
+    var folder = (typeof zip.folder === 'function') ? zip.folder('Documents') : zip;
+    var used = {};
+    var written = 0;
+
+    for (var i = 0; i < inp.files.length; i++) {
+      var f = inp.files[i];
+      var dot = f.name.lastIndexOf('.');
+      var ext = dot > 0 ? f.name.slice(dot).toLowerCase() : '';
+      var lender = safeFileStem(soaLenders[i] || '');
+      var stem = lender ? 'SOA_' + lender : 'SOA_Statement';
+      // Two statements from the same lender still need distinct names.
+      used[stem] = (used[stem] || 0) + 1;
+      if (used[stem] > 1) stem += '_' + used[stem];
+      else if (!lender && inp.files.length > 1) stem += '_' + (i + 1);
+
+      var out = f;
+      if (password && ext === '.pdf' && typeof unlockPdf === 'function') {
+        try { out = await unlockPdf(f, password); } catch (e) { out = f; }
+      }
+      folder.file(stem + ext, out);
+      written++;
+    }
+    return written;
+  };
 
   /* ═══════════════════════════════════════════════════════════════════════════
      RENAME A DOCUMENT ALREADY ON FILE

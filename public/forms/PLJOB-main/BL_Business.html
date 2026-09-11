@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BL — Business Loan Application</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="lead-shared.js?v=20260911h"></script>
+<script src="lead-shared.js?v=20260911i"></script>
 <style>/* All fields & documents are optional */ .fi label .r,.sec-err-banner,.err{display:none!important}</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -599,16 +599,6 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
 
   <!-- ⑦ OBLIGATIONS -->
 
-    <!-- SOA — always visible, standalone -->
-    <div class="fi" style="margin-top:0.6rem">
-      <label>Statement of Account (SOA) <span class="opt">(Optional / If Available)</span></label>
-      <div class="ub" id="ub-soa-always">
-        <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" id="up_soa_always" onchange="mark(this,'soa-always-fn','ub-soa-always')">
-        <div class="ub-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>
-        <div class="ul"><strong>Upload Statement of Account (SOA)</strong><span class="tag">Multi-select · Optional</span></div>
-      </div>
-      <div class="fn" id="soa-always-fn"></div>
-    </div>
 
   <div class="sec" id="sec-obligations">
     <div class="sec-title">
@@ -1016,8 +1006,7 @@ async function saveFile(){
   setProgress(58,'Adding biz addr proof...');await addFiles(docs,'up_biz_addr_proof','Business_Address_Proof');
   setProgress(63,'Unlocking & adding ITR...'); await addFiles(docs,'up_itr','ITR_3Years',val('pw_itr'));
   setProgress(73,'Unlocking & adding bank stmt...');   await addFiles(docs,'up_bank','Bank_Statement',val('pw_bank'),true);
-  setProgress(76,'Adding SOA...');         await addFiles(docs,'up_soa','SOA_Statement');
-  setProgress(78,'Adding SOA (always)...'); await addFiles(docs,'up_soa_always','SOA_Statement_Always');
+  setProgress(76,'Adding SOA...');         if (typeof window.__addSoaDocsToZip === 'function') { await window.__addSoaDocsToZip(zip, typeof unlockPdf === 'function' ? unlockPdf : null, ''); } else { await addFiles(docs,'up_soa','SOA_Statement'); }
   setProgress(80,'Adding shop video...');  await addFiles(docs,'up_shop_video','Shop_Video');
 
   function getObligationLines(){
