@@ -799,48 +799,53 @@ function handleBankStatementUpload(input, fnId, ubId) {
   // Build metadata form for each file
   const container = document.getElementById('bank-metadata-container');
   container.innerHTML = '';
-  container.style.cssText = 'margin-top:12px;padding:14px;background:var(--blue-light);border:1.5px solid var(--blue-mid);border-radius:var(--radius-sm)';
+  container.style.cssText = 'margin-top:12px;padding:16px;background:#eff6ff;border:2px solid #3b82f6;border-radius:12px';
 
   const title = document.createElement('div');
-  title.style.cssText = 'font-size:13px;font-weight:700;color:var(--blue-dark);margin-bottom:10px';
-  title.textContent = '📅 Specify Date Range for Each Bank Statement';
+  title.style.cssText = 'font-size:14px;font-weight:700;color:#1e40af;margin-bottom:6px';
+  title.textContent = '📅 Specify the date range each bank statement covers:';
   container.appendChild(title);
+  
+  const subtitle = document.createElement('p');
+  subtitle.style.cssText = 'margin:0 0 12px 0;font-size:12px;color:#1e3a8a';
+  subtitle.textContent = 'Enter the FROM date and TO date for each statement so the coverage period is clear';
+  container.appendChild(subtitle);
 
   for (let i = 0; i < input.files.length; i++) {
     const file = input.files[i];
     const fileId = 'bank-' + i;
 
     const fileRow = document.createElement('div');
-    fileRow.style.cssText = 'margin-bottom:10px;padding:10px;background:#fff;border-radius:8px;border:1px solid var(--gray-200)';
+    fileRow.style.cssText = 'margin-bottom:10px;padding:14px;background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border-radius:10px;border:2px solid #bae6fd';
 
     const fileLabel = document.createElement('div');
-    fileLabel.style.cssText = 'font-size:12px;font-weight:600;color:var(--gray-700);margin-bottom:8px';
+    fileLabel.style.cssText = 'font-size:14px;font-weight:700;color:#0c4a6e;margin-bottom:10px';
     fileLabel.textContent = '📄 ' + file.name;
     fileRow.appendChild(fileLabel);
 
     const dateRow = document.createElement('div');
-    dateRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px';
+    dateRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px';
 
     const fromGroup = document.createElement('div');
     const fromLabel = document.createElement('label');
-    fromLabel.style.cssText = 'display:block;font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px';
-    fromLabel.textContent = 'From Date';
+    fromLabel.style.cssText = 'display:block;font-size:12px;font-weight:700;color:#0369a1;margin-bottom:6px';
+    fromLabel.textContent = 'FROM Date:';
     const fromInput = document.createElement('input');
     fromInput.type = 'date';
     fromInput.id = fileId + '-from';
-    fromInput.style.cssText = 'width:100%;padding:6px 8px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:12px';
+    fromInput.style.cssText = 'width:100%;padding:8px 12px;border:2px solid #38bdf8;border-radius:8px;font-size:13px;font-weight:600';
     fromInput.required = true;
     fromGroup.appendChild(fromLabel);
     fromGroup.appendChild(fromInput);
 
     const toGroup = document.createElement('div');
     const toLabel = document.createElement('label');
-    toLabel.style.cssText = 'display:block;font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px';
-    toLabel.textContent = 'To Date';
+    toLabel.style.cssText = 'display:block;font-size:12px;font-weight:700;color:#0369a1;margin-bottom:6px';
+    toLabel.textContent = 'TO Date:';
     const toInput = document.createElement('input');
     toInput.type = 'date';
     toInput.id = fileId + '-to';
-    toInput.style.cssText = 'width:100%;padding:6px 8px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:12px';
+    toInput.style.cssText = 'width:100%;padding:8px 12px;border:2px solid #38bdf8;border-radius:8px;font-size:13px;font-weight:600';
     toInput.required = true;
     toGroup.appendChild(toLabel);
     toGroup.appendChild(toInput);
