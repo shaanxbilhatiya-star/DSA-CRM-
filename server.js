@@ -1985,6 +1985,77 @@ app.get('/share/:token', (req, res) => {
     });
   });
 
+  // ── CIBIL deep analysis, as computed by the form when the report was attached ──
+  // Rendered from the stored figures rather than re-read here, so the page always
+  // shows exactly what the agent saw. Escaped field by field; nothing from the
+  // report reaches the page as markup.
+  const cibilHTML = (function () {
+    const c = formData.__cibilAnalysis;
+    if (!c || typeof c !== 'object') return '';
+    const dot = { green: '🟢', amber: '🟠', red: '🔴' }[c.verdict] || '⚪';
+    const word = { green: 'Healthy', amber: 'Needs attention', red: 'High risk' }[c.verdict] || '—';
+    const money = n => (n || n === 0) ? '₹' + Math.round(n).toLocaleString('en-IN') : '—';
+    const ex = c.exposure || {};
+    const row = (k, v) => `<div class="cib-row"><span>${esc(k)}</span><strong>${v}</strong></div>`;
+    let h = `<div class="cibil-card">
+      <div class="cibil-head">${dot} CIBIL deep analysis <span class="cibil-verdict">${esc(word)}</span></div>
+      <div class="cibil-body">`;
+    h += row('Score', (c.scores && c.scores.score != null ? c.scores.score : '—') +
+      (c.scores && c.scores.plScore ? ' &nbsp;(personal loan ' + c.scores.plScore + ')' : ''));
+    if (c.scores && Array.isArray(c.scores.factors) && c.scores.factors.length) {
+      h += `<div class="cib-sub">Score factors: ${c.scores.factors.map(esc).join(' · ')}</div>`;
+    }
+    if (c.consumer && c.consumer.name) h += row('Bureau name', esc(c.consumer.name));
+    h += row('Active accounts', (ex.active || 0) + ' of ' + (ex.totalAccounts || 0));
+    h += row('Total active EMI', money(ex.totalActiveEmi));
+    h += row('Outstanding', money(ex.totalOutstanding));
+    if (ex.interestOnly) h += row('Gold / interest-only', money(ex.interestOnly));
+
+    const od = Array.isArray(c.overdues) ? c.overdues : [];
+    h += row('Overdue / default accounts', od.length);
+    od.forEach(o => {
+      h += `<div class="cib-flag red">🔴 ${esc(o.lender || 'Not disclosed')} — ${esc(o.type || '')}
+        · worst DPD ${esc(String((o.dpd && (o.dpd.peakDpd || o.dpd.worstClass)) || '—'))}
+        · overdue ${o.overdue ? money(o.overdue) : 'Blank'}
+        · settled ${o.settled ? money(o.settled) : 'Blank'}
+        · written-off ${o.writtenOff ? money(o.writtenOff) : 'Blank'}${o.suitFiled ? ' · SUIT FILED' : ''}</div>`;
+    });
+
+    const g = Array.isArray(c.guarantor) ? c.guarantor : [];
+    h += row('Guarantor-linked accounts', g.length);
+    g.forEach(x => {
+      h += `<div class="cib-flag amber">🤝 ${esc(x.lender || 'Not disclosed')} — ${esc(x.type || '')}
+        · outstanding ${money(x.balance)}
+        · worst DPD ${esc(String((x.dpd && (x.dpd.peakDpd || x.dpd.worstClass)) || '—'))}
+        · ${x.active ? 'Active' : 'Closed'}</div>`;
+    });
+    if (g.length) {
+      h += `<div class="cib-sub">A guaranteed facility can affect underwriting even though the applicant is
+        not the primary borrower. The CIR does not name the borrower — verify the account relationship and
+        obtain the loan documents or lender confirmation before relying on it.</div>`;
+    }
+
+    if (Array.isArray(c.history) && c.history.length) {
+      h += row('Delinquency pattern', esc(c.pattern || '—'));
+      c.history.slice(0, 5).forEach(x => {
+        h += `<div class="cib-flag">${esc(x.lender || '—')} — peak DPD ${esc(String(x.peakDpd || x.worstClass || '—'))}
+          · ${esc(x.when || '—')} · ${esc(x.outcome || '')}</div>`;
+      });
+    }
+    const e = c.enquiries || {};
+    h += row('Enquiries', (e.total == null ? '—' : e.total) + ' total · ' + (e.last3 || 0) +
+      ' in 3 months · ' + (e.last6 || 0) + ' in 6 months');
+    if (Array.isArray(c.stacking) && c.stacking.length) {
+      h += row('Stacking signal', esc(c.stacking[0].lender) + ' × ' + c.stacking[0].count +
+        ' loans over ' + c.stacking[0].spanMonths + ' month(s)');
+    }
+    if (c.kyc && Array.isArray(c.kyc.notes) && c.kyc.notes.length) {
+      c.kyc.notes.forEach(n => { h += `<div class="cib-flag amber">⚠️ ${esc(n)}</div>`; });
+    }
+    h += `<div class="cib-note">Read directly from the uploaded CIR; nothing is estimated.</div>`;
+    return h + '</div></div>';
+  })();
+
   const keyPartiesHTML = keyParties.length ? `
       <div class="parties">
         ${keyParties.map(kp => {
@@ -2386,6 +2457,22 @@ app.get('/share/:token', (req, res) => {
   .doc-sub{font-size:11.5px;color:#64748b;margin-top:3px;word-break:break-all}
   .doc-empty{padding:14px 16px;border:1.5px dashed #cbd5e1;border-radius:12px;background:#f8fafc;
     color:#64748b;font-size:12.5px;font-style:italic;text-align:center}
+  /* CIBIL deep analysis */
+  .cibil-card{border:2px solid #c7d2fe;border-radius:14px;overflow:hidden;margin-bottom:16px}
+  .cibil-head{padding:12px 15px;background:linear-gradient(135deg,#eef2ff,#e0e7ff);font-size:14px;
+    font-weight:800;color:#3730a3;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .cibil-verdict{margin-left:auto;font-size:11px;font-weight:700;background:#fff;color:#4338ca;
+    padding:3px 11px;border-radius:20px}
+  .cibil-body{padding:12px 15px;font-size:12.5px;color:#0f172a}
+  .cib-row{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px dashed #e5e7eb}
+  .cib-row span{color:#64748b}
+  .cib-flag{margin:5px 0;padding:7px 10px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0;
+    font-size:11.5px;line-height:1.55}
+  .cib-flag.red{background:#fef2f2;border-color:#fecaca}
+  .cib-flag.amber{background:#fffbeb;border-color:#fde68a}
+  .cib-sub{margin:6px 0;font-size:11.5px;color:#475569;line-height:1.55}
+  .cib-note{margin-top:9px;font-size:11px;color:#94a3b8;font-style:italic}
+  @media(max-width:560px){ .cib-row{flex-direction:column;gap:2px} .cibil-verdict{margin-left:0} }
   /* Key parties panel — first thing read on the page */
   .parties{margin-top:14px;display:flex;flex-direction:column;gap:10px}
   .party-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 14px;border-radius:12px;
@@ -2523,6 +2610,7 @@ app.get('/share/:token', (req, res) => {
   <!-- Applicant info card -->
   <div class="card">
     <h2>Applicant Information</h2>
+    ${cibilHTML}
     ${infoBlock}
   </div>
 

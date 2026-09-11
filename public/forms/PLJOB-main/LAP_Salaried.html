@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LAP — Salaried Application</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="lead-shared.js?v=20260911p"></script>
+<script src="cibil-analysis.js?v=20260911q"></script>
+<script src="lead-shared.js?v=20260911q"></script>
 <style>/* All fields & documents are optional */ .fi label .r,.sec-err-banner,.err{display:none!important}</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -1414,6 +1415,7 @@ async function saveFile(){
     'CIBIL',
     '------------------------------------------------------------',
     'CIBIL score        : ' + (val('f_cibil')||'—'),
+    ...(function(){ /* __cibilInfoLines */ try { return (window.__cibilAnalysis && window.CibilAnalysis) ? window.CibilAnalysis.toInfoLines(window.__cibilAnalysis) : []; } catch(e){ return []; } })(),
     '',
     '------------------------------------------------------------',
     'PROPERTY DETAILS',

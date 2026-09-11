@@ -71,6 +71,10 @@
       }
     }
 
+    // The CIBIL summary travels with the lead so it is there on reopening and can be
+    // shown under CIBIL on the view page without re-reading the report.
+    if (window.__cibilAnalysis) data['__cibilAnalysis'] = window.__cibilAnalysis;
+
     // Salary type and property type are picked with buttons, not form controls, so
     // the loop above never saw them and both came back unselected on reopening even
     // though they were already decided. The forms mirror the choice onto window.
@@ -102,6 +106,19 @@
     if (data['__parties'] && typeof window.__restoreParties === 'function') {
       try { window.__restoreParties(data['__parties']); }
       catch (e) { console.warn('Could not restore co-applicant/guarantor rows', e); }
+    }
+
+    // Show the stored CIBIL summary again when a lead is reopened, so it is visible
+    // in edit mode without the agent having to re-attach the report.
+    if (data['__cibilAnalysis']) {
+      window.__cibilAnalysis = data['__cibilAnalysis'];
+      setTimeout(function () {
+        var box = cibilBox();
+        if (box && typeof window.CibilAnalysis !== 'undefined') {
+          try { box.innerHTML = window.CibilAnalysis.renderHtml(data['__cibilAnalysis']); }
+          catch (e) { /* leave the field as-is if the stored shape is unexpected */ }
+        }
+      }, 60);
     }
 
     // Re-apply the button-driven choices. Both also reveal their dependent sections
@@ -2102,6 +2119,88 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () { watchItrField(); });
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     CIBIL REPORT -> AUTOMATIC DEEP ANALYSIS
+
+     The moment a CIBIL report is attached, it is read and summarised in place:
+     score and factors, KYC match against what was typed on the form, active
+     exposure and EMI, current overdues, guarantor exposure, historical
+     delinquencies, enquiry pattern and stacking signals. The summary is stored in
+     the snapshot so it reappears on reopening and is shown under CIBIL on the
+     shared view page. cibil-analysis.js does the reading; this only wires it up.
+     ═══════════════════════════════════════════════════════════════════════════ */
+
+  function cibilBox() {
+    var inp = document.getElementById('up_cibil');
+    if (!inp) return null;
+    var box = document.getElementById('cibil-analysis-container');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'cibil-analysis-container';
+      var anchor = inp.closest('.ub') || inp;
+      if (anchor.parentNode) anchor.parentNode.insertBefore(box, anchor.nextSibling);
+    }
+    return box;
+  }
+
+  function cibilNote(msg, tone) {
+    var c = tone === 'warn' ? ['#fffbeb', '#fbbf24', '#92400e'] : ['#eff6ff', '#93c5fd', '#1e3a8a'];
+    return '<div style="margin-top:10px;padding:11px 13px;background:' + c[0] + ';border:1.5px solid ' +
+      c[1] + ';border-radius:10px;font-size:12.5px;color:' + c[2] + '">' + msg + '</div>';
+  }
+
+  // What the agent typed, so the report can be checked against it.
+  function applicantForKyc() {
+    function v(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+    return { name: v('f_name'), dob: v('f_dob') ? isoToDmy(v('f_dob')) : '', gender: v('f_gender'), pan: v('f_pan_no') };
+  }
+  function isoToDmy(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    return m ? m[3] + '/' + m[2] + '/' + m[1] : iso;
+  }
+
+  function runCibilAnalysis() {
+    var inp = document.getElementById('up_cibil');
+    var box = cibilBox();
+    if (!inp || !box) return;
+    var file = inp.files && inp.files[0];
+    if (!file) { box.innerHTML = ''; window.__cibilAnalysis = null; return; }
+    if (typeof window.CibilAnalysis === 'undefined') {
+      box.innerHTML = cibilNote('Could not load the CIBIL reader, so no summary was produced. The report itself is still attached and will be saved.', 'warn');
+      return;
+    }
+
+    box.innerHTML = cibilNote('\u23F3 Reading the CIBIL report\u2026');
+    window.CibilAnalysis.extractText(file).then(function (text) {
+      var analysis = window.CibilAnalysis.analyse(text, applicantForKyc());
+      if (analysis.scores.score == null && analysis.exposure.totalAccounts === 0) {
+        box.innerHTML = cibilNote('This file does not look like a TransUnion CIBIL CIR, so no summary was produced. The document is still attached and will be saved.', 'warn');
+        window.__cibilAnalysis = null;
+        return;
+      }
+      window.__cibilAnalysis = analysis;
+      box.innerHTML = window.CibilAnalysis.renderHtml(analysis);
+    }).catch(function (err) {
+      window.__cibilAnalysis = null;
+      var why = (err && err.message) === 'IMAGE'
+        ? 'This is a photo or scan, which has no text to read. Upload the CIBIL report as a PDF (or the saved HTML) and the summary will be generated automatically.'
+        : (err && err.message) === 'NO_PDFJS'
+        ? 'The PDF reader did not load on this page, so no summary was produced.'
+        : 'Could not read this report automatically, so no summary was produced. The document is still attached and will be saved.';
+      box.innerHTML = cibilNote(why, 'warn');
+    });
+  }
+  window.__runCibilAnalysis = runCibilAnalysis;
+
+  function watchCibilField() {
+    var inp = document.getElementById('up_cibil');
+    if (!inp || inp.getAttribute('data-cibil-watch')) return;
+    inp.setAttribute('data-cibil-watch', '1');
+    inp.addEventListener('change', runCibilAnalysis);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () { watchCibilField(); });
 
   // Writes the ITR files under their years. Replaces the plain addFiles call the
   // business forms used to make for up_itr.
