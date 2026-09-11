@@ -399,10 +399,11 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
     <div class="fi" style="margin-top:0.6rem">
       <label id="sal-label">Salary Slips — Last 6 months <span class="r">*</span></label>
       <div class="ub" id="ub-salary">
-        <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple id="up_salary" onchange="mark(this,'sal-fn','ub-salary')">
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple id="up_salary" onchange="handleSalarySlipUpload(this,'sal-fn','ub-salary')">
         <div class="ub-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
-        <div class="ul" id="sal-ul"><strong>Upload salary slips — last 6 months</strong><span class="tag">Multi-select</span></div>
+        <div class="ul" id="sal-ul"><strong>Upload salary slips — last 6 months</strong><span class="tag">Multi-select · Will ask for month</span></div>
       </div>
+      <div id="sal-metadata-container" style="margin-top:10px;display:none"></div>
       <div class="fn" id="sal-fn"></div>
       <div class="err" id="sal-err">⚠ Salary slips are required</div>
       <div class="pw-row" style="margin-top:10px">
@@ -426,10 +427,11 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
     <div class="fi">
       <label>Bank account statement — last 6 months <span class="r">*</span></label>
       <div class="ub" id="ub-bank">
-        <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple id="up_bank" onchange="mark(this,'bank-fn','ub-bank')">
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple id="up_bank" onchange="handleBankStatementUpload(this,'bank-fn','ub-bank')">
         <div class="ub-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
-        <div class="ul"><strong>Upload bank statements — last 6 months</strong><span class="tag">Multi-select</span></div>
+        <div class="ul"><strong>Upload bank statements — last 6 months</strong><span class="tag">Multi-select · Will ask for date range</span></div>
       </div>
+      <div id="bank-metadata-container" style="margin-top:10px;display:none"></div>
       <div class="fn" id="bank-fn"></div>
       <div class="err" id="bank-err">⚠ Bank statements are required</div>
       <div class="pw-row" style="margin-top:10px">
@@ -1020,6 +1022,87 @@ function updateChecklist(inputId, hasFile) {
 }
 
 // ── MARK UPLOAD ───────────────────────────────────────────────────────
+// ── Salary Slip Upload with Month Metadata ──
+let salarySlipMetadata = {};
+function handleSalarySlipUpload(input, fnId, ubId) {
+  if (!input.files || input.files.length === 0) {
+    mark(input, fnId, ubId);
+    return;
+  }
+  
+  const files = Array.from(input.files);
+  const container = document.getElementById('sal-metadata-container');
+  container.innerHTML = '';
+  container.style.display = 'block';
+  
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                  'July', 'August', 'September', 'October', 'November', 'December'];
+  const currentYear = new Date().getFullYear();
+  const years = [currentYear, currentYear - 1];
+  
+  container.innerHTML = '<div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:14px;margin-bottom:10px"><strong style="color:#92400e;font-size:13px">📅 Specify month for each salary slip:</strong></div>';
+  
+  files.forEach((file, idx) => {
+    const id = 'sal-meta-' + idx;
+    salarySlipMetadata[idx] = { filename: file.name, month: '', year: '' };
+    
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px';
+    row.innerHTML = `
+      <div style="flex:1;font-size:13px;color:#374151;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${file.name}</div>
+      <select id="${id}-month" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;background:#fff" onchange="salarySlipMetadata[${idx}].month=this.value">
+        <option value="">Select Month</option>
+        ${months.map(m => `<option value="${m}">${m}</option>`).join('')}
+      </select>
+      <select id="${id}-year" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;background:#fff" onchange="salarySlipMetadata[${idx}].year=this.value">
+        <option value="">Year</option>
+        ${years.map(y => `<option value="${y}">${y}</option>`).join('')}
+      </select>
+    `;
+    container.appendChild(row);
+  });
+  
+  mark(input, fnId, ubId);
+}
+
+// ── Bank Statement Upload with Date Range Metadata ──
+let bankStatementMetadata = {};
+function handleBankStatementUpload(input, fnId, ubId) {
+  if (!input.files || input.files.length === 0) {
+    mark(input, fnId, ubId);
+    return;
+  }
+  
+  const files = Array.from(input.files);
+  const container = document.getElementById('bank-metadata-container');
+  container.innerHTML = '';
+  container.style.display = 'block';
+  
+  container.innerHTML = '<div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:14px;margin-bottom:10px"><strong style="color:#92400e;font-size:13px">📅 Specify date range for each bank statement:</strong></div>';
+  
+  files.forEach((file, idx) => {
+    const id = 'bank-meta-' + idx;
+    bankStatementMetadata[idx] = { filename: file.name, fromDate: '', toDate: '' };
+    
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;flex-wrap:wrap';
+    row.innerHTML = `
+      <div style="flex:1;min-width:150px;font-size:13px;color:#374151;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${file.name}</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <label style="font-size:12px;color:#6b7280;font-weight:600">From:</label>
+        <input type="date" id="${id}-from" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px" onchange="bankStatementMetadata[${idx}].fromDate=this.value">
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <label style="font-size:12px;color:#6b7280;font-weight:600">To:</label>
+        <input type="date" id="${id}-to" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px" onchange="bankStatementMetadata[${idx}].toDate=this.value">
+      </div>
+    `;
+    container.appendChild(row);
+  });
+  
+  mark(input, fnId, ubId);
+}
+
 function mark(inp, fnId, ubId) {
   const el = document.getElementById(fnId);
   const ub = document.getElementById(ubId);
@@ -1273,9 +1356,39 @@ async function saveFile() {
 
   async function addFiles(inputId, prefix, password) {
     const fs = files(inputId);
+    // Check if this is salary slips or bank statements to use metadata
+    const useSalaryMetadata = (inputId === 'up_salary' && Object.keys(salarySlipMetadata).length > 0);
+    const useBankMetadata = (inputId === 'up_bank' && Object.keys(bankStatementMetadata).length > 0);
+    
     for (let i=0;i<fs.length;i++) {
       const fileExt = ext(fs[i]);
-      const fname = prefix + (fs.length>1?'_'+(i+1):'') + fileExt;
+      let fname = prefix;
+      
+      // Add metadata to filename if available
+      if (useSalaryMetadata && salarySlipMetadata[i]) {
+        const meta = salarySlipMetadata[i];
+        if (meta.month && meta.year) {
+          fname = `${prefix}_${meta.month}_${meta.year}`;
+        } else if (meta.month) {
+          fname = `${prefix}_${meta.month}`;
+        } else {
+          fname = prefix + (fs.length>1?'_'+(i+1):'');
+        }
+      } else if (useBankMetadata && bankStatementMetadata[i]) {
+        const meta = bankStatementMetadata[i];
+        if (meta.fromDate && meta.toDate) {
+          fname = `${prefix}_${meta.fromDate}_to_${meta.toDate}`;
+        } else if (meta.fromDate) {
+          fname = `${prefix}_from_${meta.fromDate}`;
+        } else {
+          fname = prefix + (fs.length>1?'_'+(i+1):'');
+        }
+      } else {
+        fname = prefix + (fs.length>1?'_'+(i+1):'');
+      }
+      
+      fname += fileExt;
+      
       let finalFile = fs[i];
       if (password && fileExt === '.pdf') {
         finalFile = await unlockPdf(fs[i], password);
