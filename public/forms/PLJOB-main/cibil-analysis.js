@@ -125,6 +125,94 @@
     return '';
   }
 
+  // Turns the visual rows of a page into text lines.
+  //
+  // An account card is a real multi-column grid, and in a narrow column the field label
+  // wraps onto a second line. Read row by row that gives
+  //
+  //     ACCOUNT   SANCTIONED   CURRENT     ACTUAL
+  //     TYPE      AMOUNT       BALANCE     PAYMENT
+  //     : GOLD    : ₹ 58,400   : ₹ 58,619  : ₹ 590
+  //
+  // so "SANCTIONED AMOUNT" and "CURRENT BALANCE" never appear as adjacent words, their
+  // labels never match, and the card reads out as sanctioned ₹0, outstanding ₹0 and
+  // lender "Not disclosed" while single-word labels like EMI come through fine — with
+  // the neighbouring column's amount occasionally landing in the wrong field. So where
+  // a run of label-only rows is followed by a row of ":"-prefixed values, each value is
+  // rejoined with the label fragments standing above it in the same column.
+  function linearise(buckets) {
+    var out = [];
+    var stack = [];                       // label-only rows waiting for their values
+
+    function join(cells) {
+      return cells.map(function (c) { return c.s; }).join(' ').replace(/\s+/g, ' ').trim();
+    }
+    function flush() {
+      stack.forEach(function (row) { out.push(join(row)); });
+      stack = [];
+    }
+    // The CIR prints a value as ": something", or a bare ":" when the field is empty.
+    function isValue(s) { return /^\s*:/.test(s); }
+    // Only a real field label may be stacked — never a DPD grid row or a sentence.
+    function isLabelFragment(s) {
+      var v = String(s).trim();
+      return v.length > 0 && v.length <= 28 && !/^\d/.test(v) &&
+             /^[A-Z][A-Z0-9 ()\/&.,'\u2013-]*$/.test(v);
+    }
+
+    buckets.forEach(function (b) {
+      var cells = b.cells.slice().sort(function (p, q) { return p.x - q.x; });
+      var values = cells.filter(function (c) { return isValue(c.s); });
+
+      if (!values.length) {
+        if (cells.every(function (c) { return isLabelFragment(c.s); })) {
+          stack.push(cells);
+          if (stack.length > 3) out.push(join(stack.shift()));   // a label wraps twice at most
+        } else {
+          flush();
+          out.push(join(cells));
+        }
+        return;
+      }
+
+      // A row that is nothing but values, in two or more columns, closes off the label
+      // rows above it. Anything else is an ordinary "LABEL : value" line that already
+      // reads correctly, and is left exactly as it was.
+      if (values.length === cells.length && values.length >= 2 && stack.length) {
+        var xs = values.map(function (v) { return v.x; });
+        var gap = Infinity;
+        for (var i = 1; i < xs.length; i++) gap = Math.min(gap, xs[i] - xs[i - 1]);
+        var tol = Math.max(20, Math.min(60, gap / 2));
+        var parts = xs.map(function () { return []; });
+        var orphans = [];
+        stack.forEach(function (row) {
+          row.forEach(function (c) {
+            var bi = -1, bd = Infinity;
+            xs.forEach(function (vx, ci) {
+              var d = Math.abs(vx - c.x);
+              if (d < bd) { bd = d; bi = ci; }
+            });
+            // A fragment sitting outside every column — a floating ACTIVE / INACTIVE
+            // badge, say — belongs to no field and is kept as its own line.
+            if (bd <= tol) parts[bi].push(c.s.trim()); else orphans.push(c);
+          });
+        });
+        if (orphans.length) out.push(join(orphans.sort(function (p, q) { return p.x - q.x; })));
+        values.forEach(function (v, ci) {
+          var line = (parts[ci].join(' ') + ' ' + v.s.trim()).replace(/\s+/g, ' ').trim();
+          if (line) out.push(line);
+        });
+        stack = [];
+        return;
+      }
+
+      flush();
+      out.push(join(cells));
+    });
+    flush();
+    return out.filter(function (l) { return l.length; });
+  }
+
   function dmyToDate(s) {
     var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s || '').trim());
     return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null;
@@ -181,11 +269,7 @@
               b.cells.push({ x: x, s: it.str });
             });
             buckets.sort(function (p, q) { return p.y - q.y; });
-            var lines = buckets.map(function (b) {
-              return b.cells.sort(function (p, q) { return p.x - q.x; })
-                .map(function (c) { return c.s; }).join(' ').replace(/\s+/g, ' ').trim();
-            }).filter(function (l) { return l.length; });
-            return acc + lines.join('\n') + '\n';
+            return acc + linearise(buckets).join('\n') + '\n';
           });
         });
       }, Promise.resolve(''));

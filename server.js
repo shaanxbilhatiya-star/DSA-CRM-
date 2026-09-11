@@ -2008,7 +2008,11 @@ app.get('/share/:token', (req, res) => {
   // Rendered from the stored figures rather than re-read here, so the page always
   // shows exactly what the agent saw. Escaped field by field; nothing from the
   // report reaches the page as markup.
-  const cibilHTML = (function () {
+  //
+  // This flat version is the fallback for a browser with scripting turned off. When
+  // scripting is available the page renders the full seven-section analysis instead,
+  // by loading the very same analyser module the form uses — see cibilHTML below.
+  const cibilFallbackHTML = (function () {
     const c = formData.__cibilAnalysis;
     if (!c || typeof c !== 'object') return '';
     const dot = { green: '🟢', amber: '🟠', red: '🔴' }[c.verdict] || '⚪';
@@ -2073,6 +2077,35 @@ app.get('/share/:token', (req, res) => {
     }
     h += `<div class="cib-note">Read directly from the uploaded CIR; nothing is estimated.</div>`;
     return h + '</div></div>';
+  })();
+
+  // The form shows the full seven-section deep analysis. Rather than keep a second,
+  // simpler version of it here that would drift away from the form's, the page loads
+  // the same analyser module and hands it the object stored with the lead — so the view
+  // page and the form render identical markup from one implementation. The analysis
+  // itself is never recomputed; only the figures already saved with the lead are drawn.
+  const cibilHTML = (function () {
+    const c = formData.__cibilAnalysis;
+    if (!c || typeof c !== 'object') return '';
+    // Handed over as JSON in a data block rather than interpolated into script source,
+    // with "<" escaped, so nothing in the payload can close the element or open a tag.
+    const payload = JSON.stringify(c).replace(/</g, '\\u003c');
+    return `<div id="cibilBox">${cibilFallbackHTML}</div>
+    <script id="cibilData" type="application/json">${payload}</script>
+    <script src="/forms/PLJOB-main/cibil-analysis.js?v=20260911t"></script>
+    <script>
+    (function () {
+      var box = document.getElementById('cibilBox');
+      var raw = document.getElementById('cibilData');
+      if (!box || !raw) return;
+      try {
+        var a = JSON.parse(raw.textContent || raw.innerHTML);
+        if (a && window.CibilAnalysis && window.CibilAnalysis.renderHtml) {
+          box.innerHTML = window.CibilAnalysis.renderHtml(a);
+        }
+      } catch (e) { /* leave the server-rendered fallback in place */ }
+    })();
+    </script>`;
   })();
 
   const keyPartiesHTML = keyParties.length ? `
@@ -2281,23 +2314,45 @@ app.get('/share/:token', (req, res) => {
     return seenKeys.size > 0 ? result : null;
   }
 
+  // The deep analysis is drawn as the card above, so its plain-text copy is dropped
+  // from the information block below — otherwise every figure appears twice on the page.
+  // Only the display is trimmed: the stored info text and Applicant_Info.txt keep the
+  // lines, and the agent's own "CIBIL score" field stays where it is. If there is no
+  // card to show, the text is left alone so nothing is lost.
+  const stripCibilAnalysisLines = (text) => {
+    const out = [];
+    let skipping = false;
+    String(text || '').split('\n').forEach((line) => {
+      if (/^\s*CIBIL deep analysis\b/i.test(line)) { skipping = true; return; }
+      // Every line of the block is indented; the first unindented line ends it.
+      if (skipping && /^\s{2,}\S/.test(line)) return;
+      skipping = false;
+      out.push(line);
+    });
+    return out.join('\n');
+  };
+  const infoForDisplay = (text) => {
+    const t = hoistOwnerSection(text);
+    return cibilHTML ? stripCibilAnalysisLines(t) : t;
+  };
+
   let infoBlockContent;
   if (hasProperInfoFormat(num.shareInfoText)) {
     // Full format stored — display as-is
-    infoBlockContent = `<pre class="info">${esc(hoistOwnerSection(num.shareInfoText))}</pre>`;
+    infoBlockContent = `<pre class="info">${esc(infoForDisplay(num.shareInfoText))}</pre>`;
   } else if (num.form && num.form.data) {
     // Legacy/minimal shareInfoText but we have structured JSON data — build from it
     const built = buildInfoFromFormData(num.form.data, (num.form && num.form.type) || num.loanType || '');
     if (built) {
-      infoBlockContent = `<pre class="info">${esc(hoistOwnerSection(built))}</pre>`;
+      infoBlockContent = `<pre class="info">${esc(infoForDisplay(built))}</pre>`;
     } else if (num.shareInfoText) {
-      infoBlockContent = `<pre class="info">${esc(hoistOwnerSection(num.shareInfoText))}</pre>`;
+      infoBlockContent = `<pre class="info">${esc(infoForDisplay(num.shareInfoText))}</pre>`;
     } else {
       infoBlockContent = '<p class="empty">No additional information was recorded.</p>';
     }
   } else if (num.shareInfoText) {
     // Has some text even if minimal — show it
-    infoBlockContent = `<pre class="info">${esc(hoistOwnerSection(num.shareInfoText))}</pre>`;
+    infoBlockContent = `<pre class="info">${esc(infoForDisplay(num.shareInfoText))}</pre>`;
   } else {
     infoBlockContent = '<p class="empty">No additional information was recorded.</p>';
   }
