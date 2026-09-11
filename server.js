@@ -1623,27 +1623,12 @@ app.get('/share/:token', (req, res) => {
       otherDocuments: { title: 'Other Documents', owner: null, docs: [] }
     };
 
-    // Categorization rules based on document labels/filenames
+    // Categorization rules based on document labels/filenames.
+    // IMPORTANT: the first matching rule wins, so these are ordered most-specific
+    // first. Listing applicantKyc first (as this used to) meant its broad
+    // /address.*proof/ and /photo/ patterns swallowed Business_Address_Proof and
+    // Property_Photo before the business/property rules were ever consulted.
     const rules = {
-      applicantKyc: [
-        /aadhaa?r.*card/i, /pan.*card/i, /passport.*photo/i, /photo/i,
-        /cancelled.*cheque/i, /cheque/i, /electricity.*bill/i, /address.*proof/i,
-        /permanent.*address/i
-      ],
-      incomeDocuments: [
-        /salary.*slip/i, /pay.*slip/i, /bank.*statement/i, /form.*16/i,
-        /itr/i, /income.*tax/i, /cibil/i, /credit.*report/i
-      ],
-      businessDocuments: [
-        /gst/i, /udhya?am/i, /gumastha/i, /shop.*act/i, /business.*proof/i,
-        /business.*address/i, /trade.*license/i, /shop.*video/i, /business.*video/i,
-        /soa/i, /statement.*account/i
-      ],
-      propertyDocuments: [
-        /property/i, /registry/i, /patta/i, /khasra/i, /diversion/i,
-        /mutation/i, /7\/12/i, /8a/i, /property.*video/i, /property.*photo/i,
-        /noc/i, /no.*objection/i, /encumbrance/i
-      ],
       ownerFatherKyc: [
         /father.*aadhaa?r/i, /father.*pan/i, /owner.*1.*aadhaa?r/i, /owner.*1.*pan/i,
         /owner1/i, /first.*owner/i
@@ -1657,6 +1642,27 @@ app.get('/share/:token', (req, res) => {
       ],
       spouseDocuments: [
         /spouse/i, /wife/i, /husband/i
+      ],
+      propertyDocuments: [
+        /property/i, /registry/i, /patta/i, /khasra/i, /diversion/i,
+        /mutation/i, /7\/12/i, /8a/i, /property.*video/i, /property.*photo/i,
+        /noc/i, /no.*objection/i, /encumbrance/i
+      ],
+      businessDocuments: [
+        /gst/i, /udhya?am/i, /gumastha/i, /shop.*act/i, /business.*proof/i,
+        /business.*address/i, /trade.*license/i, /shop.*video/i, /business.*video/i
+      ],
+      // SOA (Statement of Account) is a financial/obligation document, not a
+      // business-registration one — it belongs with income and banking records.
+      incomeDocuments: [
+        /salary.*slip/i, /pay.*slip/i, /bank.*statement/i, /form.*16/i,
+        /itr/i, /income.*tax/i, /soa/i, /statement.*account/i,
+        /cibil/i, /credit.*report/i
+      ],
+      applicantKyc: [
+        /aadhaa?r.*card/i, /pan.*card/i, /passport.*photo/i, /applicant.*photo/i,
+        /cancelled.*cheque/i, /cheque/i, /electricity.*bill/i, /address.*proof/i,
+        /permanent.*address/i
       ]
     };
 
@@ -1679,7 +1685,60 @@ app.get('/share/:token', (req, res) => {
       }
     });
 
+    // Present each category in a readable order rather than the arbitrary order
+    // the ZIP happened to be walked in, which listed slips alphabetically
+    // (April, August, February…) and dropped unrelated files between them.
+    for (const category of Object.values(categories)) {
+      category.docs = sortDocsForDisplay(category.docs);
+    }
+
     return categories;
+  }
+
+  const MONTH_INDEX = {
+    january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
+    july: 7, august: 8, september: 9, october: 10, november: 11, december: 12
+  };
+  const MONTH_RE = new RegExp('(' + Object.keys(MONTH_INDEX).join('|') + ')[ _-]*(\\d{4})', 'i');
+
+  // Preferred position of a document type within its category. Keeps every salary
+  // slip adjacent, then statements, then the credit report — instead of mixing them.
+  const DOC_TYPE_ORDER = [
+    /salary.*slip/i, /pay.*slip/i, /form.*16/i, /itr|income.*tax/i,
+    /bank.*statement/i, /soa|statement.*account/i, /cibil|credit.*report/i
+  ];
+
+  function docTypeRank(text) {
+    for (let i = 0; i < DOC_TYPE_ORDER.length; i++) {
+      if (DOC_TYPE_ORDER[i].test(text)) return i;
+    }
+    return DOC_TYPE_ORDER.length;
+  }
+
+  // Sortable chronological key: "March 2026" -> 202603, a statement range -> its
+  // start date. Returns '' when the document carries no period at all.
+  function docPeriodKey(text) {
+    const m = text.match(MONTH_RE);
+    if (m) return m[2] + String(MONTH_INDEX[m[1].toLowerCase()]).padStart(2, '0');
+    const iso = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return iso[1] + iso[2] + iso[3];
+    return '';
+  }
+
+  function sortDocsForDisplay(list) {
+    return list.slice().sort((a, b) => {
+      const ta = (a.label || '') + ' ' + (a.filename || '');
+      const tb = (b.label || '') + ' ' + (b.filename || '');
+      const ra = docTypeRank(ta), rb = docTypeRank(tb);
+      if (ra !== rb) return ra - rb;
+      const pa = docPeriodKey(ta), pb = docPeriodKey(tb);
+      // Dated documents lead, in date order; undated ones follow by name so
+      // "Slip 2" still sorts before "Slip 10".
+      if (pa && pb) { if (pa !== pb) return pa < pb ? -1 : 1; }
+      else if (pa) return -1;
+      else if (pb) return 1;
+      return ta.localeCompare(tb, 'en', { numeric: true, sensitivity: 'base' });
+    });
   }
 
   const categorizedDocs = categorizeDocuments(docs, formData);
