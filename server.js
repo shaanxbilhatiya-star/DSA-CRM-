@@ -1619,9 +1619,48 @@ app.get('/share/:token', (req, res) => {
       ownerFatherKyc: { title: 'Owner/Father KYC Documents', owner: formData.f_owner1_name || formData.f_father || 'Father', docs: [] },
       ownerMotherKyc: { title: 'Owner/Mother KYC Documents', owner: formData.f_owner2_name || formData.f_mother || 'Mother', docs: [] },
       ownerOtherKyc: { title: 'Other Owner KYC Documents', owner: formData.f_owner3_name || 'Other Owner', docs: [] },
-      spouseDocuments: { title: 'Spouse Documents', owner: formData.f_spouse || 'Spouse', docs: [] },
-      otherDocuments: { title: 'Other Documents', owner: null, docs: [] }
+      spouseDocuments: { title: 'Spouse Documents', owner: formData.f_spouse || 'Spouse', docs: [] }
     };
+
+    // ── Co-applicants / guarantors get a section each ──
+    // Their documents are named CoApplicant1_… / Guarantor2_… by the forms, which
+    // is what keeps them attributable at all: the ZIP is flattened on upload, so
+    // the owner has to travel in the filename. Sections are derived from the
+    // parties recorded on the form, plus any party prefix seen only in the
+    // documents (so files survive on the page even if a party row was removed).
+    const partyOrder = [];
+    const partyMeta = {};
+    function notePartyMeta(key, role, slot, name) {
+      if (!partyMeta[key]) {
+        partyMeta[key] = { role, slot, name: name || '' };
+        partyOrder.push(key);
+      } else if (name && !partyMeta[key].name) {
+        partyMeta[key].name = name;
+      }
+    }
+    (Array.isArray(formData.__parties) ? formData.__parties : []).forEach(p => {
+      if (!p) return;
+      const role = p.role === 'Guarantor' ? 'Guarantor' : 'Co-Applicant';
+      const slot = Number(p.slot) || 1;
+      const key = (role === 'Guarantor' ? 'guarantor' : 'coapplicant') + slot;
+      notePartyMeta(key, role, slot, (p.fields && p.fields.name) || p.name || '');
+    });
+    docs.forEach(d => {
+      const ref = partyRefFromDoc(d);
+      if (ref) notePartyMeta(ref.key, ref.role, ref.slot, '');
+    });
+    partyOrder.forEach(key => {
+      const meta = partyMeta[key];
+      const heading = meta.role + ' ' + meta.slot;
+      categories['party_' + key] = {
+        title: heading + ' Documents',
+        owner: meta.name || heading,
+        docs: []
+      };
+    });
+
+    // Always last, so anything unrecognised is visibly at the bottom.
+    categories.otherDocuments = { title: 'Other Documents', owner: null, docs: [] };
 
     // Categorization rules based on document labels/filenames.
     // IMPORTANT: the first matching rule wins, so these are ordered most-specific
@@ -1668,6 +1707,16 @@ app.get('/share/:token', (req, res) => {
 
     // Categorize each document
     docs.forEach(doc => {
+      // Party documents are claimed before the generic rules run. Their names
+      // contain the document type too ("CoApplicant1_Aadhaar_Card"), so the
+      // applicant KYC patterns would otherwise file a co-applicant's Aadhaar
+      // under the applicant's own section.
+      const partyRef = partyRefFromDoc(doc);
+      if (partyRef && categories['party_' + partyRef.key]) {
+        categories['party_' + partyRef.key].docs.push(doc);
+        return;
+      }
+
       const searchText = (doc.label + ' ' + doc.filename).toLowerCase();
       let categorized = false;
 
@@ -1695,6 +1744,18 @@ app.get('/share/:token', (req, res) => {
     return categories;
   }
 
+  // Reads the owning party out of a document name. The forms prefix every
+  // co-applicant/guarantor file with CoApplicant<n>_ / Guarantor<n>_, and the
+  // label is that same filename with underscores turned into spaces, so both forms
+  // of the name are accepted here.
+  function partyRefFromDoc(doc) {
+    const m = String((doc && (doc.filename || doc.label)) || '')
+      .match(/^(coapplicant|guarantor)[ _]*(\d+)[ _]/i);
+    if (!m) return null;
+    const role = m[1].toLowerCase() === 'guarantor' ? 'Guarantor' : 'Co-Applicant';
+    return { key: m[1].toLowerCase() + m[2], role, slot: Number(m[2]) };
+  }
+
   const MONTH_INDEX = {
     january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
     july: 7, august: 8, september: 9, october: 10, november: 11, december: 12
@@ -1704,6 +1765,11 @@ app.get('/share/:token', (req, res) => {
   // Preferred position of a document type within its category. Keeps every salary
   // slip adjacent, then statements, then the credit report — instead of mixing them.
   const DOC_TYPE_ORDER = [
+    // Identity first, then income — the order a file is normally read in. This also
+    // gives each co-applicant/guarantor section a sensible internal order, since
+    // those sections hold KYC and income documents together.
+    /aadhaa?r/i, /pan.*card/i, /passport.*photo|applicant.*photo|photograph/i,
+    /cancelled.*cheque|cheque/i, /electricity/i, /address.*proof/i,
     /salary.*slip/i, /pay.*slip/i, /form.*16/i, /itr|income.*tax/i,
     /bank.*statement/i, /soa|statement.*account/i, /cibil|credit.*report/i
   ];
@@ -1797,6 +1863,8 @@ app.get('/share/:token', (req, res) => {
       spouseDocuments: '💑',
       otherDocuments: '📎'
     };
+    if (categoryKey.indexOf('party_guarantor') === 0) return '🤝';
+    if (categoryKey.indexOf('party_coapplicant') === 0) return '👥';
     return icons[categoryKey] || '📄';
   }
 

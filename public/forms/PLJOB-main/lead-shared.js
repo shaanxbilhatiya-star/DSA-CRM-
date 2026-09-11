@@ -66,7 +66,15 @@
         data['__otherDocs'] = otherDocs;
       }
     }
-    
+
+    // Capture co-applicants / guarantors. Their individual field inputs are also
+    // picked up by the id loop above, but this records the roles and slot numbers
+    // that the rows have to be rebuilt from before those values mean anything.
+    if (typeof window.__collectParties === 'function') {
+      var parties = window.__collectParties();
+      if (parties.length > 0) data['__parties'] = parties;
+    }
+
     // Embed prefill status so the server can also verify this was a safe submission
     data['__prefillStatus'] = window.__leadPrefillStatus || 'not_needed';
     return data;
@@ -76,6 +84,15 @@
   // so any dependent form logic (totals, toggles, previews) recomputes.
   window.applyFormSnapshot = function applyFormSnapshot(data) {
     if (!data || typeof data !== 'object') return;
+
+    // ── PHASE 0: Rebuild co-applicant / guarantor rows, synchronously ──
+    // Must happen before anything defers: markExistingDocs() runs as soon as this
+    // function returns, so a party's upload fields have to exist by then for their
+    // stored documents to attach to the right person.
+    if (data['__parties'] && typeof window.__restoreParties === 'function') {
+      try { window.__restoreParties(data['__parties']); }
+      catch (e) { console.warn('Could not restore co-applicant/guarantor rows', e); }
+    }
     
     // ── PHASE 1: Identify and trigger conditional visibility controls FIRST ──
     // These fields control which sections are visible. Set them before other fields
@@ -325,6 +342,16 @@
   // matching each saved label to the closest field label on the form.
   // IMPORTANT: Does NOT overwrite fields that already have values (from snapshot).
   function prefillFromInfoFields(fields) {
+    // Drop co-applicant / guarantor lines before any matching happens. They are
+    // labelled with their owner ("Co-Applicant 1 Mobile"), and pass 2 matches on
+    // containment — so "co applicant 1 mobile" contains the applicant's own
+    // "mobile" label and would be written into the APPLICANT's field whenever that
+    // field is still empty, silently attributing one person's details to another.
+    // Party values are restored from the __parties snapshot instead.
+    fields = (fields || []).filter(function (f) {
+      return !/^\s*(co-?\s*applicant|guarantor)\b/i.test(String((f && f.label) || ''));
+    });
+
     var entries = [];
     document.querySelectorAll('.fi').forEach(function (fi) {
       var labelEl = fi.querySelector('label');
@@ -745,6 +772,13 @@
     var current = readPeriodFromLabel(doc.label || doc.filename, kind);
     var isSet = !!current;
 
+    // A co-applicant's / guarantor's document keeps its owner prefix when
+    // relabelled — dropping it would rename their file to the applicant's naming
+    // and collide with the applicant's own document of the same type.
+    var ownerMatch = String(doc.filename || doc.label || '')
+      .match(/^((?:coapplicant|guarantor)[ _]*\d+)[ _]/i);
+    var ownerPrefix = ownerMatch ? ownerMatch[1].replace(/[ _]+/g, '') + '_' : '';
+
     // The filename is the whole point of this row — the agent has to be able to
     // tell which physical file they're labelling, so it leads at full size.
     var head = '<span style="display:inline-flex;align-items:center;gap:2px;background:#fff;border:1px solid #bbf7d0;border-radius:6px;overflow:hidden;max-width:100%">' +
@@ -790,7 +824,8 @@
     return '<div data-docrow="' + id + '" style="padding:11px 12px;background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border:2px solid #bae6fd;border-radius:10px">' +
       '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:9px">' + head + status + '</div>' +
       '<div id="docmeta-' + id + '" style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">' + controls +
-      '<button type="button" onclick="window.__saveDocPeriod(\'' + id + '\',\'' + kind + '\',this)" ' +
+      '<button type="button" onclick="window.__saveDocPeriod(\'' + id + '\',\'' + kind + '\',this,\'' +
+      escapeHtml(ownerPrefix) + '\')" ' +
       'style="padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">' +
       '\uD83D\uDCBE Save</button>' +
       '</div></div>';
@@ -798,7 +833,7 @@
 
   // ── Assign a period to a document already on file ───────────────────────────
   // Renames the stored document instead of forcing a re-upload.
-  window.__saveDocPeriod = function (docId, kind, btnEl) {
+  window.__saveDocPeriod = function (docId, kind, btnEl, ownerPrefix) {
     var p = new URLSearchParams(location.search);
     var numberId = p.get('numberId');
     var agentId = p.get('agentId');
@@ -806,19 +841,20 @@
 
     var wrap = document.getElementById('docmeta-' + docId);
     if (!wrap) return;
+    var prefix = ownerPrefix || '';
 
     var label;
     if (kind === 'month') {
       var mo = wrap.querySelector('.docmeta-month').value;
       var yr = wrap.querySelector('.docmeta-year').value;
       if (!mo || !yr) { alert('Pick both a month and a year first.'); return; }
-      label = 'Salary_Slip_' + mo + '_' + yr;
+      label = prefix + 'Salary_Slip_' + mo + '_' + yr;
     } else {
       var from = wrap.querySelector('.docmeta-from').value;
       var to = wrap.querySelector('.docmeta-to').value;
       if (!from || !to) { alert('Pick both a FROM date and a TO date first.'); return; }
       if (from > to) { alert('The FROM date must be on or before the TO date.'); return; }
-      label = 'Bank_Statement_' + from + '_to_' + to;
+      label = prefix + 'Bank_Statement_' + from + '_to_' + to;
     }
 
     var original = btnEl.textContent;
@@ -859,6 +895,21 @@
   };
 
   function markExistingDocs(docs, shareToken) {
+    // A co-applicant's / guarantor's documents are handled first and removed from
+    // the pool. They must not reach findUploadInput(), whose patterns would happily
+    // match "CoApplicant1_Aadhaar_Card" to the applicant's own Aadhaar field and
+    // show one person's document under another's name.
+    var partyGrouped = {};
+    docs = docs.filter(function (doc) {
+      var pid = (typeof window.__findPartyUploadInput === 'function')
+        ? window.__findPartyUploadInput(doc.label, doc.filename) : null;
+      if (!pid) return true;
+      if (!partyGrouped[pid]) partyGrouped[pid] = [];
+      partyGrouped[pid].push(doc);
+      return false;
+    });
+    markExistingPartyDocs(partyGrouped, shareToken);
+
     // Group docs by upload input (multiple files can map to same input)
     var grouped = {};
     docs.forEach(function (doc) {
@@ -1044,4 +1095,514 @@
         btnEl.style.opacity = '1';
       });
   };
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     CO-APPLICANT / GUARANTOR PARTIES
+
+     A case often carries a co-applicant, a guarantor, or both at once. Each of
+     those people has their own identity details and their own documents
+     (Aadhaar, PAN, photo, salary slips, bank statement, ITR, anything else) that
+     must stay attributable to them rather than being mixed into the applicant's
+     pile. This lives in the shared script so all five forms behave identically.
+
+     Documents are written into the ZIP with the party baked into the FILENAME
+     (CoApplicant1_Aadhaar_Card.pdf). That is deliberate: the server flattens ZIP
+     folders when exploding an archive, and it derives a document's group key from
+     the bare filename — so a co-applicant's "Aadhaar_Card.pdf" in a subfolder
+     would collide with the applicant's and one would replace the other on merge.
+     ═══════════════════════════════════════════════════════════════════════════ */
+
+  var PARTY_ROLES = ['Co-Applicant', 'Guarantor'];
+
+  var PARTY_FIELDS = [
+    { key: 'name',     label: 'Full name',               type: 'text',     ph: 'As per PAN / Aadhaar', wide: true },
+    { key: 'relation', label: 'Relation with applicant', type: 'text',     ph: 'e.g. Spouse, Father, Brother' },
+    { key: 'dob',      label: 'Date of birth',           type: 'date' },
+    { key: 'mobile',   label: 'Mobile',                  type: 'tel',      ph: '10-digit mobile' },
+    { key: 'email',    label: 'Email',                   type: 'text',     ph: 'Optional' },
+    { key: 'pan',      label: 'PAN number',              type: 'text',     ph: 'ABCDE1234F' },
+    { key: 'aadhaar',  label: 'Aadhaar number',          type: 'text',     ph: '12 digits' },
+    { key: 'emptype',  label: 'Employment type',         type: 'select',
+      options: ['', 'Salaried', 'Self-employed / Business', 'Retired', 'Housewife', 'Student', 'Other'] },
+    { key: 'company',  label: 'Company / Business name', type: 'text' },
+    { key: 'income',   label: 'Monthly income (Rs.)',    type: 'number',   ph: '0' },
+    { key: 'cibil',    label: 'CIBIL score',             type: 'number',   ph: 'e.g. 750' },
+    { key: 'emi',      label: 'Existing EMI (Rs.)',      type: 'number',   ph: '0' },
+    { key: 'addr',     label: 'Current address',         type: 'textarea', wide: true },
+    { key: 'pin',      label: 'PIN code',                type: 'text',     ph: '6 digits' }
+  ];
+
+  // `file` is the filename stem used inside the ZIP. `period` mirrors the
+  // applicant's own slips/statements: those are only meaningful with a month or a
+  // date range attached, so the same prompts appear here.
+  var PARTY_DOCS = [
+    { key: 'aadhaar', label: 'Aadhaar Card',   file: 'Aadhaar_Card',   multi: true },
+    { key: 'pan',     label: 'PAN Card',       file: 'PAN_Card',       multi: true },
+    { key: 'photo',   label: 'Photograph',     file: 'Passport_Photo',  multi: false },
+    { key: 'salary',  label: 'Salary Slips',   file: 'Salary_Slip',    multi: true, period: 'month' },
+    { key: 'bank',    label: 'Bank Statement', file: 'Bank_Statement', multi: true, period: 'range' },
+    { key: 'itr',     label: 'ITR',            file: 'ITR',            multi: true },
+    { key: 'other',   label: 'Other document', file: 'Other_Document', multi: true, named: true }
+  ];
+
+  var partyList = [];      // [{ role, slot }] in display order
+  var partyPeriods = {};   // uploadInputId -> { fileIndex: {month,year} | {from,to} }
+  var partyDocIndex = {};  // uploadInputId -> { party, doc } for change handlers
+
+  function partyKey(p)     { return (p.role === 'Guarantor' ? 'guarantor' : 'coapplicant') + p.slot; }
+  function partyPrefix(p)  { return (p.role === 'Guarantor' ? 'Guarantor' : 'CoApplicant') + p.slot; }
+  function partyTitle(p)   { return p.role + ' ' + p.slot; }
+  function partyFieldId(p, k) { return 'pf_' + partyKey(p) + '_' + k; }
+  function partyDocId(p, k)   { return 'up_' + partyKey(p) + '_' + k; }
+  function partyPwId(p)       { return 'pw_' + partyKey(p); }
+
+  function safeFileStem(s) {
+    return String(s || '').replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
+  }
+  function padLabel(s, n) {
+    s = String(s);
+    while (s.length < n) s += ' ';
+    return s;
+  }
+
+  var PARTY_INPUT_CSS = 'width:100%;padding:9px 12px;border:1.5px solid #e5e7eb;border-radius:8px;' +
+    'font-size:13.5px;font-family:inherit;color:#111827;background:#fff;outline:none;box-sizing:border-box';
+  var PARTY_ADD_BTN_CSS = 'padding:10px 16px;background:#eef2ff;border:1.5px dashed #a5b4fc;border-radius:9px;' +
+    'color:#4338ca;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit';
+
+  function nextSlot(role) {
+    var used = partyList.filter(function (p) { return p.role === role; })
+                        .map(function (p) { return p.slot; });
+    var n = 1;
+    while (used.indexOf(n) !== -1) n++;
+    return n;
+  }
+
+  // Builds the section chrome once. Forms only need to provide <div id="party-section">.
+  function renderPartyShell() {
+    var host = document.getElementById('party-section');
+    if (!host || host.getAttribute('data-party-ready')) return host;
+    host.setAttribute('data-party-ready', '1');
+    host.className = 'sec';
+    host.innerHTML =
+      '<div class="sec-title">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:17px;height:17px;flex-shrink:0">' +
+        '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>' +
+        '<path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>' +
+        'Co-Applicant / Guarantor' +
+        '<span class="chip">Optional \u00b7 add as many as needed</span>' +
+      '</div>' +
+      '<div style="font-size:12.5px;color:#4b5563;margin-bottom:14px;line-height:1.6">' +
+        'Add anyone applying or guaranteeing alongside the main applicant. Each person keeps their own ' +
+        'details and their own documents, and stays listed separately from the applicant\u2019s.' +
+      '</div>' +
+      '<div id="party-list"></div>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">' +
+        '<button type="button" onclick="window.__addParty(\'Co-Applicant\')" style="' + PARTY_ADD_BTN_CSS + '">' +
+        '+ Add Co-Applicant</button>' +
+        '<button type="button" onclick="window.__addParty(\'Guarantor\')" style="' + PARTY_ADD_BTN_CSS + '">' +
+        '+ Add Guarantor</button>' +
+      '</div>';
+    return host;
+  }
+
+  function partyFieldHtml(p, f) {
+    var id = partyFieldId(p, f.key);
+    var html = '<div style="' + (f.wide ? 'grid-column:1/-1' : '') + '">' +
+      '<label for="' + id + '" style="display:block;font-size:12px;font-weight:600;color:#4b5563;margin-bottom:5px">' +
+      escapeHtml(f.label) + '</label>';
+    if (f.type === 'select') {
+      html += '<select id="' + id + '" style="' + PARTY_INPUT_CSS + '">' +
+        f.options.map(function (o) {
+          return '<option value="' + escapeHtml(o) + '">' + escapeHtml(o || 'Select\u2026') + '</option>';
+        }).join('') + '</select>';
+    } else if (f.type === 'textarea') {
+      html += '<textarea id="' + id + '" rows="2" placeholder="' + escapeHtml(f.ph || '') +
+        '" style="' + PARTY_INPUT_CSS + ';resize:vertical"></textarea>';
+    } else {
+      html += '<input type="' + f.type + '" id="' + id + '" placeholder="' + escapeHtml(f.ph || '') +
+        '" style="' + PARTY_INPUT_CSS + '">';
+    }
+    return html + '</div>';
+  }
+
+  function partyDocHtml(p, d) {
+    var id = partyDocId(p, d.key);
+    var hint = d.period === 'month' ? ' \u00b7 will ask for the month of each slip'
+             : d.period === 'range' ? ' \u00b7 will ask for the date range'
+             : d.multi ? ' \u00b7 multiple allowed' : '';
+    return '<div style="padding:11px 12px;background:#fff;border:1.5px solid #e5e7eb;border-radius:9px">' +
+      '<label for="' + id + '" style="display:block;font-size:12.5px;font-weight:700;color:#374151;margin-bottom:7px">' +
+        escapeHtml(d.label) +
+        '<span style="font-weight:400;color:#9ca3af;font-size:11px">' + hint + '</span>' +
+      '</label>' +
+      (d.named ? '<input type="text" id="' + id + '_name" placeholder="Name this document (e.g. Rent Agreement)" ' +
+        'style="' + PARTY_INPUT_CSS + ';margin-bottom:7px">' : '') +
+      '<input type="file" id="' + id + '"' + (d.multi ? ' multiple' : '') +
+        ' onchange="window.__partyFileChange(\'' + id + '\')" style="font-size:12.5px;width:100%">' +
+      '<div id="' + id + '_fn" style="display:none;font-size:12px;color:#16a34a;margin-top:6px;font-weight:600"></div>' +
+      '<div id="' + id + '_period"></div>' +
+      '<div id="' + id + '_existing"></div>' +
+      '</div>';
+  }
+
+  function buildPartyCard(p) {
+    var card = document.createElement('div');
+    card.className = 'party-card';
+    card.id = 'party-card-' + partyKey(p);
+    card.setAttribute('data-party-role', p.role);
+    card.setAttribute('data-party-slot', String(p.slot));
+    card.style.cssText = 'position:relative;padding:16px;margin-bottom:14px;border:2px solid #c7d2fe;' +
+      'border-radius:12px;background:linear-gradient(135deg,#f5f3ff,#eef2ff)';
+    card.innerHTML =
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">' +
+        '<span style="font-size:13.5px;font-weight:800;color:#3730a3">' + escapeHtml(partyTitle(p)) + '</span>' +
+        '<span style="font-size:11px;font-weight:700;color:#4338ca;background:#e0e7ff;padding:3px 9px;border-radius:20px">' +
+          escapeHtml(partyPrefix(p)) + '</span>' +
+        '<button type="button" onclick="window.__removeParty(\'' + partyKey(p) + '\')" ' +
+          'style="margin-left:auto;padding:6px 12px;background:#fee2e2;border:none;border-radius:7px;' +
+          'color:#dc2626;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Remove</button>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">' +
+        PARTY_FIELDS.map(function (f) { return partyFieldHtml(p, f); }).join('') +
+      '</div>' +
+      '<div style="font-size:12px;font-weight:800;color:#3730a3;text-transform:uppercase;letter-spacing:.4px;' +
+        'margin:0 0 9px;padding-top:12px;border-top:1.5px dashed #c7d2fe">' +
+        'Their documents' +
+      '</div>' +
+      '<div style="display:grid;gap:10px">' +
+        PARTY_DOCS.map(function (d) { return partyDocHtml(p, d); }).join('') +
+      '</div>' +
+      '<div style="margin-top:10px;display:flex;align-items:center;gap:9px;flex-wrap:wrap">' +
+        '<label for="' + partyPwId(p) + '" style="font-size:12px;font-weight:600;color:#4b5563">' +
+          '\uD83D\uDD10 PDF password (if their PDFs are locked)</label>' +
+        '<input type="password" id="' + partyPwId(p) + '" placeholder="Leave blank if none" ' +
+          'style="' + PARTY_INPUT_CSS + ';flex:1;min-width:190px">' +
+      '</div>';
+    return card;
+  }
+
+  function registerPartyDocs(p) {
+    PARTY_DOCS.forEach(function (d) { partyDocIndex[partyDocId(p, d.key)] = { party: p, doc: d }; });
+  }
+
+  function addParty(role, forcedSlot) {
+    if (PARTY_ROLES.indexOf(role) === -1) role = 'Co-Applicant';
+    renderPartyShell();
+    var list = document.getElementById('party-list');
+    if (!list) return null;
+    var slot = forcedSlot;
+    if (!slot || partyList.some(function (p) { return p.role === role && p.slot === slot; })) {
+      slot = nextSlot(role);
+    }
+    var p = { role: role, slot: slot };
+    partyList.push(p);
+    registerPartyDocs(p);
+    list.appendChild(buildPartyCard(p));
+    return p;
+  }
+
+  window.__addParty = function (role) { addParty(role); };
+
+  window.__removeParty = function (key) {
+    var idx = -1;
+    for (var i = 0; i < partyList.length; i++) {
+      if (partyKey(partyList[i]) === key) { idx = i; break; }
+    }
+    if (idx === -1) return;
+    var p = partyList[idx];
+    var label = partyTitle(p);
+    if (!confirm('Remove ' + label + ' and everything entered for them?')) return;
+    PARTY_DOCS.forEach(function (d) {
+      var id = partyDocId(p, d.key);
+      delete partyPeriods[id];
+      delete partyDocIndex[id];
+    });
+    partyList.splice(idx, 1);
+    var card = document.getElementById('party-card-' + key);
+    if (card) card.remove();
+  };
+
+  // Month/date prompts for a party's slips and statements, mirroring the
+  // applicant's own so their documents are identifiable by period too.
+  window.__partyFileChange = function (inputId) {
+    var meta = partyDocIndex[inputId];
+    var inp = document.getElementById(inputId);
+    if (!meta || !inp) return;
+    var fnEl = document.getElementById(inputId + '_fn');
+    var perEl = document.getElementById(inputId + '_period');
+    var files = inp.files ? Array.prototype.slice.call(inp.files) : [];
+
+    if (fnEl) {
+      fnEl.textContent = files.length ? '\u2705 ' + files.map(function (f) { return f.name; }).join(', ') : '';
+      fnEl.style.display = files.length ? 'block' : 'none';
+    }
+    partyPeriods[inputId] = {};
+    if (!perEl) return;
+    perEl.innerHTML = '';
+    if (!meta.doc.period || !files.length) return;
+
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-top:9px;padding:11px;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:9px';
+    wrap.innerHTML = '<div style="font-size:12px;font-weight:700;color:#1e40af;margin-bottom:8px">' +
+      (meta.doc.period === 'month'
+        ? '\uD83D\uDCC5 Which month does each slip belong to?'
+        : '\uD83D\uDCC5 What period does each statement cover?') + '</div>';
+
+    files.forEach(function (f, i) {
+      partyPeriods[inputId][i] = {};
+      var row = document.createElement('div');
+      row.style.cssText = 'padding:9px;background:#fff;border:1px solid #bfdbfe;border-radius:7px;margin-bottom:7px';
+      var head = '<div style="font-size:12.5px;font-weight:700;color:#0c4a6e;margin-bottom:7px;' +
+        'overflow:hidden;text-overflow:ellipsis">\uD83D\uDCC4 ' + escapeHtml(f.name) + '</div>';
+      if (meta.doc.period === 'month') {
+        var thisYear = new Date().getFullYear();
+        var years = '';
+        for (var y = thisYear; y >= thisYear - 3; y--) years += '<option value="' + y + '">' + y + '</option>';
+        row.innerHTML = head + '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+          '<select data-party-per="month" style="' + PARTY_INPUT_CSS + ';flex:1;min-width:130px">' +
+            '<option value="">Select Month</option>' +
+            MONTH_NAMES.map(function (m) { return '<option value="' + m + '">' + m + '</option>'; }).join('') +
+          '</select>' +
+          '<select data-party-per="year" style="' + PARTY_INPUT_CSS + ';flex:0 0 110px">' +
+            '<option value="">Year</option>' + years +
+          '</select></div>';
+      } else {
+        row.innerHTML = head + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">' +
+          '<div><label style="display:block;font-size:11px;font-weight:700;color:#0369a1;margin-bottom:4px">FROM</label>' +
+            '<input type="date" data-party-per="from" style="' + PARTY_INPUT_CSS + '"></div>' +
+          '<div><label style="display:block;font-size:11px;font-weight:700;color:#0369a1;margin-bottom:4px">TO</label>' +
+            '<input type="date" data-party-per="to" style="' + PARTY_INPUT_CSS + '"></div></div>';
+      }
+      row.querySelectorAll('[data-party-per]').forEach(function (ctrl) {
+        ctrl.addEventListener('change', function () {
+          partyPeriods[inputId][i][ctrl.getAttribute('data-party-per')] = ctrl.value;
+        });
+      });
+      wrap.appendChild(row);
+    });
+    perEl.appendChild(wrap);
+  };
+
+  function partyHasContent(item) {
+    if (Object.keys(item.fields).some(function (k) { return item.fields[k]; })) return true;
+    return PARTY_DOCS.some(function (d) {
+      var inp = document.getElementById('up_' + item.key + '_' + d.key);
+      return inp && inp.files && inp.files.length > 0;
+    });
+  }
+
+  function collectParties() {
+    return partyList.map(function (p) {
+      var fields = {};
+      PARTY_FIELDS.forEach(function (f) {
+        var el = document.getElementById(partyFieldId(p, f.key));
+        fields[f.key] = el ? String(el.value == null ? '' : el.value).trim() : '';
+      });
+      var docNames = {};
+      PARTY_DOCS.forEach(function (d) {
+        if (!d.named) return;
+        var el = document.getElementById(partyDocId(p, d.key) + '_name');
+        if (el && el.value.trim()) docNames[d.key] = el.value.trim();
+      });
+      return {
+        role: p.role, slot: p.slot, key: partyKey(p), prefix: partyPrefix(p),
+        fields: fields, docNames: docNames
+      };
+    });
+  }
+
+  window.__collectParties = function () {
+    return collectParties().filter(partyHasContent);
+  };
+
+  // Rebuilt synchronously from the snapshot: markExistingDocs() runs immediately
+  // after applyFormSnapshot() returns, so these upload inputs have to exist by
+  // then or a party's stored documents would have nowhere to attach.
+  window.__restoreParties = function (list) {
+    if (!Array.isArray(list) || !list.length) return;
+    renderPartyShell();
+    var host = document.getElementById('party-list');
+    if (!host) return;
+    host.innerHTML = '';
+    partyList = [];
+    partyPeriods = {};
+    partyDocIndex = {};
+    list.forEach(function (item) {
+      if (!item) return;
+      var role = PARTY_ROLES.indexOf(item.role) !== -1 ? item.role : 'Co-Applicant';
+      var p = addParty(role, Number(item.slot) || 0);
+      if (!p) return;
+      var fields = item.fields || {};
+      PARTY_FIELDS.forEach(function (f) {
+        var el = document.getElementById(partyFieldId(p, f.key));
+        if (el && fields[f.key] != null) el.value = fields[f.key];
+      });
+      var names = item.docNames || {};
+      Object.keys(names).forEach(function (k) {
+        var el = document.getElementById(partyDocId(p, k) + '_name');
+        if (el) el.value = names[k];
+      });
+    });
+  };
+
+  // Writes every party's files into the ZIP, party baked into each filename.
+  // `unlockPdf` is handed in by the calling form because each form owns its own
+  // implementation (PL_* nest it inside saveFile, BL/LAP declare it globally).
+  window.__addPartyDocsToZip = async function (zip, unlockPdf) {
+    if (!zip || !partyList.length) return 0;
+    var folder = (typeof zip.folder === 'function') ? zip.folder('Documents') : zip;
+    var written = 0;
+
+    for (var i = 0; i < partyList.length; i++) {
+      var p = partyList[i];
+      var prefix = partyPrefix(p);
+      var pwEl = document.getElementById(partyPwId(p));
+      var pw = pwEl ? String(pwEl.value || '').trim() : '';
+
+      for (var j = 0; j < PARTY_DOCS.length; j++) {
+        var d = PARTY_DOCS[j];
+        var inputId = partyDocId(p, d.key);
+        var inp = document.getElementById(inputId);
+        if (!inp || !inp.files || !inp.files.length) continue;
+
+        var stem = d.file;
+        if (d.named) {
+          var nameEl = document.getElementById(inputId + '_name');
+          var custom = nameEl ? safeFileStem(nameEl.value) : '';
+          if (custom) stem = custom;
+        }
+        var periods = partyPeriods[inputId] || {};
+
+        for (var k = 0; k < inp.files.length; k++) {
+          var f = inp.files[k];
+          var dot = f.name.lastIndexOf('.');
+          var ext = dot > 0 ? f.name.slice(dot).toLowerCase() : '';
+          var per = periods[k] || {};
+          var namePart;
+          if (d.period === 'month' && per.month && per.year) {
+            namePart = stem + '_' + per.month + '_' + per.year;
+          } else if (d.period === 'range' && per.from && per.to) {
+            namePart = stem + '_' + per.from + '_to_' + per.to;
+          } else {
+            namePart = stem + (inp.files.length > 1 ? '_' + (k + 1) : '');
+          }
+          var out = f;
+          if (pw && ext === '.pdf' && typeof unlockPdf === 'function') {
+            try { out = await unlockPdf(f, pw); } catch (e) { out = f; }
+          }
+          folder.file(prefix + '_' + namePart + ext, out);
+          written++;
+        }
+      }
+    }
+    return written;
+  };
+
+  // Lines spliced into Applicant_Info.txt. Labels are deliberately prefixed with
+  // the party's title: the server's label->field map turns a bare "Full name"
+  // into the applicant's f_name, so an unprefixed party label would overwrite the
+  // applicant's own details when an older lead is reconstructed from this text.
+  window.__partyInfoLines = function () {
+    var parties = collectParties().filter(partyHasContent);
+    if (!parties.length) return ['  None declared'];
+
+    var lines = [];
+    parties.forEach(function (item, idx) {
+      if (idx) lines.push('');
+      var title = item.role + ' ' + item.slot;
+      lines.push(title + (item.fields.name ? ' \u2014 ' + item.fields.name : ''));
+
+      PARTY_FIELDS.forEach(function (f) {
+        var v = item.fields[f.key];
+        if (!v) return;
+        lines.push('  ' + padLabel(title + ' ' + f.label, 34) + ': ' + v);
+      });
+
+      var docBits = [];
+      PARTY_DOCS.forEach(function (d) {
+        var inp = document.getElementById('up_' + item.key + '_' + d.key);
+        if (!inp || !inp.files || !inp.files.length) return;
+        var name = (d.named && item.docNames[d.key]) ? item.docNames[d.key] : d.label;
+        docBits.push(name + ' (' + inp.files.length + ')');
+      });
+      lines.push('  ' + padLabel(title + ' documents', 34) + ': ' +
+        (docBits.length ? docBits.join(', ') : 'None uploaded'));
+    });
+    return lines;
+  };
+
+  // Routes a stored document back to the party upload field it came from, so a
+  // party's existing files show up under that party in edit mode instead of
+  // falling through to the applicant's fields or the Other Documents bucket.
+  window.__findPartyUploadInput = function (label, filename) {
+    var src = String(filename || label || '');
+    var m = src.match(/^(coapplicant|guarantor)[ _]*(\d+)[ _]+(.+)$/i);
+    if (!m) return null;
+    var key = m[1].toLowerCase() + m[2];
+    var rest = m[3].replace(/\.[^.]+$/, '').replace(/[\s]+/g, '_').toLowerCase();
+
+    // Longest stem wins so Passport_Photo isn't shadowed by a shorter match.
+    var best = null;
+    PARTY_DOCS.forEach(function (d) {
+      var stem = d.file.toLowerCase();
+      if (rest.indexOf(stem) === 0 && (!best || stem.length > best.len)) {
+        best = { key: d.key, len: stem.length };
+      }
+    });
+    var id = 'up_' + key + '_' + (best ? best.key : 'other');
+    return document.getElementById(id) ? id : null;
+  };
+
+  // Which period editor a party upload field needs, for existing-document rows.
+  window.__partyPeriodKind = function (inputId) {
+    var meta = partyDocIndex[inputId];
+    return meta && meta.doc.period ? meta.doc.period : null;
+  };
+
+  // Renders "already on file" under each party upload field. Party fields aren't
+  // wrapped in the forms' .ub upload chrome, so they get their own renderer that
+  // targets the per-field <div id="<inputId>_existing"> slot.
+  function markExistingPartyDocs(grouped, shareToken) {
+    Object.keys(grouped).forEach(function (inputId) {
+      var slot = document.getElementById(inputId + '_existing');
+      if (!slot) return;
+      var list = grouped[inputId];
+      var kind = (typeof window.__partyPeriodKind === 'function') ? window.__partyPeriodKind(inputId) : null;
+
+      var html = '<div style="margin-top:8px;padding:9px 11px;background:linear-gradient(135deg,#ecfdf5,#f0fdf4);' +
+        'border:1.5px solid #86efac;border-radius:9px">' +
+        '<div style="font-weight:700;font-size:12px;color:#166534;margin-bottom:6px">\u2705 Already on file' +
+        (list.length > 1 ? ' (' + list.length + ' files)' : '') + '</div>';
+
+      if (kind) {
+        // Slips and statements get the same period editor as the applicant's, so a
+        // party's undated files can be labelled without re-uploading them.
+        html += '<div style="display:flex;flex-direction:column;gap:8px">';
+        list.forEach(function (doc) { html += buildDocPeriodRow(doc, shareToken, kind); });
+        html += '</div>';
+      } else {
+        html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+        list.forEach(function (doc) {
+          var viewUrl = '/share/' + encodeURIComponent(shareToken) + '/doc/' + encodeURIComponent(doc.id);
+          html += '<span style="display:inline-flex;align-items:center;background:#fff;border:1px solid #bbf7d0;' +
+            'border-radius:6px;overflow:hidden">' +
+            '<a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" ' +
+            'style="padding:4px 8px;color:#15803d;text-decoration:none;font-size:11.5px;font-weight:600">' +
+            '\uD83D\uDCC4 ' + escapeHtml(doc.filename || doc.label) + '</a>' +
+            '<button type="button" onclick="window.__removeDoc(\'' + escapeHtml(doc.id) + '\',this)" ' +
+            'style="width:24px;height:24px;background:transparent;border:none;border-left:1px solid #bbf7d0;' +
+            'color:#dc2626;font-size:13px;cursor:pointer;padding:0" title="Remove this document">\u2715</button>' +
+            '</span>';
+        });
+        html += '</div>';
+      }
+
+      html += '<div style="margin-top:6px;font-size:11px;color:#16a34a;font-style:italic">' +
+        'Re-upload to replace \u00b7 Click \u2715 to remove</div></div>';
+      slot.innerHTML = html;
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () { renderPartyShell(); });
 })();
