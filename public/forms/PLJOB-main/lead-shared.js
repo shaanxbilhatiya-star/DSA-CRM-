@@ -717,6 +717,147 @@
     return null;
   }
 
+  // Upload fields whose documents only make sense with a period attached.
+  // 'month' → a single month/year (salary slips). 'range' → a from–to span
+  // (bank statements). Anything not listed here keeps the plain chip display.
+  var META_INPUT_KIND = { up_salary: 'month', up_bank: 'range' };
+
+  var MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+                     'July', 'August', 'September', 'October', 'November', 'December'];
+
+  // Pull an already-assigned period back out of a stored label so re-opening the
+  // form shows what was set before instead of resetting the inputs to blank.
+  function readPeriodFromLabel(label, kind) {
+    var s = String(label || '').replace(/[_\s]+/g, ' ');
+    if (kind === 'month') {
+      var m = s.match(new RegExp('(' + MONTH_NAMES.join('|') + ')\\s+(\\d{4})', 'i'));
+      if (!m) return null;
+      var name = MONTH_NAMES.filter(function (n) { return n.toLowerCase() === m[1].toLowerCase(); })[0];
+      return { month: name, year: m[2] };
+    }
+    var r = s.match(/(\d{4}-\d{2}-\d{2})\s*to\s*(\d{4}-\d{2}-\d{2})/i);
+    return r ? { from: r[1], to: r[2] } : null;
+  }
+
+  function buildDocPeriodRow(doc, shareToken, kind) {
+    var viewUrl = '/share/' + encodeURIComponent(shareToken) + '/doc/' + encodeURIComponent(doc.id);
+    var id = escapeHtml(doc.id);
+    var current = readPeriodFromLabel(doc.label || doc.filename, kind);
+    var isSet = !!current;
+
+    // The filename is the whole point of this row — the agent has to be able to
+    // tell which physical file they're labelling, so it leads at full size.
+    var head = '<span style="display:inline-flex;align-items:center;gap:2px;background:#fff;border:1px solid #bbf7d0;border-radius:6px;overflow:hidden;max-width:100%">' +
+      '<a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" ' +
+      'style="display:inline-flex;align-items:center;gap:5px;padding:5px 9px;color:#0c4a6e;text-decoration:none;font-size:13px;font-weight:700"' +
+      ' onmouseover="this.style.background=\'#dcfce7\'" onmouseout="this.style.background=\'transparent\'" ' +
+      'title="Open this document in a new tab">' +
+      '\uD83D\uDCC4 ' + escapeHtml(doc.filename || doc.label) +
+      '</a>' +
+      '<button type="button" onclick="window.__removeDoc(\'' + id + '\',this)" ' +
+      'style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;background:transparent;border:none;border-left:1px solid #bbf7d0;color:#dc2626;font-size:13px;cursor:pointer;padding:0" ' +
+      'onmouseover="this.style.background=\'#fef2f2\'" onmouseout="this.style.background=\'transparent\'" ' +
+      'title="Remove this document">\u2715</button>' +
+      '</span>';
+
+    var status = '<span id="docmeta-status-' + id + '" style="font-size:11.5px;font-weight:700;color:' +
+      (isSet ? '#15803d' : '#b45309') + '">' +
+      (isSet ? '\u2705 period set' : '\u26A0 no period set') + '</span>';
+
+    var controls;
+    if (kind === 'month') {
+      var monthOpts = '<option value="">Select Month</option>' + MONTH_NAMES.map(function (m) {
+        return '<option value="' + m + '"' + (current && current.month === m ? ' selected' : '') + '>' + m + '</option>';
+      }).join('');
+      var thisYear = new Date().getFullYear();
+      var yearOpts = '<option value="">Year</option>';
+      for (var y = thisYear; y >= thisYear - 3; y--) {
+        yearOpts += '<option value="' + y + '"' + (current && current.year === String(y) ? ' selected' : '') + '>' + y + '</option>';
+      }
+      controls =
+        '<select class="docmeta-month" style="padding:7px 10px;border:2px solid #38bdf8;border-radius:8px;font-size:13px;font-weight:600;background:#fff;color:#0369a1">' + monthOpts + '</select>' +
+        '<select class="docmeta-year" style="padding:7px 10px;border:2px solid #38bdf8;border-radius:8px;font-size:13px;font-weight:600;background:#fff;color:#0369a1">' + yearOpts + '</select>';
+    } else {
+      controls =
+        '<label style="font-size:11.5px;font-weight:700;color:#0369a1">From' +
+        '<input type="date" class="docmeta-from" value="' + (current ? current.from : '') + '" ' +
+        'style="display:block;margin-top:3px;padding:7px 10px;border:2px solid #38bdf8;border-radius:8px;font-size:13px;font-weight:600"></label>' +
+        '<label style="font-size:11.5px;font-weight:700;color:#0369a1">To' +
+        '<input type="date" class="docmeta-to" value="' + (current ? current.to : '') + '" ' +
+        'style="display:block;margin-top:3px;padding:7px 10px;border:2px solid #38bdf8;border-radius:8px;font-size:13px;font-weight:600"></label>';
+    }
+
+    return '<div data-docrow="' + id + '" style="padding:11px 12px;background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border:2px solid #bae6fd;border-radius:10px">' +
+      '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:9px">' + head + status + '</div>' +
+      '<div id="docmeta-' + id + '" style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">' + controls +
+      '<button type="button" onclick="window.__saveDocPeriod(\'' + id + '\',\'' + kind + '\',this)" ' +
+      'style="padding:8px 16px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">' +
+      '\uD83D\uDCBE Save</button>' +
+      '</div></div>';
+  }
+
+  // ── Assign a period to a document already on file ───────────────────────────
+  // Renames the stored document instead of forcing a re-upload.
+  window.__saveDocPeriod = function (docId, kind, btnEl) {
+    var p = new URLSearchParams(location.search);
+    var numberId = p.get('numberId');
+    var agentId = p.get('agentId');
+    if (!numberId) { alert('Cannot save: no lead ID in the URL.'); return; }
+
+    var wrap = document.getElementById('docmeta-' + docId);
+    if (!wrap) return;
+
+    var label;
+    if (kind === 'month') {
+      var mo = wrap.querySelector('.docmeta-month').value;
+      var yr = wrap.querySelector('.docmeta-year').value;
+      if (!mo || !yr) { alert('Pick both a month and a year first.'); return; }
+      label = 'Salary_Slip_' + mo + '_' + yr;
+    } else {
+      var from = wrap.querySelector('.docmeta-from').value;
+      var to = wrap.querySelector('.docmeta-to').value;
+      if (!from || !to) { alert('Pick both a FROM date and a TO date first.'); return; }
+      if (from > to) { alert('The FROM date must be on or before the TO date.'); return; }
+      label = 'Bank_Statement_' + from + '_to_' + to;
+    }
+
+    var original = btnEl.textContent;
+    btnEl.disabled = true;
+    btnEl.style.opacity = '0.5';
+    btnEl.textContent = 'Saving\u2026';
+
+    fetch('/api/agent/doc-label/' + encodeURIComponent(numberId) + '/' + encodeURIComponent(docId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId: agentId || '', label: label })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        btnEl.disabled = false;
+        btnEl.style.opacity = '1';
+        btnEl.textContent = original;
+        if (d.error) { alert('Could not save the period: ' + d.error); return; }
+
+        // Reflect the new name on the row so the change is visibly confirmed.
+        var row = document.querySelector('[data-docrow="' + docId + '"]');
+        if (row) {
+          var link = row.querySelector('a');
+          if (link) link.innerHTML = '\uD83D\uDCC4 ' + escapeHtml(d.filename || label);
+        }
+        var statusEl = document.getElementById('docmeta-status-' + docId);
+        if (statusEl) {
+          statusEl.textContent = '\u2705 saved';
+          statusEl.style.color = '#15803d';
+        }
+      })
+      .catch(function () {
+        btnEl.disabled = false;
+        btnEl.style.opacity = '1';
+        btnEl.textContent = original;
+        alert('Network error while saving the period.');
+      });
+  };
+
   function markExistingDocs(docs, shareToken) {
     // Group docs by upload input (multiple files can map to same input)
     var grouped = {};
@@ -749,24 +890,40 @@
         (docList.length > 1 ? ' (' + docList.length + ' files)' : '') +
         '</div>';
 
-      html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
-      docList.forEach(function (doc) {
-        var viewUrl = '/share/' + encodeURIComponent(shareToken) + '/doc/' + encodeURIComponent(doc.id);
-        html += '<span style="display:inline-flex;align-items:center;gap:2px;background:#fff;border:1px solid #bbf7d0;border-radius:6px;padding:0;overflow:hidden">' +
-          '<a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" ' +
-          'style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;color:#15803d;text-decoration:none;font-size:11.5px;font-weight:600;transition:all .15s"' +
-          ' onmouseover="this.style.background=\'#dcfce7\'"' +
-          ' onmouseout="this.style.background=\'transparent\'">' +
-          '\uD83D\uDCC4 ' + escapeHtml(doc.label || doc.filename) +
-          '</a>' +
-          '<button type="button" onclick="window.__removeDoc(\'' + escapeHtml(doc.id) + '\',this)" ' +
-          'style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;background:transparent;border:none;border-left:1px solid #bbf7d0;color:#dc2626;font-size:13px;cursor:pointer;transition:all .15s;padding:0" ' +
-          'onmouseover="this.style.background=\'#fef2f2\'" onmouseout="this.style.background=\'transparent\'" ' +
-          'title="Remove this document">\u2715</button>' +
-          '</span>';
-      });
-      html += '</div>';
-      html += '<div style="margin-top:5px;font-size:11px;color:#16a34a;font-style:italic">Re-upload to replace \u00b7 Click \u2715 to remove a document</div>';
+      // Salary slips and bank statements are meaningless without a period, so those
+      // two groups get an inline editor per document instead of a bare chip. Every
+      // other document type keeps the compact chip layout.
+      var metaKind = META_INPUT_KIND[inputId];
+
+      if (metaKind) {
+        html += '<div style="display:flex;flex-direction:column;gap:8px">';
+        docList.forEach(function (doc) {
+          html += buildDocPeriodRow(doc, shareToken, metaKind);
+        });
+        html += '</div>';
+        html += '<div style="margin-top:7px;font-size:11px;color:#16a34a;font-style:italic">' +
+          'Set the ' + (metaKind === 'month' ? 'month' : 'date range') + ' for each file and press Save \u00b7 ' +
+          'Re-upload to replace \u00b7 Click \u2715 to remove a document</div>';
+      } else {
+        html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+        docList.forEach(function (doc) {
+          var viewUrl = '/share/' + encodeURIComponent(shareToken) + '/doc/' + encodeURIComponent(doc.id);
+          html += '<span style="display:inline-flex;align-items:center;gap:2px;background:#fff;border:1px solid #bbf7d0;border-radius:6px;padding:0;overflow:hidden">' +
+            '<a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" ' +
+            'style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;color:#15803d;text-decoration:none;font-size:11.5px;font-weight:600;transition:all .15s"' +
+            ' onmouseover="this.style.background=\'#dcfce7\'"' +
+            ' onmouseout="this.style.background=\'transparent\'">' +
+            '\uD83D\uDCC4 ' + escapeHtml(doc.label || doc.filename) +
+            '</a>' +
+            '<button type="button" onclick="window.__removeDoc(\'' + escapeHtml(doc.id) + '\',this)" ' +
+            'style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;background:transparent;border:none;border-left:1px solid #bbf7d0;color:#dc2626;font-size:13px;cursor:pointer;transition:all .15s;padding:0" ' +
+            'onmouseover="this.style.background=\'#fef2f2\'" onmouseout="this.style.background=\'transparent\'" ' +
+            'title="Remove this document">\u2715</button>' +
+            '</span>';
+        });
+        html += '</div>';
+        html += '<div style="margin-top:5px;font-size:11px;color:#16a34a;font-style:italic">Re-upload to replace \u00b7 Click \u2715 to remove a document</div>';
+      }
 
       indicator.innerHTML = html;
       ubEl.parentNode.insertBefore(indicator, ubEl.nextSibling);
@@ -844,8 +1001,10 @@
           btnEl.style.opacity = '1';
           return;
         }
-        // Remove the doc chip from the UI
-        var chip = btnEl.closest('span');
+        // Remove the doc from the UI. Salary/bank documents render as a full row
+        // (filename + period controls), so drop the whole row rather than just the
+        // chip, which would otherwise leave orphaned month/date inputs behind.
+        var chip = btnEl.closest('[data-docrow]') || btnEl.closest('span');
         if (chip) {
           var indicator = chip.closest('.existing-doc-indicator');
           chip.remove();

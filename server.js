@@ -984,6 +984,18 @@ app.use((req, res, next) => {
   next();
 });
 
+// The loan forms and their shared script carry all the edit-mode logic, so an
+// intermediate proxy holding onto an old copy makes fixes look like they never
+// shipped. Force revalidation on every request for that directory.
+app.use('/forms', (req, res, next) => {
+  if (/\.(html?|js)$/i.test(req.path)) {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+  }
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Multer for number file uploads — keep the ORIGINAL file permanently (no longer
@@ -1404,56 +1416,52 @@ function reconstructFormDataFromInfoText(shareInfoText) {
     if (notes && notes !== 'None') snapshot['f_notes'] = notes;
   }
 
-  // ── Parse CURRENT OBLIGATIONS section ──
-  // Format: "Loan N          : Type  |  Bank  |  EMI Rs. 15,000"
-  // or variations like "  1. Type - Bank - EMI ₹15,000"
-  const obMatch = shareInfoText.match(/CURRENT OBLIGATIONS\n-{10,}\n([\s\S]*?)(?:\n-{10,}|\n={10,}|$)/);
-  if (obMatch) {
-    const obligations = [];
-    const lines = obMatch[1].trim().split('\n');
-    for (const line of lines) {
-      // Skip header lines, empty lines, and summary lines
-      if (!line.trim() || /^Total EMI/i.test(line) || /^No existing/i.test(line)) continue;
-      
-      // Try multiple formats:
-      // Format 1: "Loan 1          : Home Loan  |  HDFC  |  EMI Rs. 15,000"
-      let m = line.match(/(?:Loan|Obligation)\s*\d+\s*:\s*(.+?)\s*\|\s*(.+?)\s*\|\s*EMI\s*(?:Rs\.|₹)\s*([\d,]+)/i);
-      if (m) {
-        obligations.push({
-          type: m[1].trim(),
-          bank: m[2].trim(),
-          emi: m[3].replace(/,/g, '')
-        });
-        continue;
-      }
-      
-      // Format 2: "  1. Home Loan - HDFC - EMI ₹15,000"
-      m = line.match(/\d+\.\s*(.+?)\s*-\s*(.+?)\s*-\s*EMI\s*(?:Rs\.|₹)\s*([\d,]+)/i);
-      if (m) {
-        obligations.push({
-          type: m[1].trim(),
-          bank: m[2].trim(),
-          emi: m[3].replace(/,/g, '')
-        });
-        continue;
-      }
-      
-      // Format 3: "  1. Type - Bank - EMI Rs15000" (without space/symbol)
-      m = line.match(/\d+\.\s*(.+?)\s*-\s*(.+?)\s*-\s*EMI\s*(?:Rs\.?|₹)?\s*([\d,]+)/i);
-      if (m) {
-        obligations.push({
-          type: m[1].trim(),
-          bank: m[2].trim(),
-          emi: m[3].replace(/,/g, '')
-        });
-      }
-    }
-    if (obligations.length > 0) {
-      snapshot['__obligations'] = obligations;
-    }
-  }
+  const obligations = parseObligationsFromInfoText(shareInfoText);
+  if (obligations.length > 0) snapshot['__obligations'] = obligations;
 
   return Object.keys(snapshot).length > 0 ? snapshot : null;
+}
+
+/**
+ * Parse the "CURRENT OBLIGATIONS" block of an Applicant_Info.txt into
+ * [{ type, bank, emi }]. Kept standalone (rather than buried inside
+ * reconstructFormDataFromInfoText) because obligations live in .ob-row elements
+ * that have no element IDs, so older leads saved before collectFormSnapshot()
+ * captured __obligations have field data but no obligations in their JSON
+ * snapshot. Those leads still have the info text, so we re-derive obligations
+ * from it and merge them in — see /api/lead-form/:numberId.
+ *
+ * Handles both formats the five forms emit:
+ *   PL_Salaried / PL_Business : "Loan 1          : Car Loan  |  ICICI  |  EMI Rs. 15,000"
+ *   LAP_* / BL_Business       : "  1. Car Loan - ICICI - EMI ₹15,000"
+ */
+function parseObligationsFromInfoText(shareInfoText) {
+  if (!shareInfoText || typeof shareInfoText !== 'string') return [];
+  const obMatch = shareInfoText.match(/CURRENT OBLIGATIONS\s*\n-{10,}\n([\s\S]*?)(?:\n\s*-{10,}|\n\s*={10,}|$)/i);
+  if (!obMatch) return [];
+
+  const obligations = [];
+  for (const line of obMatch[1].split('\n')) {
+    // Skip blanks, the trailing total, and the "nothing declared" placeholders.
+    if (!line.trim()) continue;
+    if (/^\s*Total\s+EMI/i.test(line)) continue;
+    if (/No existing obligations|None declared/i.test(line)) continue;
+
+    // "Loan 1  : Type  |  Bank  |  EMI Rs. 15,000"
+    let m = line.match(/(?:Loan|Obligation)\s*\d*\s*:\s*(.+?)\s*\|\s*(.+?)\s*\|\s*EMI\s*(?:Rs\.?|₹)?\s*([\d,]+)/i);
+    // "  1. Type - Bank - EMI ₹15,000"  (also tolerates a missing currency symbol)
+    if (!m) m = line.match(/^\s*\d+\.\s*(.+?)\s*-\s*(.+?)\s*-\s*EMI\s*(?:Rs\.?|₹)?\s*([\d,]+)/i);
+    if (!m) continue;
+
+    const type = m[1].trim();
+    const bank = m[2].trim();
+    const emi  = m[3].replace(/,/g, '');
+    // Placeholders the forms write for blank cells — store as empty, not literal text.
+    const clean = v => (v === '-' || v === '(unspecified)') ? '' : v;
+    if (!clean(type) && !clean(bank) && !(parseFloat(emi) > 0)) continue;
+    obligations.push({ type: clean(type), bank: clean(bank), emi });
+  }
+  return obligations;
 }
 
 app.get('/api/lead-form/:numberId', (req, res) => {
@@ -1478,7 +1486,22 @@ app.get('/api/lead-form/:numberId', (req, res) => {
 
   // Final fallback: at minimum inject the lead name + phone so the first two
   // fields aren't blank even on very old leads that have neither JSON nor text.
-  if (!formData) formData = {};
+  // Copy rather than alias num.form.data so the response-shaping below never
+  // mutates (and accidentally persists into) the stored lead record.
+  formData = formData ? Object.assign({}, formData) : {};
+
+  // ── Obligations must be merged in even when a JSON snapshot DOES exist ──
+  // Obligation rows live in .ob-row elements with no IDs, so collectFormSnapshot()
+  // only started capturing them recently. Every lead saved before that has real
+  // field data (so the reconstruct branch above is skipped) but no __obligations,
+  // which made Current Obligations open blank in the editor even though the values
+  // are clearly present in the info text / share page. Re-derive them from the
+  // info text whenever the stored snapshot doesn't already carry them.
+  if (num.shareInfoText && !(Array.isArray(formData['__obligations']) && formData['__obligations'].length)) {
+    const obligations = parseObligationsFromInfoText(num.shareInfoText);
+    if (obligations.length > 0) formData['__obligations'] = obligations;
+  }
+
   if (!formData['f_name']   && (num.leadName || num.name)) formData['f_name']   = num.leadName || num.name;
   if (!formData['f_mobile'] && num.phone)                  formData['f_mobile'] = num.phone;
 
@@ -2210,6 +2233,59 @@ app.delete('/api/agent/doc/:numberId/:docId', (req, res) => {
   num.shareDocs.splice(docIdx, 1);
   saveState(appState);
   res.json({ success: true, remainingDocs: num.shareDocs.length });
+});
+
+// ─── Re-label an individual document (assign its period) ──────────────────────
+// Salary slips and bank statements are only meaningful with a period attached.
+// Documents uploaded before the metadata prompts existed are stored as
+// "Salary_Slip_1.pdf" / "Bank_Statement_1.pdf", and re-uploading every file just
+// to name it is wasteful. This lets the form editor attach a month/year or a
+// from–to range to a document already on file: the stored label, the filename and
+// the file on disk are all renamed, so the share page and any future ZIP export
+// show the period without the file being re-sent.
+app.post('/api/agent/doc-label/:numberId/:docId', (req, res) => {
+  const { numberId, docId } = req.params;
+  const { agentId, label } = req.body || {};
+  if (!agentId) return res.status(400).json({ error: 'agentId required' });
+  if (!label || !String(label).trim()) return res.status(400).json({ error: 'label required' });
+
+  const num = appState.numbers.find(n => n.id === numberId);
+  if (!num) return res.status(404).json({ error: 'Lead not found' });
+  if (num.disposition !== 'interested') {
+    return res.status(400).json({ error: 'Lead is not marked as interested' });
+  }
+  if (num.interestedBy !== agentId) {
+    return res.status(403).json({ error: 'This lead is not assigned to you' });
+  }
+  if (!num.shareDocs || !num.shareDocs.length) return res.status(404).json({ error: 'No documents found' });
+
+  const doc = num.shareDocs.find(d => d.id === docId);
+  if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+  // Keep the original extension — only the descriptive part of the name changes.
+  const ext = path.extname(doc.filename || '') || '';
+  const newBase = sanitizeFileName(String(label).trim().replace(/\.[a-zA-Z0-9]{2,5}$/, ''));
+  const newFilename = newBase + ext;
+
+  // Rename on disk so downloads/share links carry the new name too. A failed
+  // rename must not corrupt the record, so only commit the change if it succeeds.
+  if (doc.path && fs.existsSync(doc.path)) {
+    const newPath = path.join(path.dirname(doc.path), doc.id + '__' + newFilename);
+    if (newPath !== doc.path) {
+      try {
+        fs.renameSync(doc.path, newPath);
+        doc.path = newPath;
+      } catch (e) {
+        return res.status(500).json({ error: 'Could not rename the stored file' });
+      }
+    }
+  }
+
+  doc.filename = newFilename;
+  doc.label = newBase.replace(/_+/g, ' ').trim();
+  num.shareUpdatedAt = new Date().toISOString();
+  saveState(appState);
+  res.json({ success: true, id: doc.id, label: doc.label, filename: doc.filename });
 });
 
 app.get('/api/admin/stats', (req, res) => res.json(getAdminStats()));
