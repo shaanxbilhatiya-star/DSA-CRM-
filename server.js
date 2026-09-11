@@ -131,6 +131,25 @@ function readZipEntries(buf) {
   return entries;
 }
 
+/**
+ * True when a value read out of an Applicant_Info.txt means "nothing was entered".
+ *
+ * The forms deliberately write readable placeholders into that text so a banker
+ * reading the file sees "Loan Facilitator : Not specified" rather than a blank.
+ * Those placeholders must never travel back into a form field: the label map turns
+ * "Loan Facilitator" into f_lender, so an unfiltered "Not specified" was being
+ * loaded into the field as if the agent had typed it, and then saved back as a real
+ * value. Filtering here rather than in the forms fixes leads already stored with
+ * the placeholder, and keeps the text itself readable.
+ */
+function isNoValue(v) {
+  if (v == null) return true;
+  const s = String(v).trim();
+  if (!s) return true;
+  if (s === '\u2014' || s === '\u2013' || s === '-') return true;
+  return /^(?:n\/?a|none(?:\s+declared)?|not\s+(?:specified|selected|available|disclosed|applicable)|nil)$/i.test(s);
+}
+
 function sanitizeFileName(s) {
   return String(s || '').replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 120) || 'file';
 }
@@ -257,7 +276,7 @@ function explodeZipForLead(num, opts) {
       const m = line.match(/:\s+(.+)$/);
       if (!m) return false;
       const v = m[1].trim();
-      return v && v !== '\u2014' && v !== '-' && v !== 'N/A' && v !== 'None' && v.length > 1;
+      return !isNoValue(v) && v.length > 1;
     });
     if (hasRealInfoContent) {
       // New ZIP has meaningful info text — always use it (regardless of keepInfo)
@@ -291,7 +310,7 @@ function parseInfoFields(text) {
     const label = line.slice(0, idx).trim();
     const value = line.slice(idx + 1).trim();
     if (!label) return;
-    rows.push({ heading: false, label, value: (value === '\u2014' || value === 'None') ? '' : value });
+    rows.push({ heading: false, label, value: isNoValue(value) ? '' : value });
   });
   return rows;
 }
@@ -1226,7 +1245,7 @@ app.post('/api/agent/upload-doc-zip/:numberId', docUpload.single('docZip'), (req
         const m = line.match(/:\s+(.+)$/);
         if (!m) return false;
         const val = m[1].trim();
-        return val && val !== '\u2014' && val !== '-' && val !== 'N/A' && val !== 'None' && val.length > 1;
+        return !isNoValue(val) && val.length > 1;
       });
       if (hasRealContent || !num.shareInfoText) {
         num.shareInfoText = newText;
@@ -1279,7 +1298,7 @@ function reconstructFormDataFromInfoText(shareInfoText) {
     if (!m) continue;
     const key = m[1].trim();
     const val = m[2].trim();
-    if (val && val !== '—' && val !== '-') parsed[key] = val;
+    if (!isNoValue(val)) parsed[key] = val;
   }
   if (Object.keys(parsed).length === 0) return null;
 
@@ -1461,7 +1480,7 @@ function parseSelectionsFromInfoText(shareInfoText) {
   const sal = shareInfoText.match(/^\s*Salary type\s*:\s*(.+)$/mi);
   if (sal) {
     const v = sal[1].trim();
-    if (v && v !== '—' && v !== '-') {
+    if (!isNoValue(v)) {
       out.salaryType = /govt|government|psu/i.test(v) ? 'govt' : 'private';
     }
   }
@@ -1469,7 +1488,7 @@ function parseSelectionsFromInfoText(shareInfoText) {
   const prop = shareInfoText.match(/^\s*Property type\s*:\s*(.+)$/mi);
   if (prop) {
     const v = prop[1].trim();
-    if (v && !/^not selected$/i.test(v) && v !== '—' && v !== '-') {
+    if (!isNoValue(v)) {
       const PROP_KEYS = [
         [/pakka\s*ghar|residential\s*house/i, 'house'],
         [/sirf\s*zameen|residential\s*plot/i, 'plot'],
@@ -2156,7 +2175,7 @@ app.get('/share/:token', (req, res) => {
       const m = line.match(/:\s+(.+)$/);
       if (!m) continue;
       const v = m[1].trim();
-      if (v && v !== '\u2014' && v !== '-' && v !== 'N/A' && v !== 'None' && v.length > 1) {
+      if (!isNoValue(v) && v.length > 1) {
         realLineCount++;
         if (realLineCount >= 5) return true;
       }
