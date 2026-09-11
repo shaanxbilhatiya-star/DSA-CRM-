@@ -183,7 +183,12 @@ function explodeZipForLead(num, opts) {
       const base = e.name.split('/').pop();
       if (base === 'Applicant_Info.txt') { infoText = e.data.toString('utf8'); continue; }
       const safe = sanitizeFileName(base);
-      const label = safe.replace(/\.[^.]+$/, '').replace(/_/g, ' ').trim() || safe;
+      // A custom document can carry the section it was filed under as a
+      // "Cat-<slug>_" prefix. That stays in the stored filename because the share
+      // page reads the section from it, but it is dropped from the human-facing
+      // label so the document reads as its own name under that section's heading.
+      const labelSrc = safe.replace(/^Cat-[a-zA-Z]+_/, '');
+      const label = labelSrc.replace(/\.[^.]+$/, '').replace(/_/g, ' ').trim() || safe;
       // Compute groupKey: strip extension and trailing _N (so Aadhaar_Card_1 and _2 share a group).
       let groupKey = safe.replace(/\.[^.]+$/, '').replace(/_\d+$/, '').toLowerCase();
       parsed.push({ groupKey, label, filename: safe, data: e.data });
@@ -1655,9 +1660,17 @@ app.get('/share/:token', (req, res) => {
       categories['party_' + key] = {
         title: heading + ' Documents',
         owner: meta.name || heading,
+        // Shown even while empty: if this person is on the case, the reader should
+        // see their section and that nothing has been collected for them yet.
+        alwaysShow: true,
         docs: []
       };
     });
+
+    // Same for property owners, once one has been named on the form.
+    if (formData.f_owner1_name) categories.ownerFatherKyc.alwaysShow = true;
+    if (formData.f_owner2_name) categories.ownerMotherKyc.alwaysShow = true;
+    if (formData.f_owner3_name) categories.ownerOtherKyc.alwaysShow = true;
 
     // Always last, so anything unrecognised is visibly at the bottom.
     categories.otherDocuments = { title: 'Other Documents', owner: null, docs: [] };
@@ -1711,6 +1724,15 @@ app.get('/share/:token', (req, res) => {
       // contain the document type too ("CoApplicant1_Aadhaar_Card"), so the
       // applicant KYC patterns would otherwise file a co-applicant's Aadhaar
       // under the applicant's own section.
+      // An explicitly chosen section beats every guess. When an agent files a
+      // custom document under a section on the form, that choice is recorded in
+      // the filename and honoured verbatim here.
+      const chosen = explicitSectionFor(doc);
+      if (chosen && categories[chosen]) {
+        categories[chosen].docs.push(doc);
+        return;
+      }
+
       const partyRef = partyRefFromDoc(doc);
       if (partyRef && categories['party_' + partyRef.key]) {
         categories['party_' + partyRef.key].docs.push(doc);
@@ -1748,6 +1770,24 @@ app.get('/share/:token', (req, res) => {
   // co-applicant/guarantor file with CoApplicant<n>_ / Guarantor<n>_, and the
   // label is that same filename with underscores turned into spaces, so both forms
   // of the name are accepted here.
+  // Section a custom document was explicitly filed under on the form, encoded by
+  // the forms as a "Cat-<slug>_" filename prefix.
+  const CAT_SLUG_TO_KEY = {
+    kyc: 'applicantKyc',
+    income: 'incomeDocuments',
+    business: 'businessDocuments',
+    property: 'propertyDocuments',
+    ownerfather: 'ownerFatherKyc',
+    ownermother: 'ownerMotherKyc',
+    ownerother: 'ownerOtherKyc',
+    spouse: 'spouseDocuments',
+    other: 'otherDocuments'
+  };
+  function explicitSectionFor(doc) {
+    const m = String((doc && doc.filename) || '').match(/^Cat-([a-zA-Z]+)_/);
+    return m ? (CAT_SLUG_TO_KEY[m[1].toLowerCase()] || null) : null;
+  }
+
   function partyRefFromDoc(doc) {
     const m = String((doc && (doc.filename || doc.label)) || '')
       .match(/^(coapplicant|guarantor)[ _]*(\d+)[ _]/i);
@@ -1809,11 +1849,55 @@ app.get('/share/:token', (req, res) => {
 
   const categorizedDocs = categorizeDocuments(docs, formData);
 
+  // ── Everyone besides the applicant, surfaced at the very top ──
+  // Whether a case carries a property owner, a co-applicant or a guarantor changes
+  // how the whole file is read, so it is stated directly under the heading rather
+  // than left to be discovered further down the page.
+  const keyParties = [];
+  const ownerType = formData.f_owner_type || '';
+  [['f_owner1_name', 'Property Owner'], ['f_owner2_name', 'Property Owner'], ['f_owner3_name', 'Property Owner']]
+    .forEach(([field, role]) => {
+      const nm = formData[field];
+      if (nm) keyParties.push({ role: role + ' KYC', name: nm, meta: ownerType, docKeyPrefix: null });
+    });
+  (Array.isArray(formData.__parties) ? formData.__parties : []).forEach(p => {
+    if (!p) return;
+    const role = p.role === 'Guarantor' ? 'Guarantor' : 'Co-Applicant';
+    const slot = Number(p.slot) || 1;
+    const f = p.fields || {};
+    const metaBits = [f.relation, f.mobile, f.emptype].filter(Boolean);
+    keyParties.push({
+      role: role + ' ' + slot,
+      name: f.name || ('(name not recorded)'),
+      meta: metaBits.join('  \u00b7  '),
+      docKeyPrefix: 'party_' + (role === 'Guarantor' ? 'guarantor' : 'coapplicant') + slot
+    });
+  });
+
+  const keyPartiesHTML = keyParties.length ? `
+      <div class="parties">
+        ${keyParties.map(kp => {
+          const cat = kp.docKeyPrefix ? categorizedDocs[kp.docKeyPrefix] : null;
+          const n = cat ? cat.docs.length : 0;
+          const count = kp.docKeyPrefix
+            ? `<span class="party-count">${n} document${n === 1 ? '' : 's'}</span>` : '';
+          return `<div class="party-line">
+            <span class="party-role">${esc(kp.role)}</span>
+            <span class="party-name">${esc(kp.name)}</span>
+            ${kp.meta ? `<span class="party-meta">${esc(kp.meta)}</span>` : ''}
+            ${count}
+          </div>`;
+        }).join('')}
+      </div>` : '';
+
   // Build HTML for categorized documents
   let docCardsHTML = '';
   
   for (const [key, category] of Object.entries(categorizedDocs)) {
-    if (category.docs.length === 0) continue; // Skip empty categories
+    // Empty sections are hidden, except for people who are on the case
+    // (co-applicant, guarantor, named property owner) — for them an empty section
+    // is itself the useful information.
+    if (category.docs.length === 0 && !category.alwaysShow) continue;
 
     const ownerTag = category.owner ? `<span class="owner-tag">${esc(category.owner)}</span>` : '';
     
@@ -1825,6 +1909,11 @@ app.get('/share/:token', (req, res) => {
           ${ownerTag}
         </h3>
         <div class="doc-list">`;
+
+    if (category.docs.length === 0) {
+      docCardsHTML += `
+        <div class="doc-empty">No documents uploaded for this person yet.</div>`;
+    }
 
     category.docs.forEach(d => {
       docCardsHTML += `
@@ -2184,6 +2273,19 @@ app.get('/share/:token', (req, res) => {
   .doc-meta{flex:1;min-width:0}
   .doc-name{font-weight:700;font-size:14px;color:#0f172a}
   .doc-sub{font-size:11.5px;color:#64748b;margin-top:3px;word-break:break-all}
+  .doc-empty{padding:14px 16px;border:1.5px dashed #cbd5e1;border-radius:12px;background:#f8fafc;
+    color:#64748b;font-size:12.5px;font-style:italic;text-align:center}
+  /* Key parties panel — first thing read on the page */
+  .parties{margin-top:14px;display:flex;flex-direction:column;gap:10px}
+  .party-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 14px;border-radius:12px;
+    background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22)}
+  .party-role{font-size:10.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;
+    padding:4px 10px;border-radius:20px;background:rgba(255,255,255,.9);color:#4338ca;white-space:nowrap}
+  .party-name{font-size:14px;font-weight:700;color:#fff}
+  .party-meta{font-size:11.5px;color:#c7d2fe}
+  .party-count{margin-left:auto;font-size:11px;font-weight:700;color:#e0e7ff;
+    background:rgba(0,0,0,.18);padding:4px 10px;border-radius:20px;white-space:nowrap}
+  @media(max-width:560px){ .party-count{margin-left:0} }
   .doc-actions{display:flex;gap:8px;flex-shrink:0}
 
   /* ── Buttons ── */
@@ -2297,6 +2399,7 @@ app.get('/share/:token', (req, res) => {
         <span class="pill">\uD83D\uDCC4 ${docs.length} document${docs.length === 1 ? '' : 's'}</span>
         ${completedAt ? `<span class="pill">\uD83D\uDD52 ${esc(completedAt)}</span>` : ''}
       </div>
+      ${keyPartiesHTML}
     </div>
   </div>
 

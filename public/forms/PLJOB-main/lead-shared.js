@@ -58,7 +58,11 @@
           otherDocs.push({
             name: doc.name || 'Unnamed Document',
             filename: doc.file ? doc.file.name : null,
-            size: doc.file ? doc.file.size : null
+            size: doc.file ? doc.file.size : null,
+            // Which section the agent filed this document under. The stored
+            // filename carries it too; this keeps it readable in the snapshot.
+            section: (typeof window.__otherDocSection === 'function')
+              ? window.__otherDocSection(doc.id) : ''
           });
         }
       });
@@ -788,6 +792,7 @@
       'title="Open this document in a new tab">' +
       '\uD83D\uDCC4 ' + escapeHtml(doc.filename || doc.label) +
       '</a>' +
+      renameBtnHtml(doc.id) +
       '<button type="button" onclick="window.__removeDoc(\'' + id + '\',this)" ' +
       'style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;background:transparent;border:none;border-left:1px solid #bbf7d0;color:#dc2626;font-size:13px;cursor:pointer;padding:0" ' +
       'onmouseover="this.style.background=\'#fef2f2\'" onmouseout="this.style.background=\'transparent\'" ' +
@@ -966,6 +971,7 @@
             ' onmouseout="this.style.background=\'transparent\'">' +
             '\uD83D\uDCC4 ' + escapeHtml(doc.label || doc.filename) +
             '</a>' +
+            renameBtnHtml(doc.id) +
             '<button type="button" onclick="window.__removeDoc(\'' + escapeHtml(doc.id) + '\',this)" ' +
             'style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;background:transparent;border:none;border-left:1px solid #bbf7d0;color:#dc2626;font-size:13px;cursor:pointer;transition:all .15s;padding:0" ' +
             'onmouseover="this.style.background=\'#fef2f2\'" onmouseout="this.style.background=\'transparent\'" ' +
@@ -1590,6 +1596,7 @@
             '<a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" ' +
             'style="padding:4px 8px;color:#15803d;text-decoration:none;font-size:11.5px;font-weight:600">' +
             '\uD83D\uDCC4 ' + escapeHtml(doc.filename || doc.label) + '</a>' +
+            renameBtnHtml(doc.id) +
             '<button type="button" onclick="window.__removeDoc(\'' + escapeHtml(doc.id) + '\',this)" ' +
             'style="width:24px;height:24px;background:transparent;border:none;border-left:1px solid #bbf7d0;' +
             'color:#dc2626;font-size:13px;cursor:pointer;padding:0" title="Remove this document">\u2715</button>' +
@@ -1605,4 +1612,159 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () { renderPartyShell(); });
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     "OTHER DOCUMENTS" -> WHICH SECTION DO THEY BELONG TO
+
+     A custom document always belongs to somebody or to some section — a property
+     paper, an income proof, applicant KYC, a co-owner, a co-applicant. Naming it
+     alone left it stranded in a generic "Other Documents" pile on the view page.
+     Each slot now carries a section dropdown, and the choice is encoded into the
+     ZIP filename as a "Cat-<slug>_" prefix (or the party's own prefix), because
+     the server flattens ZIP folders and can only read the filename.
+
+     The dropdown is injected from here rather than editing five different
+     "Other Documents" implementations — two are written out longhand and three are
+     minified one-liners, so a shared observer is both smaller and safer.
+     ═══════════════════════════════════════════════════════════════════════════ */
+
+  var OTHER_DOC_SECTIONS = [
+    { value: '',            label: 'Other Documents (unassigned)' },
+    { value: 'kyc',         label: 'Applicant KYC Documents' },
+    { value: 'income',      label: 'Income & Financial Documents' },
+    { value: 'business',    label: 'Business Documents' },
+    { value: 'property',    label: 'Property Documents' },
+    { value: 'ownerfather', label: 'Property Owner / Father KYC' },
+    { value: 'ownermother', label: 'Property Owner / Mother KYC' },
+    { value: 'ownerother',  label: 'Other Property Owner KYC' },
+    { value: 'spouse',      label: 'Spouse Documents' }
+  ];
+
+  // Parties currently on the form are offered too, so a document can be filed
+  // directly under the co-applicant or guarantor it belongs to.
+  function otherDocSectionOptions() {
+    var opts = OTHER_DOC_SECTIONS.slice();
+    partyList.forEach(function (p) {
+      opts.push({ value: 'party:' + partyPrefix(p), label: partyTitle(p) + (function () {
+        var el = document.getElementById(partyFieldId(p, 'name'));
+        return (el && el.value.trim()) ? ' \u2014 ' + el.value.trim() : '';
+      })() });
+    });
+    return opts;
+  }
+
+  function normaliseOtherDocRowId(rawId) {
+    var id = String(rawId == null ? '' : rawId);
+    return /^other-doc-/.test(id) ? id : 'other-doc-' + id;
+  }
+
+  // Filename prefix for a slot's chosen section. Called by each form's ZIP builder.
+  window.__otherDocPrefix = function (rawId) {
+    var sel = document.getElementById(normaliseOtherDocRowId(rawId) + '-cat');
+    var v = sel ? sel.value : '';
+    if (!v) return '';
+    if (v.indexOf('party:') === 0) return v.slice(6) + '_';
+    return 'Cat-' + v + '_';
+  };
+
+  window.__otherDocSection = function (rawId) {
+    var sel = document.getElementById(normaliseOtherDocRowId(rawId) + '-cat');
+    return sel ? sel.value : '';
+  };
+
+  function injectOtherDocSection(row) {
+    if (!row || row.querySelector('[data-otherdoc-cat]')) return;
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-top:9px;display:flex;align-items:center;gap:8px;flex-wrap:wrap';
+    var opts = otherDocSectionOptions().map(function (o) {
+      return '<option value="' + escapeHtml(o.value) + '">' + escapeHtml(o.label) + '</option>';
+    }).join('');
+    wrap.innerHTML =
+      '<label for="' + row.id + '-cat" style="font-size:11.5px;font-weight:700;color:#4338ca">' +
+        'Show under section:</label>' +
+      '<select id="' + row.id + '-cat" data-otherdoc-cat="1" style="flex:1;min-width:210px;padding:7px 10px;' +
+        'border:1.5px solid #a5b4fc;border-radius:8px;font-size:12.5px;font-family:inherit;background:#fff;' +
+        'color:#3730a3;font-weight:600">' + opts + '</select>';
+    row.appendChild(wrap);
+  }
+
+  function watchOtherDocRows() {
+    ['other-docs-container', 'other-docs-wrapper'].forEach(function (hostId) {
+      var host = document.getElementById(hostId);
+      if (!host || host.getAttribute('data-cat-watch')) return;
+      host.setAttribute('data-cat-watch', '1');
+      // Catch rows that already exist, then anything added later.
+      Array.prototype.forEach.call(host.children, function (el) {
+        if (/^other-doc-\d+$/.test(el.id || '')) injectOtherDocSection(el);
+      });
+      new MutationObserver(function (muts) {
+        muts.forEach(function (m) {
+          Array.prototype.forEach.call(m.addedNodes, function (n) {
+            if (n.nodeType === 1 && /^other-doc-\d+$/.test(n.id || '')) injectOtherDocSection(n);
+          });
+        });
+      }).observe(host, { childList: true });
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () { watchOtherDocRows(); });
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     RENAME A DOCUMENT ALREADY ON FILE
+     Available on every existing document — property owner KYC, co-applicant,
+     guarantor and the rest — not just the ones that take a period.
+     ═══════════════════════════════════════════════════════════════════════════ */
+
+  window.__renameDoc = function (docId, btnEl) {
+    var p = new URLSearchParams(location.search);
+    var numberId = p.get('numberId');
+    var agentId = p.get('agentId');
+    if (!numberId) { alert('Cannot rename: no lead ID in the URL.'); return; }
+
+    var row = btnEl.closest('[data-docrow]') || btnEl.closest('span');
+    var link = row ? row.querySelector('a') : null;
+    var currentRaw = link ? link.textContent.replace(/^[^\w]*\s*/, '').trim() : '';
+    var current = currentRaw.replace(/\.[^.]+$/, '');
+
+    var next = prompt('Rename this document to:', current);
+    if (next === null) return;
+    next = next.trim();
+    if (!next) { alert('The name cannot be empty.'); return; }
+    if (/[<>:"/\\|?*]/.test(next)) { alert('Avoid these characters: < > : " / \\ | ? *'); return; }
+
+    // Keep the owner prefix so a party's document stays attributed to them.
+    var ownerMatch = currentRaw.match(/^((?:coapplicant|guarantor)[ _]*\d+)[ _]/i);
+    var prefix = ownerMatch ? ownerMatch[1].replace(/[ _]+/g, '') + '_' : '';
+    if (prefix && next.toLowerCase().indexOf(prefix.toLowerCase()) === 0) prefix = '';
+
+    btnEl.disabled = true;
+    btnEl.style.opacity = '0.5';
+
+    fetch('/api/agent/doc-label/' + encodeURIComponent(numberId) + '/' + encodeURIComponent(docId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId: agentId || '', label: prefix + next })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        btnEl.disabled = false;
+        btnEl.style.opacity = '1';
+        if (d.error) { alert('Could not rename: ' + d.error); return; }
+        if (link) link.innerHTML = '\uD83D\uDCC4 ' + escapeHtml(d.filename || next);
+      })
+      .catch(function () {
+        btnEl.disabled = false;
+        btnEl.style.opacity = '1';
+        alert('Network error while renaming.');
+      });
+  };
+
+  // Small pencil control appended to an existing-document chip.
+  function renameBtnHtml(docId) {
+    return '<button type="button" onclick="window.__renameDoc(\'' + escapeHtml(docId) + '\',this)" ' +
+      'style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;' +
+      'background:transparent;border:none;border-left:1px solid #bbf7d0;color:#2563eb;font-size:12px;' +
+      'cursor:pointer;padding:0" title="Rename this document">\u270F\uFE0F</button>';
+  }
+  window.__renameBtnHtml = renameBtnHtml;
 })();
