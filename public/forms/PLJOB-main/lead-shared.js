@@ -1384,17 +1384,25 @@
     var row = document.createElement('div');
     row.id = 'otherrow_' + key + '_' + n;
     row.style.cssText = 'padding:10px;margin-bottom:8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px';
+    // File first, name second. Asking for a name before anything is attached gives
+    // the agent nothing to describe, so the name field only appears once a file is
+    // chosen (or straight away when a stored name is being restored).
+    var hasPreset = !!(presetName && presetName.trim());
     row.innerHTML =
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">' +
-        '<input type="text" id="' + nameId + '" placeholder="Name this document (e.g. Rent Agreement)" ' +
-          'value="' + escapeHtml(presetName || '') + '" style="' + PARTY_INPUT_CSS + ';flex:1">' +
+      '<div style="display:flex;align-items:center;gap:8px">' +
+        '<input type="file" id="' + fileId + '" multiple ' +
+          'onchange="window.__partyFileChange(\'' + fileId + '\')" style="flex:1;font-size:12.5px">' +
         '<button type="button" onclick="window.__removePartyOtherDoc(\'' + key + '\',' + n + ')" ' +
           'style="padding:7px 11px;background:#fee2e2;border:none;border-radius:7px;color:#dc2626;' +
           'font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">Remove</button>' +
       '</div>' +
-      '<input type="file" id="' + fileId + '" multiple ' +
-        'onchange="window.__partyFileChange(\'' + fileId + '\')" style="font-size:12.5px;width:100%">' +
       '<div id="' + fileId + '_fn" style="display:none;font-size:12px;color:#16a34a;margin-top:6px;font-weight:600"></div>' +
+      '<div id="' + fileId + '_namewrap" style="' + (hasPreset ? '' : 'display:none;') + 'margin-top:7px">' +
+        '<label for="' + nameId + '" style="display:block;font-size:11.5px;font-weight:700;color:#4338ca;' +
+          'margin-bottom:4px">Name this document</label>' +
+        '<input type="text" id="' + nameId + '" placeholder="e.g. Rent Agreement" ' +
+          'value="' + escapeHtml(presetName || '') + '" style="' + PARTY_INPUT_CSS + '">' +
+      '</div>' +
       '<div id="' + fileId + '_period"></div>';
     host.appendChild(row);
     return n;
@@ -1480,6 +1488,16 @@
       fnEl.textContent = files.length ? '\u2705 ' + files.map(function (f) { return f.name; }).join(', ') : '';
       fnEl.style.display = files.length ? 'block' : 'none';
     }
+    // An extra document is named after its file is attached, so reveal that field now.
+    var nameWrap = document.getElementById(inputId + '_namewrap');
+    if (nameWrap) {
+      nameWrap.style.display = files.length ? 'block' : 'none';
+      if (files.length) {
+        var nameField = nameWrap.querySelector('input');
+        if (nameField && !nameField.value.trim()) nameField.focus();
+      }
+    }
+
     partyPeriods[inputId] = {};
     if (!perEl) return;
     perEl.innerHTML = '';

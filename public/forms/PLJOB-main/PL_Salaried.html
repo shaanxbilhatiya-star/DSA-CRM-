@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Personal Loan Application</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="lead-shared.js?v=20260911k"></script>
+<script src="lead-shared.js?v=20260911m"></script>
 <style>/* All fields & documents are optional */ .fi label .r,.sec-err-banner,.err{display:none!important}</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -657,14 +657,8 @@ function addOtherDocSlot() {
   div.style.cssText = 'background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:12px;position:relative';
   
   div.innerHTML = `
-    <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px">
-      <div style="flex:1">
-        <label style="display:block;font-size:13px;font-weight:600;color:#1e293b;margin-bottom:6px">Document Name <span style="color:#ef4444">*</span></label>
-        <input type="text" id="other-doc-name-${id}" placeholder="e.g. Property Tax Receipt, Affidavit, etc." 
-               style="width:100%;padding:10px 12px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:13px;font-family:inherit"
-               onchange="validateOtherDocName(${id})">
-        <div id="other-doc-name-error-${id}" style="color:#ef4444;font-size:11px;margin-top:4px;display:none"></div>
-      </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px">
+      <div style="font-size:12.5px;font-weight:700;color:#475569">Step 1 &middot; attach the file</div>
       <button type="button" onclick="removeOtherDoc(${id})" 
               style="padding:8px;background:#fee2e2;border:none;border-radius:8px;cursor:pointer;color:#dc2626;flex-shrink:0"
               title="Remove this document">
@@ -679,6 +673,14 @@ function addOtherDocSlot() {
       <span class="ub-text">Click to attach files</span>
     </div>
     <div class="fn" id="other-doc-fn-${id}"></div>
+
+    <div id="other-doc-name-wrap-${id}" style="display:none;margin-top:10px">
+      <label style="display:block;font-size:12.5px;font-weight:700;color:#475569;margin-bottom:6px">Step 2 &middot; name this document <span style="color:#ef4444">*</span></label>
+      <input type="text" id="other-doc-name-${id}" placeholder="e.g. Property Tax Receipt, Affidavit, etc."
+             style="width:100%;padding:10px 12px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:13px;font-family:inherit"
+             onchange="otherDocNameEntered(${id})">
+      <div id="other-doc-name-error-${id}" style="color:#ef4444;font-size:11px;margin-top:4px;display:none"></div>
+    </div>
     
     <div id="other-doc-confirm-${id}" style="display:none;background:#fef3c7;border:1.5px solid #fbbf24;border-radius:8px;padding:12px;margin-top:12px">
       <div style="font-size:13px;font-weight:600;color:#92400e;margin-bottom:8px">
@@ -739,30 +741,45 @@ function handleOtherDocFileSelect(id) {
   const confirmDiv = document.getElementById('other-doc-confirm-' + id);
   
   if (!input.files || input.files.length === 0) return;
-  
-  const name = nameInput.value.trim();
-  if (!name) {
-    alert('⚠️ Please enter a document name first');
-    input.value = '';
-    return;
-  }
-  
-  if (!validateOtherDocName(id)) {
-    input.value = '';
-    return;
-  }
-  
-  // Show files selected
+
+  // Files first. The name is asked for only now that there is something to name,
+  // so the field is revealed here rather than gating the upload behind it.
   const fileNames = Array.from(input.files).map(f => f.name).join(', ');
   fnDiv.innerHTML = `<span style="color:#059669;font-weight:600">${input.files.length} file(s) selected</span>: ${fileNames}`;
   ubDiv.classList.add('uploaded');
-  
-  // Show confirmation panel
+
+  const docData = otherDocsData.find(d => d.id === id);
+  if (docData) {
+    docData.files = input.files;
+    docData.confirmed = false;
+  }
+
+  const wrap = document.getElementById('other-doc-name-wrap-' + id);
+  if (wrap) wrap.style.display = 'block';
+  confirmDiv.style.display = 'none';
+
+  if (nameInput && nameInput.value.trim()) {
+    // Re-picking files for an already-named document: straight to confirmation.
+    otherDocNameEntered(id);
+  } else if (nameInput) {
+    nameInput.focus();
+  }
+}
+
+// Runs when the name is typed, once the file is already attached.
+function otherDocNameEntered(id) {
+  const input = document.getElementById('other-doc-file-' + id);
+  const nameInput = document.getElementById('other-doc-name-' + id);
+  const confirmDiv = document.getElementById('other-doc-confirm-' + id);
+  if (!nameInput || !validateOtherDocName(id)) return;
+  if (!input || !input.files || input.files.length === 0) return;
+
+  const name = nameInput.value.trim();
+  const fileNames = Array.from(input.files).map(f => f.name).join(', ');
   document.getElementById('other-doc-confirm-name-' + id).textContent = name;
   document.getElementById('other-doc-confirm-count-' + id).textContent = input.files.length + ' file(s) — ' + fileNames;
   confirmDiv.style.display = 'block';
-  
-  // Update data (not confirmed yet)
+
   const docData = otherDocsData.find(d => d.id === id);
   if (docData) {
     docData.name = name;
