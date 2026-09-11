@@ -894,6 +894,24 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#ccfbf1 0%
     <div class="fi"><label>Notes / Remarks</label><textarea id="f_notes" placeholder="Any special remarks about the case or property..."></textarea></div>
   </div>
 
+  <!-- ⑨½ OTHER DOCUMENTS -->
+  <div class="sec">
+    <div class="sec-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+      Other Documents
+    </div>
+    <p style="margin: 0 0 1rem 0; color: var(--gray-600); font-size: 0.95rem;">
+      Upload any additional documents not covered above (e.g., Property Papers, NOC, Partnership Deed). Each document can have a custom name.
+    </p>
+    <div id="other-docs-wrapper" style="display:flex;flex-direction:column;gap:0.75rem;margin-bottom:1rem">
+      <!-- Dynamic other doc slots appear here -->
+    </div>
+    <button type="button" class="other-doc-btn-add" onclick="addOtherDocSlot()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Other Document
+    </button>
+  </div>
+
   <!-- ⑩ REFERENCES -->
   <div class="sec" id="sec-refs">
     <div class="sec-title">
@@ -949,10 +967,23 @@ const _urlParams = new URLSearchParams(window.location.search);
 const _numberId = _urlParams.get('numberId');
 const _agentId = _urlParams.get('agentId');
 let obCount=1;
+let otherDocsCount=0;
+let otherDocsData=[];
 let selectedProp='';
 let salaryType='private';
 
 function g(id){return document.getElementById(id)}
+
+function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML}
+function addOtherDocSlot(){const n=prompt('Enter a custom name for this document (e.g., "Proof of Residence", "Property Papers"):');if(!n||!n.trim()){alert('❌ Document name cannot be empty.');return}const c=n.trim();if(!validateOtherDocName(c)){return}otherDocsCount++;const id='other-doc-'+otherDocsCount;const w=document.getElementById('other-docs-wrapper');const h=escapeHtml(c);const r=document.createElement('div');r.className='other-doc-row';r.id=id;r.innerHTML=`<div class="other-doc-info"><strong>${h}</strong><span class="other-doc-status" id="${id}-status">Waiting for file...</span></div><input type="file" id="${id}-input" style="display:none" onchange="handleOtherDocFileSelect('${id}','${h}')"><button class="other-doc-btn-select" onclick="document.getElementById('${id}-input').click()">Choose File</button><button class="other-doc-btn-confirm" id="${id}-confirm" style="display:none" onclick="confirmOtherDoc('${id}')">✓ Confirm</button><button class="other-doc-btn-cancel" id="${id}-cancel" style="display:none" onclick="cancelOtherDocConfirm('${id}')">✗ Cancel</button><button class="other-doc-btn-remove" onclick="removeOtherDoc('${id}')">Remove</button>`;w.appendChild(r)}
+function validateOtherDocName(n){if(n.length>100){alert('❌ Document name is too long (max 100 characters).');return false}if(/[<>:"/\\|?*]/.test(n)){alert('❌ Document name contains invalid characters. Avoid: < > : " / \\ | ? *');return false}const e=otherDocsData.map(d=>d.name.toLowerCase());if(e.includes(n.toLowerCase())){alert('❌ A document with this name already exists. Please choose a different name.');return false}return true}
+function handleOtherDocFileSelect(id,n){const i=document.getElementById(id+'-input');const f=i.files[0];if(!f){return}document.getElementById(id+'-status').textContent='Selected: '+f.name+' ('+formatFileSize(f.size)+') — Confirm?';document.querySelector('#'+id+' .other-doc-btn-select').style.display='none';document.getElementById(id+'-confirm').style.display='inline-block';document.getElementById(id+'-cancel').style.display='inline-block'}
+function confirmOtherDoc(id){const i=document.getElementById(id+'-input');const f=i.files[0];if(!f){alert('❌ No file selected.');return}const n=otherDocsData.find(d=>d.id===id);if(n){n.name=n.name;n.file=f}else{const m=document.getElementById(id+'-status').parentElement.querySelector('strong').textContent;otherDocsData.push({id:id,name:m,file:f})}document.getElementById(id+'-status').textContent='✅ '+f.name+' ('+formatFileSize(f.size)+')';document.querySelector('#'+id+' .other-doc-btn-select').style.display='inline-block';document.getElementById(id+'-confirm').style.display='none';document.getElementById(id+'-cancel').style.display='none'}
+function cancelOtherDocConfirm(id){const i=document.getElementById(id+'-input');i.value='';const e=otherDocsData.find(d=>d.id===id);if(e&&e.file){document.getElementById(id+'-status').textContent='✅ '+e.file.name+' ('+formatFileSize(e.file.size)+')'}else{document.getElementById(id+'-status').textContent='Waiting for file...'}document.querySelector('#'+id+' .other-doc-btn-select').style.display='inline-block';document.getElementById(id+'-confirm').style.display='none';document.getElementById(id+'-cancel').style.display='none'}
+function removeOtherDoc(id){if(!confirm('Are you sure you want to remove this document slot?')){return}const i=otherDocsData.findIndex(d=>d.id===id);if(i>-1){otherDocsData.splice(i,1)}document.getElementById(id).remove()}
+function formatFileSize(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(1)+' KB';return(b/1048576).toFixed(1)+' MB'}
+async function addOtherDocsToZip(z){for(const d of otherDocsData){if(d.file){const s=d.name.replace(/[<>:"/\\|?*]/g,'_').substring(0,100);const e=d.file.name.split('.').pop();const fn=s+(e?'.'+e:'');await z.file('Other_Documents/'+fn,d.file)}}}
+window.loadExistingOtherDocs=function(m){if(!m||!m.OTHER_DOCUMENTS)return;otherDocsCount=0;otherDocsData=[];document.getElementById('other-docs-wrapper').innerHTML='';const a=m.OTHER_DOCUMENTS;for(const k in a){if(a.hasOwnProperty(k)){const n=k;addOtherDocSlot();const id='other-doc-'+otherDocsCount;setTimeout(()=>{const s=document.getElementById(id+'-status');if(s){s.textContent='✅ '+a[k]+' (existing)'}},50)}}};
 
 function toggleOwnerKyc(v){
   document.getElementById('owner-father-block').style.display=(v==='father'||v==='both')?'block':'none';
@@ -1313,6 +1344,8 @@ async function saveFile(){
     'Generated on : ' + new Date().toLocaleString('en-IN'),
     '============================================================',
   ].join('\n');
+  setProgress(81,'Adding Other Documents...');
+  await addOtherDocsToZip(zip);
   zip.file('Applicant_Info.txt', txt);
   setProgress(82, 'Compressing ZIP...');
   const zipBlob = await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
