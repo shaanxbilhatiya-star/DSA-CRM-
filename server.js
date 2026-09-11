@@ -155,6 +155,9 @@ function explodeZipForLead(num, opts) {
   const token = num.shareToken || uuidv4();
   const destDir = path.join(SHARES_DIR, token);
 
+  // Initialize stable ID counter on first explosion (never reuse IDs after deletion).
+  if (typeof num.shareDocSeq !== 'number') num.shareDocSeq = 0;
+
   const existing = (opts.merge && Array.isArray(num.shareDocs))
     ? num.shareDocs.filter(d => d && d.path && fs.existsSync(d.path))
     : [];
@@ -166,10 +169,12 @@ function explodeZipForLead(num, opts) {
   ensureDir(destDir);
 
   let entries = null;
+  let parseErr = null;
   try { entries = readZipEntries(fs.readFileSync(num.docZipPath)); }
-  catch (e) { entries = null; }
+  catch (e) { entries = null; parseErr = e; }
 
-  // Parse the archive into { label, filename, data } records (skip the info text).
+  // Parse the archive into { groupKey, label, filename, data } records (skip the info text).
+  // groupKey = filename with extension and trailing _N (multi-file seq) removed.
   let infoText = '';
   const parsed = [];
   if (entries) {
@@ -179,37 +184,60 @@ function explodeZipForLead(num, opts) {
       if (base === 'Applicant_Info.txt') { infoText = e.data.toString('utf8'); continue; }
       const safe = sanitizeFileName(base);
       const label = safe.replace(/\.[^.]+$/, '').replace(/_/g, ' ').trim() || safe;
-      parsed.push({ label, filename: safe, data: e.data });
+      // Compute groupKey: strip extension and trailing _N (so Aadhaar_Card_1 and _2 share a group).
+      let groupKey = safe.replace(/\.[^.]+$/, '').replace(/_\d+$/, '').toLowerCase();
+      parsed.push({ groupKey, label, filename: safe, data: e.data });
+    }
+  } else if (opts.merge && existing.length > 0) {
+    // Merge requested but new ZIP unparseable and we have old docs — fail loudly.
+    return false;
+  }
+
+  // Build document map keyed by groupKey.
+  const byGroup = new Map();
+  for (const d of existing) {
+    // Recompute groupKey for legacy docs (they don't have d.groupKey stored).
+    const gk = (d.groupKey || (d.filename || '').replace(/\.[^.]+$/, '').replace(/_\d+$/, '')).toLowerCase();
+    if (!byGroup.has(gk)) byGroup.set(gk, []);
+    byGroup.get(gk).push(d);
+  }
+
+  // On merge, delete all docs in groups that appear in the new ZIP (full replacement per group).
+  if (opts.merge) {
+    const newGroups = new Set(parsed.map(p => p.groupKey));
+    for (const gk of newGroups) {
+      const old = byGroup.get(gk) || [];
+      for (const d of old) {
+        if (d.path) { try { fs.unlinkSync(d.path); } catch {} }
+      }
+      byGroup.delete(gk);
     }
   }
 
-  // Start the document map from what's already on file (merge) or empty (fresh).
-  const byKey = new Map();
-  let maxId = -1;
-  for (const d of existing) {
-    byKey.set((d.label || d.filename || '').toLowerCase(), d);
-    const n = parseInt(d.id, 10); if (!isNaN(n)) maxId = Math.max(maxId, n);
-  }
-  // Overlay the newly uploaded documents (replace same-label, add new ones).
+  // Add the newly uploaded documents (allocating fresh, never-reused IDs).
   for (const nd of parsed) {
-    const key = nd.label.toLowerCase();
-    const prev = byKey.get(key);
-    if (prev && prev.path) { try { fs.unlinkSync(prev.path); } catch {} }
-    const id = prev ? prev.id : String(++maxId);
+    const id = String(++num.shareDocSeq);
     const outPath = path.join(destDir, id + '__' + nd.filename);
     try { fs.writeFileSync(outPath, nd.data); } catch { continue; }
-    byKey.set(key, { id, label: nd.label, filename: nd.filename, path: outPath, size: nd.data.length });
+    if (!byGroup.has(nd.groupKey)) byGroup.set(nd.groupKey, []);
+    byGroup.get(nd.groupKey).push({ 
+      id, groupKey: nd.groupKey, label: nd.label, filename: nd.filename, 
+      path: outPath, size: nd.data.length 
+    });
   }
 
-  let docs = Array.from(byKey.values());
+  let docs = [];
+  for (const group of byGroup.values()) docs.push(...group);
 
   // Fallback — couldn't parse the archive and we have nothing else: keep the ZIP itself.
   if (docs.length === 0 && !infoText) {
+    const id = String(++num.shareDocSeq);
     const safe = sanitizeFileName(num.docZipName || 'documents.zip');
-    const outPath = path.join(destDir, '0__' + safe);
+    const outPath = path.join(destDir, id + '__' + safe);
     try {
       fs.copyFileSync(num.docZipPath, outPath);
-      docs = [{ id: '0', label: 'All Documents (ZIP)', filename: safe, path: outPath, size: fs.statSync(outPath).size }];
+      docs = [{ id, groupKey: 'all_documents_zip', label: 'All Documents (ZIP)', 
+               filename: safe, path: outPath, size: fs.statSync(outPath).size }];
     } catch {}
   }
 
@@ -1033,7 +1061,10 @@ app.post('/api/admin/upload', numberUpload.single('file'), (req, res) => {
     saveState(appState);
     broadcastAdminStats();
     res.json({ success: true, count: phones.length, skipped, fileId });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    if (req.file) { try { fs.unlinkSync(req.file.path); } catch {} }
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─── Lead Document ZIP Upload (Agent) ─────────────────────────────────────────
@@ -1153,13 +1184,16 @@ app.post('/api/agent/upload-doc-zip/:numberId', docUpload.single('docZip'), (req
     // when the lead already has documents so an edit that only re-uploads one file
     // keeps the previously uploaded documents. keepInfo preserves the saved text
     // info when this submission carried no real field data (add-a-doc-only edits).
-    try {
-      explodeZipForLead(num, {
-        force: true,
-        merge: !!(num.shareDocs && num.shareDocs.length),
-        keepInfo: !hasRealData
-      });
-    } catch (e) { console.error('explode failed:', e.message); }
+    const exploded = explodeZipForLead(num, {
+      force: true,
+      merge: !!(num.shareDocs && num.shareDocs.length),
+      keepInfo: !hasRealData
+    });
+    if (!exploded) {
+      // ZIP failed to parse and either merge failed or nothing exploded.
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'ZIP file is corrupt or unreadable' });
+    }
 
     // The legacy-lead editor sends the edited applicant info as plain text (it has
     // no structured form fields). When present, it is authoritative for the page.
@@ -1278,16 +1312,16 @@ function reconstructFormDataFromInfoText(shareInfoText) {
     'Salary type':         '__salaryType',   // special: client calls setSalaryType()
     'Job type':            'f_job',
     'Designation':         'f_designation',
-    'Business type':       'f_biz_type',
-    'Business Type':       'f_biz_type',
+    'Business type':       'f_job',           // PL_Business + LAP_Business use f_job
+    'Business Type':       'f_job',
     'Business name':       'f_company',
-    'Business Name':       'f_biz_name',
+    'Business Name':       'f_company',
     'Company':             'f_company',
     'Company name':        'f_company',
     'Employed since':      'f_emp_since',
     'Office address':      'f_office_addr',
     'Business address':    'f_office_addr',
-    'Business Address':    'f_biz_addr',
+    'Business Address':    'f_office_addr',
     'Business Contact No': 'f_biz_mobile',
     'Business contact':    'f_biz_mobile',
     'Biz. landmark':       'f_biz_landmark',
@@ -1295,14 +1329,14 @@ function reconstructFormDataFromInfoText(shareInfoText) {
     'Biz. PIN code':       'f_biz_pin',
     'Business PIN code':   'f_biz_pin',
     'Res. to biz. dist.':  'f_biz_distance',
-    'Residence to Business Distance': 'f_distance',
+    'Residence to Business Distance': 'f_biz_distance',
     'Work email':          'f_work_email',
     'Experience':          'f_exp',
-    'Total biz. exp.':     'f_biz_exp',
-    'Total Business Experience': 'f_biz_exp',
+    'Total biz. exp.':     'f_exp',
+    'Total Business Experience': 'f_exp',
     'Monthly income':      'f_income',
-    'Monthly net income':  'f_net_income',
-    'Net Monthly Income':  'f_net_income',
+    'Monthly net income':  'f_income',       // both map to f_income
+    'Net Monthly Income':  'f_income',
     'GSTIN':               'f_gstin',
     // Loan details
     'Required amount':     'f_lamount',
@@ -1966,8 +2000,15 @@ app.get('/share/:token/doc/:docId', (req, res) => {
 app.delete('/api/agent/doc/:numberId/:docId', (req, res) => {
   const { numberId, docId } = req.params;
   const { agentId } = req.body || {};
+  if (!agentId) return res.status(400).json({ error: 'agentId required' });
   const num = appState.numbers.find(n => n.id === numberId);
   if (!num) return res.status(404).json({ error: 'Lead not found' });
+  if (num.disposition !== 'interested') {
+    return res.status(400).json({ error: 'Lead is not marked as interested' });
+  }
+  if (num.interestedBy !== agentId) {
+    return res.status(403).json({ error: 'This lead is not assigned to you' });
+  }
   if (!num.shareDocs || !num.shareDocs.length) return res.status(404).json({ error: 'No documents found' });
   const docIdx = num.shareDocs.findIndex(d => d.id === docId);
   if (docIdx === -1) return res.status(404).json({ error: 'Document not found' });
@@ -2305,7 +2346,7 @@ app.post('/api/admin/remove-interested', (req, res) => {
 });
 
 app.post('/api/admin/update-interested', (req, res) => {
-  const { numberId, loanType, remarks, loanAmount, status, employmentType, city } = req.body;
+  const { numberId, loanType, remarks, loanAmount, adminStatus, employmentType, city } = req.body;
   if (!numberId) {
     return res.status(400).json({ error: 'numberId is required' });
   }
@@ -2319,7 +2360,14 @@ app.post('/api/admin/update-interested', (req, res) => {
   }
   if (remarks !== undefined) num.remarks = remarks;
   if (loanAmount !== undefined) num.loanAmount = loanAmount;
-  if (status !== undefined) num.adminStatus = status;
+  if (adminStatus !== undefined) {
+    // Apply the same validation as /update-lead-status
+    const validStatuses = ['Completed', 'In Process', 'Rejected', 'Approved', 'On Hold'];
+    if (adminStatus && !validStatuses.includes(adminStatus)) {
+      return res.status(400).json({ error: 'Invalid adminStatus. Must be one of: ' + validStatuses.join(', ') });
+    }
+    num.adminStatus = adminStatus;
+  }
   if (employmentType !== undefined) num.employmentType = employmentType;
   if (city !== undefined) num.city = city;
   saveState(appState);
@@ -3150,8 +3198,11 @@ app.post('/api/tl/auth', (req, res) => {
 // ─── Agent Photo Upload ─────────────────────────────────────────────────────────
 app.post('/api/admin/agent-photo/:eid', agentPhotoUpload.single('photo'), (req, res) => {
   try {
-    const eid = req.params.eid;
-    if (!req.file) return res.status(400).json({ error: 'No image file uploaded' });
+    const eid = sanitizeFileName(req.params.eid || '');  // FIX: sanitize to prevent path traversal
+    if (!eid || !req.file) {
+      if (req.file) { try { fs.unlinkSync(req.file.path); } catch {} }
+      return res.status(400).json({ error: 'No image file uploaded or invalid employee ID' });
+    }
     const photoPath = '/api/admin/agent-photo/' + eid + '?t=' + Date.now();
     const existing = appState.allowedEids[eid];
     if (existing) {
@@ -3169,7 +3220,8 @@ app.post('/api/admin/agent-photo/:eid', agentPhotoUpload.single('photo'), (req, 
 });
 
 app.get('/api/admin/agent-photo/:eid', (req, res) => {
-  const eid = req.params.eid;
+  const eid = sanitizeFileName(req.params.eid || '');  // FIX: sanitize here too
+  if (!eid) return res.status(400).json({ error: 'Invalid employee ID' });
   const val = appState.allowedEids[eid];
   const photoPath = getEidPhoto(val);
   if (!photoPath || !fs.existsSync(photoPath)) {
@@ -4424,6 +4476,23 @@ app.post('/api/admin/daily-reports/generate', (req, res) => {
   }
 });
 
+
+// ─── Multer Error Handling ────────────────────────────────────────────────────
+// Multer errors (file size limit, filter rejection) are thrown during the upload
+// middleware and need a dedicated error handler to return proper JSON instead of
+// Express' default HTML 500 stack trace.
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'File too large' });
+    }
+    return res.status(400).json({ error: err.message });
+  } else if (err && err.message && (err.message.includes('Only') || err.message.includes('file'))) {
+    // Our custom fileFilter errors
+    return res.status(400).json({ error: err.message });
+  }
+  next(err);
+});
 
 // ─── Page Routes ──────────────────────────────────────────────────────────────
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/admin/index.html')));
