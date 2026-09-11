@@ -58,57 +58,91 @@
   // so any dependent form logic (totals, toggles, previews) recomputes.
   window.applyFormSnapshot = function applyFormSnapshot(data) {
     if (!data || typeof data !== 'object') return;
-    Object.keys(data).forEach(function (key) {
-      // Skip internal tracking keys
-      if (key.indexOf('__') === 0) return;
-      
-      var val = data[key];
-      var el = document.getElementById(key);
-      if (el) {
-        if (el.type === 'file') return;  // SAFETY: never try to set file input values
-        if (el.type === 'radio') return; // radios handled below
-        try {
-          if (el.type === 'checkbox') el.checked = !!val;
-          else el.value = val;
-          fire(el);
-        } catch (e) { /* ignore write errors for readonly/disabled fields */ }
-        return;
-      }
-      // Radios (and anything keyed by name)
-      var radios = document.querySelectorAll('input[type="radio"][name="' + cssEscape(key) + '"]');
-      if (radios.length) {
-        radios.forEach(function (r) {
-          r.checked = (r.value === val);
-          if (r.checked) fire(r);
-        });
+    
+    // ── PHASE 1: Identify and trigger conditional visibility controls FIRST ──
+    // These fields control which sections are visible. Set them before other fields
+    // so that hidden fields become visible and can receive their values.
+    var visibilityTriggers = {
+      'f_owner_type': 'toggleOwnerKyc',        // LAP forms: Father/Mother owner KYC
+      'f_perm_same': 'togglePermanent',        // BL_Business: Permanent address
+      'f_prop_type': 'selectProp'              // LAP forms: Property type sections
+    };
+    
+    Object.keys(visibilityTriggers).forEach(function(fieldId) {
+      if (data[fieldId]) {
+        var el = document.getElementById(fieldId);
+        var funcName = visibilityTriggers[fieldId];
+        if (el && typeof window[funcName] === 'function') {
+          try {
+            if (el.type === 'checkbox') el.checked = !!data[fieldId];
+            else if (el.type === 'select-one' || el.type === 'text') el.value = data[fieldId];
+            fire(el);
+            // Explicitly call the visibility toggle function
+            window[funcName](data[fieldId]);
+          } catch (e) { console.warn('Failed to trigger visibility for ' + fieldId, e); }
+        }
       }
     });
     
-    // Restore obligations (call addOb() for each row, then populate)
-    if (data['__obligations'] && Array.isArray(data['__obligations'])) {
-      var obligations = data['__obligations'];
-      var existingRows = document.querySelectorAll('.ob-row').length;
-      // Add missing rows
-      for (var i = existingRows; i < obligations.length; i++) {
-        if (typeof window.addOb === 'function') window.addOb();
-      }
-      // Populate all rows
-      var rows = document.querySelectorAll('.ob-row');
-      obligations.forEach(function (ob, idx) {
-        if (idx >= rows.length) return;
-        var row = rows[idx];
-        var typeEl = row.querySelector('.ob-type');
-        var bankEl = row.querySelector('.ob-bank');
-        var emiEl = row.querySelector('.ob-emi');
-        if (typeEl) typeEl.value = ob.type || '';
-        if (bankEl) bankEl.value = ob.bank || '';
-        if (emiEl) emiEl.value = ob.emi || '';
+    // Small delay to ensure DOM updates from visibility toggles are complete
+    setTimeout(function() {
+      
+      // ── PHASE 2: Apply all other field values ──
+      Object.keys(data).forEach(function (key) {
+        // Skip internal tracking keys
+        if (key.indexOf('__') === 0) return;
+        // Skip fields we already handled in phase 1
+        if (visibilityTriggers[key]) return;
+        
+        var val = data[key];
+        var el = document.getElementById(key);
+        if (el) {
+          if (el.type === 'file') return;  // SAFETY: never try to set file input values
+          if (el.type === 'radio') return; // radios handled below
+          try {
+            if (el.type === 'checkbox') el.checked = !!val;
+            else el.value = val;
+            fire(el);
+          } catch (e) { /* ignore write errors for readonly/disabled fields */ }
+          return;
+        }
+        // Radios (and anything keyed by name)
+        var radios = document.querySelectorAll('input[type="radio"][name="' + cssEscape(key) + '"]');
+        if (radios.length) {
+          radios.forEach(function (r) {
+            r.checked = (r.value === val);
+            if (r.checked) fire(r);
+          });
+        }
       });
-      // Recalculate total
-      if (typeof window.calcTotal === 'function') {
-        setTimeout(function() { window.calcTotal(); }, 100);
+      
+      // ── PHASE 3: Restore obligations (call addOb() for each row, then populate) ──
+      if (data['__obligations'] && Array.isArray(data['__obligations'])) {
+        var obligations = data['__obligations'];
+        var existingRows = document.querySelectorAll('.ob-row').length;
+        // Add missing rows
+        for (var i = existingRows; i < obligations.length; i++) {
+          if (typeof window.addOb === 'function') window.addOb();
+        }
+        // Populate all rows
+        var rows = document.querySelectorAll('.ob-row');
+        obligations.forEach(function (ob, idx) {
+          if (idx >= rows.length) return;
+          var row = rows[idx];
+          var typeEl = row.querySelector('.ob-type');
+          var bankEl = row.querySelector('.ob-bank');
+          var emiEl = row.querySelector('.ob-emi');
+          if (typeEl) typeEl.value = ob.type || '';
+          if (bankEl) bankEl.value = ob.bank || '';
+          if (emiEl) emiEl.value = ob.emi || '';
+        });
+        // Recalculate total
+        if (typeof window.calcTotal === 'function') {
+          setTimeout(function() { window.calcTotal(); }, 100);
+        }
       }
-    }
+      
+    }, 50); // Short delay for DOM updates
   };
 
   function fire(el) {
