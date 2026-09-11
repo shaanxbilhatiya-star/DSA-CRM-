@@ -534,11 +534,12 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#e0e7ff 0%
     <div class="fi">
       <label>Bank Statement — Last 12 Months <span class="r">*</span></label>
       <div class="ub" id="ub-bank">
-        <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple id="up_bank" onchange="mark(this,'bank-fn','ub-bank')">
+        <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple id="up_bank" onchange="handleBankStatementUpload(this,'bank-fn','ub-bank')">
         <div class="ub-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>
         <div class="ul"><strong>Upload Bank Statement — 12 Months (multi-select)</strong><span class="tag">PDF / JPG / PNG</span></div>
       </div>
       <div class="fn" id="bank-fn"></div>
+      <div id="bank-metadata-container"></div>
       <div class="err" id="bank-err">⚠ Bank statement is required</div>
       <div class="pw-row">
         <label>🔐 PDF Password</label>
@@ -773,6 +774,93 @@ function mark(input,fnId,ubId){
   }
 }
 
+// ─────────────────────────────────────────────────────────────────
+// Bank Statement Metadata Upload Handler
+// ─────────────────────────────────────────────────────────────────
+let bankStatementMetadata = {};
+
+function handleBankStatementUpload(input, fnId, ubId) {
+  const ub = g(ubId);
+  const fn = g(fnId);
+  
+  if (!input.files || input.files.length === 0) {
+    return;
+  }
+
+  // Mark as uploaded
+  ub.classList.add('uploaded');
+  fn.style.display = 'block';
+  fn.textContent = input.files.length > 1 ? input.files.length + ' files selected' : input.files[0].name;
+  updateChecklist();
+
+  // Clear previous metadata
+  bankStatementMetadata = {};
+
+  // Build metadata form for each file
+  const container = document.getElementById('bank-metadata-container');
+  container.innerHTML = '';
+  container.style.cssText = 'margin-top:12px;padding:14px;background:var(--blue-light);border:1.5px solid var(--blue-mid);border-radius:var(--radius-sm)';
+
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:13px;font-weight:700;color:var(--blue-dark);margin-bottom:10px';
+  title.textContent = '📅 Specify Date Range for Each Bank Statement';
+  container.appendChild(title);
+
+  for (let i = 0; i < input.files.length; i++) {
+    const file = input.files[i];
+    const fileId = 'bank-' + i;
+
+    const fileRow = document.createElement('div');
+    fileRow.style.cssText = 'margin-bottom:10px;padding:10px;background:#fff;border-radius:8px;border:1px solid var(--gray-200)';
+
+    const fileLabel = document.createElement('div');
+    fileLabel.style.cssText = 'font-size:12px;font-weight:600;color:var(--gray-700);margin-bottom:8px';
+    fileLabel.textContent = '📄 ' + file.name;
+    fileRow.appendChild(fileLabel);
+
+    const dateRow = document.createElement('div');
+    dateRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px';
+
+    const fromGroup = document.createElement('div');
+    const fromLabel = document.createElement('label');
+    fromLabel.style.cssText = 'display:block;font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px';
+    fromLabel.textContent = 'From Date';
+    const fromInput = document.createElement('input');
+    fromInput.type = 'date';
+    fromInput.id = fileId + '-from';
+    fromInput.style.cssText = 'width:100%;padding:6px 8px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:12px';
+    fromInput.required = true;
+    fromGroup.appendChild(fromLabel);
+    fromGroup.appendChild(fromInput);
+
+    const toGroup = document.createElement('div');
+    const toLabel = document.createElement('label');
+    toLabel.style.cssText = 'display:block;font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px';
+    toLabel.textContent = 'To Date';
+    const toInput = document.createElement('input');
+    toInput.type = 'date';
+    toInput.id = fileId + '-to';
+    toInput.style.cssText = 'width:100%;padding:6px 8px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:12px';
+    toInput.required = true;
+    toGroup.appendChild(toLabel);
+    toGroup.appendChild(toInput);
+
+    dateRow.appendChild(fromGroup);
+    dateRow.appendChild(toGroup);
+    fileRow.appendChild(dateRow);
+
+    // Store metadata when dates change
+    fromInput.addEventListener('change', () => {
+      bankStatementMetadata[i] = { from: fromInput.value, to: toInput.value };
+    });
+    toInput.addEventListener('change', () => {
+      bankStatementMetadata[i] = { ...bankStatementMetadata[i], to: toInput.value };
+    });
+
+    container.appendChild(fileRow);
+  }
+}
+
 function updateChecklist(){
   const checks=[
     ['chk-aadhaar','up_aadhaar'],['chk-pan','up_pan'],['chk-photo','up_photo'],
@@ -864,11 +952,24 @@ async function unlockPdf(file,password){
   }catch(e){console.warn('PDF unlock failed:',e.message);return file}
 }
 
-async function addFiles(zip,inputId,prefix,password){
+async function addFiles(zip,inputId,prefix,password,useBankMetadata=false){
   const fs=files(inputId);
   for(let i=0;i<fs.length;i++){
     const fileExt=ext(fs[i]);
-    const fname=prefix+(fs.length>1?'_'+(i+1):'')+fileExt;
+    let fname;
+    
+    // Bank Statement with date range metadata
+    if (useBankMetadata && bankStatementMetadata[i]) {
+      const meta = bankStatementMetadata[i];
+      if (meta.from && meta.to) {
+        fname = prefix + '_' + meta.from + '_to_' + meta.to + fileExt;
+      } else {
+        fname = prefix + (fs.length > 1 ? '_' + (i + 1) : '') + fileExt;
+      }
+    } else {
+      fname = prefix + (fs.length > 1 ? '_' + (i + 1) : '') + fileExt;
+    }
+    
     let finalFile=fs[i];
     if(password&&fileExt==='.pdf')finalFile=await unlockPdf(fs[i],password);
     zip.file(fname,finalFile);
@@ -903,7 +1004,7 @@ async function saveFile(){
   setProgress(55,'Adding Gumastha...');    await addFiles(docs,'up_gumastha','Gumastha_Shop_Act');
   setProgress(58,'Adding biz addr proof...');await addFiles(docs,'up_biz_addr_proof','Business_Address_Proof');
   setProgress(63,'Unlocking & adding ITR...'); await addFiles(docs,'up_itr','ITR_3Years',val('pw_itr'));
-  setProgress(73,'Unlocking & adding bank stmt...');   await addFiles(docs,'up_bank','Bank_Statement',val('pw_bank'));
+  setProgress(73,'Unlocking & adding bank stmt...');   await addFiles(docs,'up_bank','Bank_Statement',val('pw_bank'),true);
   setProgress(76,'Adding SOA...');         await addFiles(docs,'up_soa','SOA_Statement');
   setProgress(78,'Adding SOA (always)...'); await addFiles(docs,'up_soa_always','SOA_Statement_Always');
   setProgress(80,'Adding shop video...');  await addFiles(docs,'up_shop_video','Shop_Video');
