@@ -756,6 +756,18 @@
   var MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
                      'July', 'August', 'September', 'October', 'November', 'December'];
 
+  // Dates are written and shown as DD-MM-YYYY, the way they are read in India.
+  // <input type="date"> only ever speaks ISO, so these convert between the two.
+  function toDMY(iso) {
+    var m = String(iso == null ? '' : iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return m ? m[3] + '-' + m[2] + '-' + m[1] : String(iso == null ? '' : iso);
+  }
+  function toISODate(dmy) {
+    var m = String(dmy == null ? '' : dmy).match(/^(\d{2})-(\d{2})-(\d{4})$/);
+    return m ? m[3] + '-' + m[2] + '-' + m[1] : String(dmy == null ? '' : dmy);
+  }
+  window.__dmy = toDMY;
+
   // Pull an already-assigned period back out of a stored label so re-opening the
   // form shows what was set before instead of resetting the inputs to blank.
   function readPeriodFromLabel(label, kind) {
@@ -766,7 +778,11 @@
       var name = MONTH_NAMES.filter(function (n) { return n.toLowerCase() === m[1].toLowerCase(); })[0];
       return { month: name, year: m[2] };
     }
-    var r = s.match(/(\d{4}-\d{2}-\d{2})\s*to\s*(\d{4}-\d{2}-\d{2})/i);
+    // DD-MM-YYYY first, then the ISO form older documents were labelled with, so
+    // either way the editor still prefills with what was already set.
+    var r = s.match(/(\d{2}-\d{2}-\d{4})\s*to\s*(\d{2}-\d{2}-\d{4})/i);
+    if (r) return { from: toISODate(r[1]), to: toISODate(r[2]) };
+    r = s.match(/(\d{4}-\d{2}-\d{2})\s*to\s*(\d{4}-\d{2}-\d{2})/i);
     return r ? { from: r[1], to: r[2] } : null;
   }
 
@@ -859,7 +875,7 @@
       var to = wrap.querySelector('.docmeta-to').value;
       if (!from || !to) { alert('Pick both a FROM date and a TO date first.'); return; }
       if (from > to) { alert('The FROM date must be on or before the TO date.'); return; }
-      label = prefix + 'Bank_Statement_' + from + '_to_' + to;
+      label = prefix + 'Bank_Statement_' + toDMY(from) + '_to_' + toDMY(to);
     }
 
     var original = btnEl.textContent;
@@ -1147,13 +1163,14 @@
     { key: 'photo',   label: 'Photograph',     file: 'Passport_Photo',  multi: false },
     { key: 'salary',  label: 'Salary Slips',   file: 'Salary_Slip',    multi: true, period: 'month' },
     { key: 'bank',    label: 'Bank Statement', file: 'Bank_Statement', multi: true, period: 'range' },
-    { key: 'itr',     label: 'ITR',            file: 'ITR',            multi: true },
-    { key: 'other',   label: 'Other document', file: 'Other_Document', multi: true, named: true }
+    { key: 'itr',     label: 'ITR',            file: 'ITR',            multi: true }
   ];
 
   var partyList = [];      // [{ role, slot }] in display order
   var partyPeriods = {};   // uploadInputId -> { fileIndex: {month,year} | {from,to} }
   var partyDocIndex = {};  // uploadInputId -> { party, doc } for change handlers
+  var partyOtherSeq = {};  // partyKey -> last row number handed out
+  var partyOtherRows = {}; // partyKey -> [rowNumber, …] currently on the page
 
   function partyKey(p)     { return (p.role === 'Guarantor' ? 'guarantor' : 'coapplicant') + p.slot; }
   function partyPrefix(p)  { return (p.role === 'Guarantor' ? 'Guarantor' : 'CoApplicant') + p.slot; }
@@ -1279,6 +1296,19 @@
       '<div style="display:grid;gap:10px">' +
         PARTY_DOCS.map(function (d) { return partyDocHtml(p, d); }).join('') +
       '</div>' +
+      // Anything beyond the standard set. Each entry is named on its own, because
+      // one shared name for a whole multi-select tells you nothing about which file
+      // is which once they are all sitting in the ZIP together.
+      '<div style="margin-top:10px;padding:11px 12px;background:#fff;border:1.5px solid #e5e7eb;border-radius:9px">' +
+        '<div style="font-size:12.5px;font-weight:700;color:#374151;margin-bottom:8px">Other documents' +
+          '<span style="font-weight:400;color:#9ca3af;font-size:11px"> \u00b7 name each one separately</span></div>' +
+        '<div id="otherlist_' + partyKey(p) + '"></div>' +
+        '<div id="up_' + partyKey(p) + '_other_existing"></div>' +
+        '<button type="button" onclick="window.__addPartyOtherDoc(\'' + partyKey(p) + '\')" ' +
+          'style="margin-top:8px;padding:8px 14px;background:#eef2ff;border:1.5px dashed #a5b4fc;' +
+          'border-radius:8px;color:#4338ca;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit">' +
+          '+ Add another document</button>' +
+      '</div>' +
       '<div style="margin-top:10px;display:flex;align-items:center;gap:9px;flex-wrap:wrap">' +
         '<label for="' + partyPwId(p) + '" style="font-size:12px;font-weight:600;color:#4b5563">' +
           '\uD83D\uDD10 PDF password (if their PDFs are locked)</label>' +
@@ -1290,6 +1320,69 @@
 
   function registerPartyDocs(p) {
     PARTY_DOCS.forEach(function (d) { partyDocIndex[partyDocId(p, d.key)] = { party: p, doc: d }; });
+  }
+
+  function partyByKey(key) {
+    for (var i = 0; i < partyList.length; i++) {
+      if (partyKey(partyList[i]) === key) return partyList[i];
+    }
+    return null;
+  }
+
+  // One extra document for a party, with its own name. Returns the row number.
+  window.__addPartyOtherDoc = function (key, presetName) {
+    var p = partyByKey(key);
+    var host = document.getElementById('otherlist_' + key);
+    if (!p || !host) return null;
+
+    var n = (partyOtherSeq[key] = (partyOtherSeq[key] || 0) + 1);
+    if (!partyOtherRows[key]) partyOtherRows[key] = [];
+    partyOtherRows[key].push(n);
+
+    var fileId = 'up_' + key + '_other' + n;
+    var nameId = 'pn_' + key + '_' + n;
+    partyDocIndex[fileId] = { party: p, doc: { key: 'other' + n, label: 'Other document', file: 'Other_Document' } };
+
+    var row = document.createElement('div');
+    row.id = 'otherrow_' + key + '_' + n;
+    row.style.cssText = 'padding:10px;margin-bottom:8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px';
+    row.innerHTML =
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">' +
+        '<input type="text" id="' + nameId + '" placeholder="Name this document (e.g. Rent Agreement)" ' +
+          'value="' + escapeHtml(presetName || '') + '" style="' + PARTY_INPUT_CSS + ';flex:1">' +
+        '<button type="button" onclick="window.__removePartyOtherDoc(\'' + key + '\',' + n + ')" ' +
+          'style="padding:7px 11px;background:#fee2e2;border:none;border-radius:7px;color:#dc2626;' +
+          'font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">Remove</button>' +
+      '</div>' +
+      '<input type="file" id="' + fileId + '" multiple ' +
+        'onchange="window.__partyFileChange(\'' + fileId + '\')" style="font-size:12.5px;width:100%">' +
+      '<div id="' + fileId + '_fn" style="display:none;font-size:12px;color:#16a34a;margin-top:6px;font-weight:600"></div>' +
+      '<div id="' + fileId + '_period"></div>';
+    host.appendChild(row);
+    return n;
+  };
+
+  window.__removePartyOtherDoc = function (key, n) {
+    var row = document.getElementById('otherrow_' + key + '_' + n);
+    if (row && !confirm('Remove this document?')) return;
+    if (row) row.remove();
+    delete partyDocIndex['up_' + key + '_other' + n];
+    delete partyPeriods['up_' + key + '_other' + n];
+    var list = partyOtherRows[key] || [];
+    var i = list.indexOf(n);
+    if (i !== -1) list.splice(i, 1);
+  };
+
+  // [{ n, name, input }] for a party's extra documents, in the order shown.
+  function partyOtherEntries(key) {
+    return (partyOtherRows[key] || []).map(function (n) {
+      var nameEl = document.getElementById('pn_' + key + '_' + n);
+      return {
+        n: n,
+        name: nameEl ? nameEl.value.trim() : '',
+        input: document.getElementById('up_' + key + '_other' + n)
+      };
+    });
   }
 
   function addParty(role, forcedSlot) {
@@ -1324,6 +1417,12 @@
       delete partyPeriods[id];
       delete partyDocIndex[id];
     });
+    (partyOtherRows[key] || []).forEach(function (n) {
+      delete partyPeriods['up_' + key + '_other' + n];
+      delete partyDocIndex['up_' + key + '_other' + n];
+    });
+    delete partyOtherRows[key];
+    delete partyOtherSeq[key];
     partyList.splice(idx, 1);
     var card = document.getElementById('party-card-' + key);
     if (card) card.remove();
@@ -1392,9 +1491,12 @@
 
   function partyHasContent(item) {
     if (Object.keys(item.fields).some(function (k) { return item.fields[k]; })) return true;
-    return PARTY_DOCS.some(function (d) {
+    if (PARTY_DOCS.some(function (d) {
       var inp = document.getElementById('up_' + item.key + '_' + d.key);
       return inp && inp.files && inp.files.length > 0;
+    })) return true;
+    return partyOtherEntries(item.key).some(function (e) {
+      return e.name || (e.input && e.input.files && e.input.files.length > 0);
     });
   }
 
@@ -1411,9 +1513,13 @@
         var el = document.getElementById(partyDocId(p, d.key) + '_name');
         if (el && el.value.trim()) docNames[d.key] = el.value.trim();
       });
+      // Names of the extra document rows, so reopening the form brings them back.
+      var otherDocs = partyOtherEntries(partyKey(p))
+        .filter(function (e) { return e.name || (e.input && e.input.files && e.input.files.length); })
+        .map(function (e) { return { name: e.name }; });
       return {
         role: p.role, slot: p.slot, key: partyKey(p), prefix: partyPrefix(p),
-        fields: fields, docNames: docNames
+        fields: fields, docNames: docNames, otherDocs: otherDocs
       };
     });
   }
@@ -1434,6 +1540,8 @@
     partyList = [];
     partyPeriods = {};
     partyDocIndex = {};
+    partyOtherSeq = {};
+    partyOtherRows = {};
     list.forEach(function (item) {
       if (!item) return;
       var role = PARTY_ROLES.indexOf(item.role) !== -1 ? item.role : 'Co-Applicant';
@@ -1448,6 +1556,12 @@
       Object.keys(names).forEach(function (k) {
         var el = document.getElementById(partyDocId(p, k) + '_name');
         if (el) el.value = names[k];
+      });
+      // Recreate each extra document row so its name comes back with it.
+      (item.otherDocs || []).forEach(function (od) {
+        if (typeof window.__addPartyOtherDoc === 'function') {
+          window.__addPartyOtherDoc(partyKey(p), (od && od.name) || '');
+        }
       });
     });
   };
@@ -1489,7 +1603,7 @@
           if (d.period === 'month' && per.month && per.year) {
             namePart = stem + '_' + per.month + '_' + per.year;
           } else if (d.period === 'range' && per.from && per.to) {
-            namePart = stem + '_' + per.from + '_to_' + per.to;
+            namePart = stem + '_' + toDMY(per.from) + '_to_' + toDMY(per.to);
           } else {
             namePart = stem + (inp.files.length > 1 ? '_' + (k + 1) : '');
           }
@@ -1498,6 +1612,26 @@
             try { out = await unlockPdf(f, pw); } catch (e) { out = f; }
           }
           folder.file(prefix + '_' + namePart + ext, out);
+          written++;
+        }
+      }
+
+      // Their extra documents, each under the name given to that row.
+      var entries = partyOtherEntries(partyKey(p));
+      for (var e = 0; e < entries.length; e++) {
+        var entry = entries[e];
+        if (!entry.input || !entry.input.files || !entry.input.files.length) continue;
+        var otherStem = safeFileStem(entry.name) || ('Other_Document_' + entry.n);
+        for (var q = 0; q < entry.input.files.length; q++) {
+          var ef = entry.input.files[q];
+          var edot = ef.name.lastIndexOf('.');
+          var eext = edot > 0 ? ef.name.slice(edot).toLowerCase() : '';
+          var eName = otherStem + (entry.input.files.length > 1 ? '_' + (q + 1) : '');
+          var eOut = ef;
+          if (pw && eext === '.pdf' && typeof unlockPdf === 'function') {
+            try { eOut = await unlockPdf(ef, pw); } catch (err) { eOut = ef; }
+          }
+          folder.file(prefix + '_' + eName + eext, eOut);
           written++;
         }
       }
@@ -1532,6 +1666,10 @@
         var name = (d.named && item.docNames[d.key]) ? item.docNames[d.key] : d.label;
         docBits.push(name + ' (' + inp.files.length + ')');
       });
+      partyOtherEntries(item.key).forEach(function (e) {
+        if (!e.input || !e.input.files || !e.input.files.length) return;
+        docBits.push((e.name || 'Other document') + ' (' + e.input.files.length + ')');
+      });
       lines.push('  ' + padLabel(title + ' documents', 34) + ': ' +
         (docBits.length ? docBits.join(', ') : 'None uploaded'));
     });
@@ -1556,8 +1694,14 @@
         best = { key: d.key, len: stem.length };
       }
     });
-    var id = 'up_' + key + '_' + (best ? best.key : 'other');
-    return document.getElementById(id) ? id : null;
+    if (best) {
+      var id = 'up_' + key + '_' + best.key;
+      return document.getElementById(id) ? id : null;
+    }
+    // Not one of the standard types, so it is one of their extra documents. Those
+    // rows are named freely and can't be matched by stem, so existing files are
+    // listed together under the party's own "Other documents" area.
+    return document.getElementById('up_' + key + '_other_existing') ? ('up_' + key + '_other') : null;
   };
 
   // Which period editor a party upload field needs, for existing-document rows.

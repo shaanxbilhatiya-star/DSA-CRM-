@@ -1826,9 +1826,21 @@ app.get('/share/:token', (req, res) => {
   function docPeriodKey(text) {
     const m = text.match(MONTH_RE);
     if (m) return m[2] + String(MONTH_INDEX[m[1].toLowerCase()]).padStart(2, '0');
+    // Statements are now named DD-MM-YYYY; older ones are ISO. Both are reduced to
+    // the same sortable YYYYMMDD so a mixed set still reads in date order.
+    const dmy = text.match(/(\d{2})-(\d{2})-(\d{4})/);
+    if (dmy) return dmy[3] + dmy[2] + dmy[1];
     const iso = text.match(/(\d{4})-(\d{2})-(\d{2})/);
     if (iso) return iso[1] + iso[2] + iso[3];
     return '';
+  }
+
+  // Documents named before the switch to DD-MM-YYYY still carry ISO dates in their
+  // label. Rewriting stored names would be invasive, so the label is converted for
+  // display only — the file on disk keeps whatever name it was saved with.
+  function displayLabel(label) {
+    return String(label == null ? '' : label)
+      .replace(/(^|[^\d])(\d{4})-(\d{2})-(\d{2})(?!\d)/g, (_, pre, y, mo, d) => pre + d + '-' + mo + '-' + y);
   }
 
   function sortDocsForDisplay(list) {
@@ -1920,7 +1932,7 @@ app.get('/share/:token', (req, res) => {
         <div class="doc">
           <div class="doc-ic">${fileIconFor(d.filename)}</div>
           <div class="doc-meta">
-            <div class="doc-name">${esc(d.label)}</div>
+            <div class="doc-name">${esc(displayLabel(d.label))}</div>
             <div class="doc-sub">${esc(d.filename)} · ${humanSize(d.size)}</div>
           </div>
           <div class="doc-actions">
