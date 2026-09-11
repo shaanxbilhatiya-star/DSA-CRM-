@@ -1404,6 +1404,55 @@ function reconstructFormDataFromInfoText(shareInfoText) {
     if (notes && notes !== 'None') snapshot['f_notes'] = notes;
   }
 
+  // ── Parse CURRENT OBLIGATIONS section ──
+  // Format: "Loan N          : Type  |  Bank  |  EMI Rs. 15,000"
+  // or variations like "  1. Type - Bank - EMI ₹15,000"
+  const obMatch = shareInfoText.match(/CURRENT OBLIGATIONS\n-{10,}\n([\s\S]*?)(?:\n-{10,}|\n={10,}|$)/);
+  if (obMatch) {
+    const obligations = [];
+    const lines = obMatch[1].trim().split('\n');
+    for (const line of lines) {
+      // Skip header lines, empty lines, and summary lines
+      if (!line.trim() || /^Total EMI/i.test(line) || /^No existing/i.test(line)) continue;
+      
+      // Try multiple formats:
+      // Format 1: "Loan 1          : Home Loan  |  HDFC  |  EMI Rs. 15,000"
+      let m = line.match(/(?:Loan|Obligation)\s*\d+\s*:\s*(.+?)\s*\|\s*(.+?)\s*\|\s*EMI\s*(?:Rs\.|₹)\s*([\d,]+)/i);
+      if (m) {
+        obligations.push({
+          type: m[1].trim(),
+          bank: m[2].trim(),
+          emi: m[3].replace(/,/g, '')
+        });
+        continue;
+      }
+      
+      // Format 2: "  1. Home Loan - HDFC - EMI ₹15,000"
+      m = line.match(/\d+\.\s*(.+?)\s*-\s*(.+?)\s*-\s*EMI\s*(?:Rs\.|₹)\s*([\d,]+)/i);
+      if (m) {
+        obligations.push({
+          type: m[1].trim(),
+          bank: m[2].trim(),
+          emi: m[3].replace(/,/g, '')
+        });
+        continue;
+      }
+      
+      // Format 3: "  1. Type - Bank - EMI Rs15000" (without space/symbol)
+      m = line.match(/\d+\.\s*(.+?)\s*-\s*(.+?)\s*-\s*EMI\s*(?:Rs\.?|₹)?\s*([\d,]+)/i);
+      if (m) {
+        obligations.push({
+          type: m[1].trim(),
+          bank: m[2].trim(),
+          emi: m[3].replace(/,/g, '')
+        });
+      }
+    }
+    if (obligations.length > 0) {
+      snapshot['__obligations'] = obligations;
+    }
+  }
+
   return Object.keys(snapshot).length > 0 ? snapshot : null;
 }
 

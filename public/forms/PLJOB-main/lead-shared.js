@@ -49,6 +49,24 @@
       data['__obligations'] = obligations;
     }
     
+    // Capture Other Documents metadata (names of custom documents uploaded)
+    // otherDocsData is a global array defined in each form that has Other Documents feature
+    if (typeof window.otherDocsData !== 'undefined' && window.otherDocsData && window.otherDocsData.length > 0) {
+      var otherDocs = [];
+      window.otherDocsData.forEach(function(doc) {
+        if (doc.file || doc.name) {  // Either has file or at least has a name
+          otherDocs.push({
+            name: doc.name || 'Unnamed Document',
+            filename: doc.file ? doc.file.name : null,
+            size: doc.file ? doc.file.size : null
+          });
+        }
+      });
+      if (otherDocs.length > 0) {
+        data['__otherDocs'] = otherDocs;
+      }
+    }
+    
     // Embed prefill status so the server can also verify this was a safe submission
     data['__prefillStatus'] = window.__leadPrefillStatus || 'not_needed';
     return data;
@@ -139,6 +157,21 @@
         // Recalculate total
         if (typeof window.calcTotal === 'function') {
           setTimeout(function() { window.calcTotal(); }, 100);
+        }
+      }
+      
+      // ── PHASE 4: Restore Other Documents slots (recreate as view-only indicators) ──
+      if (data['__otherDocs'] && Array.isArray(data['__otherDocs']) && typeof window.loadExistingOtherDocs === 'function') {
+        // Convert to the format loadExistingOtherDocs expects (object with keys as doc names)
+        var otherDocsObj = {};
+        data['__otherDocs'].forEach(function(doc) {
+          var displayName = doc.filename || doc.name || 'Document';
+          otherDocsObj[doc.name] = displayName;
+        });
+        if (Object.keys(otherDocsObj).length > 0) {
+          setTimeout(function() {
+            window.loadExistingOtherDocs({ OTHER_DOCUMENTS: otherDocsObj });
+          }, 150);
         }
       }
       
