@@ -1535,19 +1535,139 @@ app.get('/share/:token', (req, res) => {
   const name = num.leadName || num.name || 'Applicant';
   const loanType = (num.form && num.form.type) || num.loanType || '';
   const completedAt = num.documentationCompletedAt ? new Date(num.documentationCompletedAt).toLocaleString('en-IN') : '';
+  const formData = (num.form && num.form.data) || {};
 
-  const docCards = docs.length ? docs.map(d => `
-      <div class="doc">
-        <div class="doc-ic">${fileIconFor(d.filename)}</div>
-        <div class="doc-meta">
-          <div class="doc-name">${esc(d.label)}</div>
-          <div class="doc-sub">${esc(d.filename)} \u00b7 ${humanSize(d.size)}</div>
+  // ── CATEGORIZE DOCUMENTS BY SECTION WITH OWNER NAMES ──
+  function categorizeDocuments(docs, formData) {
+    const categories = {
+      applicantKyc: { title: 'Applicant KYC Documents', owner: formData.f_name || 'Applicant', docs: [] },
+      incomeDocuments: { title: 'Income & Financial Documents', owner: formData.f_name || 'Applicant', docs: [] },
+      businessDocuments: { title: 'Business Documents', owner: formData.f_company || formData.f_biz_name || 'Business', docs: [] },
+      propertyDocuments: { title: 'Property Documents', owner: formData.f_prop_addr ? 'Property' : null, docs: [] },
+      ownerFatherKyc: { title: 'Owner/Father KYC Documents', owner: formData.f_owner1_name || formData.f_father || 'Father', docs: [] },
+      ownerMotherKyc: { title: 'Owner/Mother KYC Documents', owner: formData.f_owner2_name || formData.f_mother || 'Mother', docs: [] },
+      ownerOtherKyc: { title: 'Other Owner KYC Documents', owner: formData.f_owner3_name || 'Other Owner', docs: [] },
+      spouseDocuments: { title: 'Spouse Documents', owner: formData.f_spouse || 'Spouse', docs: [] },
+      otherDocuments: { title: 'Other Documents', owner: null, docs: [] }
+    };
+
+    // Categorization rules based on document labels/filenames
+    const rules = {
+      applicantKyc: [
+        /aadhaa?r.*card/i, /pan.*card/i, /passport.*photo/i, /photo/i,
+        /cancelled.*cheque/i, /cheque/i, /electricity.*bill/i, /address.*proof/i,
+        /permanent.*address/i
+      ],
+      incomeDocuments: [
+        /salary.*slip/i, /pay.*slip/i, /bank.*statement/i, /form.*16/i,
+        /itr/i, /income.*tax/i, /cibil/i, /credit.*report/i
+      ],
+      businessDocuments: [
+        /gst/i, /udhya?am/i, /gumastha/i, /shop.*act/i, /business.*proof/i,
+        /business.*address/i, /trade.*license/i, /shop.*video/i, /business.*video/i,
+        /soa/i, /statement.*account/i
+      ],
+      propertyDocuments: [
+        /property/i, /registry/i, /patta/i, /khasra/i, /diversion/i,
+        /mutation/i, /7\/12/i, /8a/i, /property.*video/i, /property.*photo/i,
+        /noc/i, /no.*objection/i, /encumbrance/i
+      ],
+      ownerFatherKyc: [
+        /father.*aadhaa?r/i, /father.*pan/i, /owner.*1.*aadhaa?r/i, /owner.*1.*pan/i,
+        /owner1/i, /first.*owner/i
+      ],
+      ownerMotherKyc: [
+        /mother.*aadhaa?r/i, /mother.*pan/i, /owner.*2.*aadhaa?r/i, /owner.*2.*pan/i,
+        /owner2/i, /second.*owner/i
+      ],
+      ownerOtherKyc: [
+        /owner.*3/i, /other.*owner/i, /co.*owner/i, /third.*owner/i
+      ],
+      spouseDocuments: [
+        /spouse/i, /wife/i, /husband/i
+      ]
+    };
+
+    // Categorize each document
+    docs.forEach(doc => {
+      const searchText = (doc.label + ' ' + doc.filename).toLowerCase();
+      let categorized = false;
+
+      for (const [category, patterns] of Object.entries(rules)) {
+        if (patterns.some(pattern => pattern.test(searchText))) {
+          categories[category].docs.push(doc);
+          categorized = true;
+          break;
+        }
+      }
+
+      // If no category matches, put in "Other Documents"
+      if (!categorized) {
+        categories.otherDocuments.docs.push(doc);
+      }
+    });
+
+    return categories;
+  }
+
+  const categorizedDocs = categorizeDocuments(docs, formData);
+
+  // Build HTML for categorized documents
+  let docCardsHTML = '';
+  
+  for (const [key, category] of Object.entries(categorizedDocs)) {
+    if (category.docs.length === 0) continue; // Skip empty categories
+
+    const ownerTag = category.owner ? `<span class="owner-tag">${esc(category.owner)}</span>` : '';
+    
+    docCardsHTML += `
+      <div class="doc-category">
+        <h3 class="category-title">
+          <span class="category-icon">${getCategoryIcon(key)}</span>
+          ${esc(category.title)}
+          ${ownerTag}
+        </h3>
+        <div class="doc-list">`;
+
+    category.docs.forEach(d => {
+      docCardsHTML += `
+        <div class="doc">
+          <div class="doc-ic">${fileIconFor(d.filename)}</div>
+          <div class="doc-meta">
+            <div class="doc-name">${esc(d.label)}</div>
+            <div class="doc-sub">${esc(d.filename)} · ${humanSize(d.size)}</div>
+          </div>
+          <div class="doc-actions">
+            <a class="btn ghost" href="/share/${esc(token)}/doc/${esc(d.id)}" target="_blank" rel="noopener">View</a>
+            <a class="btn solid" href="/share/${esc(token)}/doc/${esc(d.id)}?dl=1">Download</a>
+          </div>
+        </div>`;
+    });
+
+    docCardsHTML += `
         </div>
-        <div class="doc-actions">
-          <a class="btn ghost" href="/share/${esc(token)}/doc/${esc(d.id)}" target="_blank" rel="noopener">View</a>
-          <a class="btn solid" href="/share/${esc(token)}/doc/${esc(d.id)}?dl=1">Download</a>
-        </div>
-      </div>`).join('') : '<p class="empty">No documents were attached to this lead.</p>';
+      </div>`;
+  }
+
+  if (!docCardsHTML) {
+    docCardsHTML = '<p class="empty">No documents were attached to this lead.</p>';
+  }
+
+  // Helper function to get category icons
+  function getCategoryIcon(categoryKey) {
+    const icons = {
+      applicantKyc: '👤',
+      incomeDocuments: '💰',
+      businessDocuments: '🏢',
+      propertyDocuments: '🏠',
+      ownerFatherKyc: '👨',
+      ownerMotherKyc: '👩',
+      ownerOtherKyc: '👥',
+      spouseDocuments: '💑',
+      otherDocuments: '📎'
+    };
+    return icons[categoryKey] || '📄';
+  }
 
   // Determine if shareInfoText has proper "Label : Value" lines (full format)
   // or is just a legacy 2-3 line minimal summary (no colon-separated fields).
@@ -1829,11 +1949,27 @@ app.get('/share/:token', (req, res) => {
   }
 
   /* ── Document rows ── */
+  .doc-category{margin-bottom:28px}
+  .category-title{
+    font-size:13px;font-weight:700;color:#6d28d9;
+    margin-bottom:14px;padding:10px 16px;
+    background:linear-gradient(135deg,#faf5ff,#f3e8ff);
+    border:1px solid #e9d5ff;border-radius:12px;
+    display:flex;align-items:center;gap:10px;
+    box-shadow:0 1px 4px rgba(124,58,237,.08);
+  }
+  .category-icon{font-size:20px;flex-shrink:0}
+  .owner-tag{
+    margin-left:auto;font-size:11px;font-weight:600;
+    background:linear-gradient(135deg,#7c3aed,#6d28d9);
+    color:#fff;padding:4px 12px;border-radius:20px;
+    letter-spacing:.3px;box-shadow:0 2px 6px rgba(124,58,237,.25);
+  }
+  .doc-list{display:flex;flex-direction:column;gap:10px}
   .doc{
     display:flex;align-items:center;gap:14px;
     padding:14px 16px;
     border:1px solid #e9d5ff;border-radius:14px;
-    margin-bottom:10px;
     background:rgba(250,245,255,.5);
     transition:all .18s;
     position:relative;overflow:hidden;
@@ -1906,6 +2042,10 @@ app.get('/share/:token', (req, res) => {
     .pill{font-size:10.5px;padding:4px 10px}
     h2{font-size:10.5px;margin-bottom:10px}
     .info{font-size:10.5px;padding:12px 10px;line-height:1.6;border-radius:10px;word-break:break-word}
+    .doc-category{margin-bottom:20px}
+    .category-title{font-size:12px;padding:8px 12px;gap:8px;flex-wrap:wrap}
+    .category-icon{font-size:18px}
+    .owner-tag{font-size:10px;padding:3px 10px;margin-left:0;width:100%;text-align:center}
     .doc{flex-wrap:wrap;gap:8px;padding:10px 12px}
     .doc-ic{font-size:24px}
     .doc-meta{min-width:calc(100% - 44px)}
@@ -1964,7 +2104,7 @@ app.get('/share/:token', (req, res) => {
   <!-- Documents card -->
   <div class="card">
     <h2>Documents</h2>
-    ${docCards}
+    ${docCardsHTML}
   </div>
 
   <!-- Applicant info card -->
