@@ -136,28 +136,35 @@
       
       // ── PHASE 3: Restore obligations (call addOb() for each row, then populate) ──
       if (data['__obligations'] && Array.isArray(data['__obligations'])) {
-        var obligations = data['__obligations'];
-        var existingRows = document.querySelectorAll('.ob-row').length;
-        // Add missing rows
-        for (var i = existingRows; i < obligations.length; i++) {
-          if (typeof window.addOb === 'function') window.addOb();
-        }
-        // Populate all rows
-        var rows = document.querySelectorAll('.ob-row');
-        obligations.forEach(function (ob, idx) {
-          if (idx >= rows.length) return;
-          var row = rows[idx];
-          var typeEl = row.querySelector('.ob-type');
-          var bankEl = row.querySelector('.ob-bank');
-          var emiEl = row.querySelector('.ob-emi');
-          if (typeEl) typeEl.value = ob.type || '';
-          if (bankEl) bankEl.value = ob.bank || '';
-          if (emiEl) emiEl.value = ob.emi || '';
-        });
-        // Recalculate total
-        if (typeof window.calcTotal === 'function') {
-          setTimeout(function() { window.calcTotal(); }, 100);
-        }
+        setTimeout(function() {
+          var obligations = data['__obligations'];
+          var existingRows = document.querySelectorAll('.ob-row');
+          var existingCount = existingRows.length;
+          
+          // Add missing rows
+          for (var i = existingCount; i < obligations.length; i++) {
+            if (typeof window.addOb === 'function') window.addOb();
+          }
+          
+          // Wait for rows to be added, then populate
+          setTimeout(function() {
+            var rows = document.querySelectorAll('.ob-row');
+            obligations.forEach(function (ob, idx) {
+              if (idx >= rows.length) return;
+              var row = rows[idx];
+              var typeEl = row.querySelector('.ob-type');
+              var bankEl = row.querySelector('.ob-bank');
+              var emiEl = row.querySelector('.ob-emi');
+              if (typeEl) typeEl.value = ob.type || '';
+              if (bankEl) bankEl.value = ob.bank || '';
+              if (emiEl) emiEl.value = ob.emi || '';
+            });
+            // Recalculate total
+            if (typeof window.calcTotal === 'function') {
+              setTimeout(function() { window.calcTotal(); }, 100);
+            }
+          }, 100);
+        }, 200);
       }
       
       // ── PHASE 4: Restore Other Documents slots (recreate as view-only indicators) ──

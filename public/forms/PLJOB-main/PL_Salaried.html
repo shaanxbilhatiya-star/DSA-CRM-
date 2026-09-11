@@ -1038,23 +1038,25 @@ function handleSalarySlipUpload(input, fnId, ubId) {
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                   'July', 'August', 'September', 'October', 'November', 'December'];
   const currentYear = new Date().getFullYear();
-  const years = [currentYear, currentYear - 1];
+  const years = [currentYear, currentYear - 1, currentYear - 2];
   
-  container.innerHTML = '<div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:14px;margin-bottom:10px"><strong style="color:#92400e;font-size:13px">📅 Specify month for each salary slip:</strong></div>';
+  container.innerHTML = '<div style="background:#eff6ff;border:2px solid #3b82f6;border-radius:12px;padding:16px;margin-bottom:12px"><strong style="color:#1e40af;font-size:14px;display:block;margin-bottom:6px">📅 Specify which month each salary slip belongs to:</strong><p style="margin:0;font-size:12px;color:#1e3a8a">Match the file name to its month and year so documents are properly labeled</p></div>';
   
   files.forEach((file, idx) => {
     const id = 'sal-meta-' + idx;
     salarySlipMetadata[idx] = { filename: file.name, month: '', year: '' };
     
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:12px;padding:14px;background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border:2px solid #bae6fd;border-radius:10px;margin-bottom:10px';
     row.innerHTML = `
-      <div style="flex:1;font-size:13px;color:#374151;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${file.name}</div>
-      <select id="${id}-month" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;background:#fff" onchange="salarySlipMetadata[${idx}].month=this.value">
+      <div style="font-size:14px;color:#0c4a6e;font-weight:700;overflow:hidden;text-overflow:ellipsis">
+        📄 ${escapeHtml(file.name)}
+      </div>
+      <select id="${id}-month" style="padding:8px 12px;border:2px solid #38bdf8;border-radius:8px;font-size:13px;font-weight:600;background:#fff;color:#0369a1;min-width:140px" onchange="salarySlipMetadata[${idx}].month=this.value">
         <option value="">Select Month</option>
         ${months.map(m => `<option value="${m}">${m}</option>`).join('')}
       </select>
-      <select id="${id}-year" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;background:#fff" onchange="salarySlipMetadata[${idx}].year=this.value">
+      <select id="${id}-year" style="padding:8px 12px;border:2px solid #38bdf8;border-radius:8px;font-size:13px;font-weight:600;background:#fff;color:#0369a1;min-width:100px" onchange="salarySlipMetadata[${idx}].year=this.value">
         <option value="">Year</option>
         ${years.map(y => `<option value="${y}">${y}</option>`).join('')}
       </select>
@@ -1063,6 +1065,13 @@ function handleSalarySlipUpload(input, fnId, ubId) {
   });
   
   mark(input, fnId, ubId);
+}
+
+// Helper function to escape HTML
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 // ── Bank Statement Upload with Date Range Metadata ──
@@ -1078,23 +1087,27 @@ function handleBankStatementUpload(input, fnId, ubId) {
   container.innerHTML = '';
   container.style.display = 'block';
   
-  container.innerHTML = '<div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:14px;margin-bottom:10px"><strong style="color:#92400e;font-size:13px">📅 Specify date range for each bank statement:</strong></div>';
+  container.innerHTML = '<div style="background:#eff6ff;border:2px solid #3b82f6;border-radius:12px;padding:16px;margin-bottom:12px"><strong style="color:#1e40af;font-size:14px;display:block;margin-bottom:6px">📅 Specify the date range each bank statement covers:</strong><p style="margin:0;font-size:12px;color:#1e3a8a">Enter the FROM date and TO date for each statement so the coverage period is clear</p></div>';
   
   files.forEach((file, idx) => {
     const id = 'bank-meta-' + idx;
     bankStatementMetadata[idx] = { filename: file.name, fromDate: '', toDate: '' };
     
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;flex-wrap:wrap';
+    row.style.cssText = 'padding:14px;background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border:2px solid #bae6fd;border-radius:10px;margin-bottom:10px';
     row.innerHTML = `
-      <div style="flex:1;min-width:150px;font-size:13px;color:#374151;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${file.name}</div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <label style="font-size:12px;color:#6b7280;font-weight:600">From:</label>
-        <input type="date" id="${id}-from" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px" onchange="bankStatementMetadata[${idx}].fromDate=this.value">
+      <div style="font-size:14px;color:#0c4a6e;font-weight:700;margin-bottom:10px;overflow:hidden;text-overflow:ellipsis">
+        📄 ${escapeHtml(file.name)}
       </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <label style="font-size:12px;color:#6b7280;font-weight:600">To:</label>
-        <input type="date" id="${id}-to" style="padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px" onchange="bankStatementMetadata[${idx}].toDate=this.value">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="display:block;font-size:12px;color:#0369a1;font-weight:700;margin-bottom:6px">FROM Date:</label>
+          <input type="date" id="${id}-from" style="width:100%;padding:8px 12px;border:2px solid #38bdf8;border-radius:8px;font-size:13px;font-weight:600" onchange="bankStatementMetadata[${idx}].fromDate=this.value">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;color:#0369a1;font-weight:700;margin-bottom:6px">TO Date:</label>
+          <input type="date" id="${id}-to" style="width:100%;padding:8px 12px;border:2px solid #38bdf8;border-radius:8px;font-size:13px;font-weight:600" onchange="bankStatementMetadata[${idx}].toDate=this.value">
+        </div>
       </div>
     `;
     container.appendChild(row);
