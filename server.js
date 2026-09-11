@@ -1835,6 +1835,45 @@ app.get('/share/:token', (req, res) => {
     return '';
   }
 
+  // On a property-backed case the owner is who the whole file hinges on, so
+  // PROPERTY OWNER KYC is presented before PERSONAL DETAILS. Reordering the rendered
+  // text — not just the form templates — means leads saved earlier read the same way
+  // without their stored text being rewritten.
+  function hoistOwnerSection(text) {
+    const src = String(text == null ? '' : text);
+    const lines = src.split('\n');
+    const isDiv = i => /^\s*-{10,}\s*$/.test(lines[i] || '');
+
+    // A section starts with: divider, title, divider.
+    const heads = [];
+    for (let i = 0; i + 2 < lines.length; i++) {
+      if (isDiv(i) && lines[i + 1].trim() && !isDiv(i + 1) && isDiv(i + 2)) {
+        heads.push({ start: i, title: lines[i + 1].trim() });
+      }
+    }
+    const iOwner = heads.findIndex(h => /^PROPERTY OWNER KYC$/i.test(h.title));
+    const iPers = heads.findIndex(h => /^PERSONAL DETAILS$/i.test(h.title));
+    if (iOwner === -1 || iPers === -1 || iOwner < iPers) return src;
+
+    // Carry the blank line that separates a section from the one before it.
+    const withLead = s => (s > 0 && lines[s - 1].trim() === '' ? s - 1 : s);
+
+    // The section ends where the next one begins, or at the closing '====' footer.
+    const nextStart = heads[iOwner + 1] ? withLead(heads[iOwner + 1].start) : lines.length;
+    let oEnd = nextStart;
+    for (let i = heads[iOwner].start; i < nextStart; i++) {
+      if (/^\s*={10,}\s*$/.test(lines[i])) { oEnd = withLead(i); break; }
+    }
+
+    const oStart = withLead(heads[iOwner].start);
+    const pStart = withLead(heads[iPers].start);
+    const block = lines.slice(oStart, oEnd);
+    const rest = lines.slice(0, oStart).concat(lines.slice(oEnd));
+    // pStart sits before oStart, so removing the later block cannot shift it.
+    rest.splice(pStart, 0, ...block);
+    return rest.join('\n');
+  }
+
   // Documents named before the switch to DD-MM-YYYY still carry ISO dates in their
   // label. Rewriting stored names would be invasive, so the label is converted for
   // display only — the file on disk keeps whatever name it was saved with.
@@ -2095,20 +2134,20 @@ app.get('/share/:token', (req, res) => {
   let infoBlockContent;
   if (hasProperInfoFormat(num.shareInfoText)) {
     // Full format stored — display as-is
-    infoBlockContent = `<pre class="info">${esc(num.shareInfoText)}</pre>`;
+    infoBlockContent = `<pre class="info">${esc(hoistOwnerSection(num.shareInfoText))}</pre>`;
   } else if (num.form && num.form.data) {
     // Legacy/minimal shareInfoText but we have structured JSON data — build from it
     const built = buildInfoFromFormData(num.form.data, (num.form && num.form.type) || num.loanType || '');
     if (built) {
-      infoBlockContent = `<pre class="info">${esc(built)}</pre>`;
+      infoBlockContent = `<pre class="info">${esc(hoistOwnerSection(built))}</pre>`;
     } else if (num.shareInfoText) {
-      infoBlockContent = `<pre class="info">${esc(num.shareInfoText)}</pre>`;
+      infoBlockContent = `<pre class="info">${esc(hoistOwnerSection(num.shareInfoText))}</pre>`;
     } else {
       infoBlockContent = '<p class="empty">No additional information was recorded.</p>';
     }
   } else if (num.shareInfoText) {
     // Has some text even if minimal — show it
-    infoBlockContent = `<pre class="info">${esc(num.shareInfoText)}</pre>`;
+    infoBlockContent = `<pre class="info">${esc(hoistOwnerSection(num.shareInfoText))}</pre>`;
   } else {
     infoBlockContent = '<p class="empty">No additional information was recorded.</p>';
   }
