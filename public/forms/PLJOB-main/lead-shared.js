@@ -315,6 +315,10 @@
             prefillFromInfoFields(d.infoFields);
           }
 
+          // Last, so neither the snapshot nor the label matcher can put a lender
+          // name a previous agent typed back into the facilitator field.
+          applyLoanFacilitator();
+
           // Prefill succeeded — mark as safe to save/update.
           window.__leadPrefillStatus = 'success';
 
@@ -357,6 +361,37 @@
       .replace(/[^a-z0-9]+/g, ' ')
       .trim();
   }
+
+  /* ── Loan Facilitator ───────────────────────────────────────────────────────
+     Every application is facilitated by Ruralift itself, so this is not a box the
+     agent fills in — it carries the firm's registered name and MSME number, and
+     nothing else. Held here rather than in each form so the five copies cannot
+     drift apart, and re-applied after an edit-mode restore for two reasons:
+
+       · a lead saved before the field was fixed carries whatever the agent typed
+         at the time (one had "FIVE STAR"), and reopening it must not bring that
+         value back;
+       · Chrome ignores autocomplete="off" on a plain text input and will offer a
+         previously typed value, which a readonly field is never exposed to.   */
+  var LOAN_FACILITATOR =
+    '\uD83C\uDFE6 \u0930\u0942\u0930\u093E\u0932\u093F\u092B\u094D\u091F (MSME: UDYAM-MP-29-0021193)';
+  function applyLoanFacilitator() {
+    var el = document.getElementById('f_lender');
+    if (!el) return;
+    el.value = LOAN_FACILITATOR;
+    // readonly, not disabled: a disabled field is left out when the form is
+    // collected, which would drop the facilitator from the saved lead entirely.
+    el.setAttribute('readonly', 'readonly');
+    el.setAttribute('autocomplete', 'off');
+    el.removeAttribute('placeholder');
+    // Styled here rather than in five stylesheets, so it reads as settled rather
+    // than as an empty box the agent forgot to fill in.
+    el.style.background = '#f8fafc';
+    el.style.cursor = 'default';
+  }
+  window.LOAN_FACILITATOR = LOAN_FACILITATOR;
+  window.applyLoanFacilitator = applyLoanFacilitator;
+  document.addEventListener('DOMContentLoaded', applyLoanFacilitator);
 
   function setFieldValue(el, value) {
     try {
