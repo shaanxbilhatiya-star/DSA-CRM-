@@ -150,6 +150,42 @@ function isNoValue(v) {
   return /^(?:n\/?a|none(?:\s+declared)?|not\s+(?:specified|selected|available|disclosed|applicable)|nil)$/i.test(s);
 }
 
+/* ── Loan Facilitator ─────────────────────────────────────────────────────────
+   Ruralift facilitates every application itself, so this is a fixed fact about the
+   firm rather than a per-lead value. It must match LOAN_FACILITATOR in
+   public/forms/PLJOB-main/lead-shared.js, which is what the forms write.
+
+   Leads saved before the field was fixed carry whatever was there at the time:
+   "Not specified", or a lender name an agent typed, or — on BL — no such line at
+   all, because that form was missing the field. The view page prints the stored
+   information text verbatim, so those files would keep reading wrongly until each
+   one was opened and saved again. The line is therefore corrected on the way to the
+   page: rewritten where present, inserted under the required amount where missing.
+   Nothing on disk is modified.                                                   */
+const LOAN_FACILITATOR =
+  '\uD83C\uDFE6 \u0930\u0942\u0930\u093E\u0932\u093F\u092B\u094D\u091F (MSME: UDYAM-MP-29-0021193)';
+
+function normaliseLoanFacilitator(text) {
+  const lines = String(text || '').split('\n');
+  let found = false;
+  for (let i = 0; i < lines.length; i++) {
+    // The label's trailing spaces are kept so the colons stay in a column.
+    const m = /^(\s*Loan\s*Facilitator[ \t]*): ?.*$/i.exec(lines[i]);
+    if (!m) continue;
+    lines[i] = m[1] + ': ' + LOAN_FACILITATOR;
+    found = true;
+  }
+  if (!found) {
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\s*Required\s+amount[ \t]*:/i.test(lines[i])) {
+        lines.splice(i + 1, 0, 'Loan Facilitator   : ' + LOAN_FACILITATOR);
+        break;
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
 function sanitizeFileName(s) {
   return String(s || '').replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 120) || 'file';
 }
@@ -2332,7 +2368,7 @@ app.get('/share/:token', (req, res) => {
     return out.join('\n');
   };
   const infoForDisplay = (text) => {
-    const t = hoistOwnerSection(text);
+    const t = normaliseLoanFacilitator(hoistOwnerSection(text));
     return cibilHTML ? stripCibilAnalysisLines(t) : t;
   };
 
