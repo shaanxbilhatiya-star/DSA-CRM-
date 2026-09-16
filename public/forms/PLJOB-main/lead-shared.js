@@ -781,22 +781,15 @@
       .trim();
   }
 
-  // docOrigFilename is the name the document was stored under, before any rename.
-  // It is tried FIRST: a document renamed by the agent ("Registry" → "Plot Kagzaat")
-  // must still be recognised as belonging to its original upload slot, otherwise it
-  // disappears from the slot it belongs to and cannot be found to edit.
-  function findUploadInput(docLabel, docFilename, docOrigFilename) {
-    // Try candidates in order: original name, then label, then current filename —
-    // each also without a trailing multi-file number.
+  function findUploadInput(docLabel, docFilename) {
+    // Try candidates in order: label as-is, label without trailing digits, filename as-is, filename without digits
     var candidates = [
-      normDocLabel(docOrigFilename),
-      normDocLabel(docOrigFilename).replace(/\s*\d+$/, ''),
       normDocLabel(docLabel),
       normDocLabel(docLabel).replace(/\s*\d+$/, ''),
       normDocLabel(docFilename),
       normDocLabel(docFilename).replace(/\s*\d+$/, '')
     ];
-
+    
     for (var c = 0; c < candidates.length; c++) {
       var norm = candidates[c];
       if (!norm) continue;
@@ -815,13 +808,7 @@
       if (!norm) continue;
       for (var i = 0; i < keys.length; i++) {
         var key = keys[i];
-        // norm contains the key: "owner 1 registry" → key "registry". Safe.
-        // key contains norm: only accepted as a PREFIX and only for names long enough
-        // to be meaningful, so "aadhaar" still finds "aadhaar card" while a custom
-        // document called "Tax", "B1" or "NOC" no longer gets swallowed by an
-        // unrelated slot whose key merely happens to contain those letters.
-        if (norm.indexOf(key) !== -1 ||
-            (norm.length >= 4 && key.indexOf(norm) === 0)) {
+        if (norm.indexOf(key) !== -1 || key.indexOf(norm) !== -1) {
           var inputId = DOC_TO_INPUT[key];
           if (document.getElementById(inputId)) return inputId;
         }
@@ -1053,7 +1040,7 @@
     var partyGrouped = {};
     docs = docs.filter(function (doc) {
       var pid = (typeof window.__findPartyUploadInput === 'function')
-        ? window.__findPartyUploadInput(doc.label, doc.filename, doc.origFilename) : null;
+        ? window.__findPartyUploadInput(doc.label, doc.filename) : null;
       if (!pid) return true;
       if (!partyGrouped[pid]) partyGrouped[pid] = [];
       partyGrouped[pid].push(doc);
@@ -1064,7 +1051,7 @@
     // Group docs by upload input (multiple files can map to same input)
     var grouped = {};
     docs.forEach(function (doc) {
-      var inputId = findUploadInput(doc.label, doc.filename, doc.origFilename);
+      var inputId = findUploadInput(doc.label, doc.filename);
       if (!inputId) return;
       if (!grouped[inputId]) grouped[inputId] = [];
       grouped[inputId].push(doc);
@@ -1147,21 +1134,12 @@
 
     // Show unmatched docs in the "Other Documents" section
     var unmatchedDocs = docs.filter(function (doc) {
-      return !findUploadInput(doc.label, doc.filename, doc.origFilename);
+      return !findUploadInput(doc.label, doc.filename);
     });
     
-    if (unmatchedDocs.length > 0) {
-      // Only the PL forms' loadExistingOtherDocs takes a list of documents. The other
-      // three expect a completely different argument (a map under .OTHER_DOCUMENTS) and
-      // silently return when handed an array, which left documents that matched no
-      // upload slot invisible in the editor — on file, but impossible to find, rename
-      // or remove. Those forms get the shared renderer below instead.
-      var formHandler = window.loadExistingOtherDocs;
-      if (typeof formHandler === 'function' && formHandler.acceptsDocsArray) {
-        try { formHandler(unmatchedDocs, shareToken); } catch (e) { renderExistingOtherDocs(unmatchedDocs, shareToken); }
-      } else {
-        renderExistingOtherDocs(unmatchedDocs, shareToken);
-      }
+    if (unmatchedDocs.length > 0 && typeof window.loadExistingOtherDocs === 'function') {
+      // Let the form handle loading these as "Other Documents"
+      try { window.loadExistingOtherDocs(unmatchedDocs, shareToken); } catch (e) {}
     }
     
     // Also show in banner as fallback
@@ -1180,51 +1158,6 @@
       }
     }
   }
-
-  /* Documents already on file that belong to no upload slot — anything the agent
-     named themselves, and anything whose slot could not be determined. They still
-     have to be reachable: viewable, renamable and removable. Renaming matters most,
-     because giving a document back a name its slot recognises is how an agent
-     corrects one that was renamed into the wrong place. */
-  function renderExistingOtherDocs(docs, shareToken) {
-    if (!docs || !docs.length) return;
-    var host = document.getElementById('other-docs-wrapper') ||
-               document.getElementById('other-docs-container') ||
-               document.getElementById('otherDocsWrapper');
-    if (!host) return;
-
-    var box = document.getElementById('existing-other-docs');
-    if (!box) {
-      box = document.createElement('div');
-      box.id = 'existing-other-docs';
-      box.style.cssText = 'margin-bottom:12px;padding:11px 13px;background:linear-gradient(135deg,#ecfdf5,#f0fdf4);' +
-        'border:1.5px solid #86efac;border-radius:10px;font-size:12.5px;color:#166534;line-height:1.5';
-      host.parentNode.insertBefore(box, host);
-    }
-
-    var html = '<div style="font-weight:700;margin-bottom:7px">\u2705 Already on file (' + docs.length + ')</div>' +
-      '<div style="display:flex;flex-direction:column;gap:6px">';
-    docs.forEach(function (doc) {
-      var viewUrl = '/share/' + encodeURIComponent(shareToken) + '/doc/' + encodeURIComponent(doc.id);
-      html += '<span data-docrow style="display:inline-flex;align-items:center;gap:2px;background:#fff;' +
-          'border:1px solid #bbf7d0;border-radius:6px;padding:0;overflow:hidden;align-self:flex-start;max-width:100%">' +
-        '<a href="' + escapeHtml(viewUrl) + '" target="_blank" rel="noopener" ' +
-          'style="display:inline-flex;align-items:center;gap:4px;padding:5px 9px;color:#15803d;' +
-          'text-decoration:none;font-size:11.5px;font-weight:600">' +
-          '\uD83D\uDCC4 ' + escapeHtml(doc.label || doc.filename) + '</a>' +
-        renameBtnHtml(doc.id) +
-        '<button type="button" onclick="window.__removeDoc(\'' + escapeHtml(doc.id) + '\',this)" ' +
-          'style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;' +
-          'background:transparent;border:none;border-left:1px solid #bbf7d0;color:#dc2626;font-size:13px;' +
-          'cursor:pointer;padding:0" title="Remove this document">\u2715</button>' +
-        '</span>';
-    });
-    html += '</div>' +
-      '<div style="margin-top:6px;font-size:11px;color:#16a34a;font-style:italic">' +
-      'Use \u270F\uFE0F to rename \u00b7 \u2715 to remove \u00b7 add a new document below to upload another</div>';
-    box.innerHTML = html;
-  }
-  window.__renderExistingOtherDocs = renderExistingOtherDocs;
 
   function escapeHtml(s) {
     return String(s == null ? '' : s)
@@ -1883,10 +1816,8 @@
   // Routes a stored document back to the party upload field it came from, so a
   // party's existing files show up under that party in edit mode instead of
   // falling through to the applicant's fields or the Other Documents bucket.
-  // origFilename is preferred: renaming a party's document strips the owner prefix
-  // from the current filename, which would detach it from that person.
-  window.__findPartyUploadInput = function (label, filename, origFilename) {
-    var src = String(origFilename || filename || label || '');
+  window.__findPartyUploadInput = function (label, filename) {
+    var src = String(filename || label || '');
     var m = src.match(/^(coapplicant|guarantor)[ _]*(\d+)[ _]+(.+)$/i);
     if (!m) return null;
     var key = m[1].toLowerCase() + m[2];

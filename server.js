@@ -196,59 +196,12 @@ function sanitizeFileName(s) {
 // persisted and must travel with it, because the filename can be renamed later
 // (see the doc-label endpoint) and re-deriving it from the new name would silently
 // move the document into a different group.
-// opts.custom marks a document the agent named themselves (the form's "other
-// documents"). A standard slot appends _1, _2 … when one slot holds several files
-// and those all belong to the same group, so the suffix is stripped. A custom
-// name is typed by hand, so a trailing number is part of the name — "Bahi Kitab 1"
-// and "Bahi Kitab 2" are two different documents, and collapsing them into one
-// group makes uploading the second delete the first.
-function deriveGroupKey(filename, opts) {
-  let stem = String(filename || '').replace(/\.[^.]+$/, '');
-  if (!(opts && opts.custom)) stem = stem.replace(/_\d+$/, '');
-  return stem.toLowerCase();
+function deriveGroupKey(filename) {
+  return String(filename || '').replace(/\.[^.]+$/, '').replace(/_\d+$/, '').toLowerCase();
 }
 function groupKeyOf(doc) {
   if (!doc) return '';
-  if (doc.groupKey) return String(doc.groupKey).toLowerCase();
-  return deriveGroupKey(doc.filename, { custom: !!doc.custom });
-}
-
-// The name that says WHAT a document is, as opposed to what it is currently called.
-//
-// A document's filename is assigned by the upload slot it came from ("Registry.pdf",
-// "CoApplicant1_Aadhaar_Card.pdf", "Cat-property_Sale_Deed.pdf"), and everything
-// downstream reads its identity out of that name: which share-page section it belongs
-// under, which party owns it, and which form field it maps back to when the lead is
-// re-opened for editing. Renaming a document rewrites the filename, which erased all
-// of that — a renamed Registry stopped being recognised as the Registry, dropped into
-// "Other Documents", and could no longer be found against its upload slot in the form.
-//
-// origFilename records the name the document was stored under and is never rewritten,
-// so identity survives any number of renames. For documents predating this field,
-// groupKey holds the original filename stem (the re-label endpoint used to leave it
-// untouched), which makes it an exact record of the original name even for documents
-// that have already been renamed.
-function docIdentityName(doc) {
-  if (!doc) return '';
-  return String(doc.origFilename || doc.groupKey || doc.filename || '');
-}
-
-// Text used for matching a document to a section: its identity name plus the
-// current label/filename, so a renamed document is still recognised by what it is
-// while a hand-named one can still be matched on the name the agent gave it.
-function docMatchText(doc) {
-  if (!doc) return '';
-  return (docIdentityName(doc) + ' ' + (doc.label || '') + ' ' + (doc.filename || '')).toLowerCase();
-}
-
-// Record what a document originally was, for records created before origFilename
-// existed. Returns true if the record was changed.
-function backfillDocIdentity(doc) {
-  if (!doc || doc.origFilename) return false;
-  const src = doc.groupKey || doc.filename;
-  if (!src) return false;
-  doc.origFilename = String(src);
-  return true;
+  return String(doc.groupKey || deriveGroupKey(doc.filename)).toLowerCase();
 }
 
 // Highest document ID this lead has ever handed out.
@@ -285,8 +238,6 @@ function repairShareDocIds(num) {
   let repaired = 0;
   for (const d of num.shareDocs) {
     if (!d) continue;
-    // Pin down what this document is before anything else renames it.
-    backfillDocIdentity(d);
     const id = (d.id === 0 || d.id) ? String(d.id) : '';
     if (id && !seen.has(id)) { seen.add(id); continue; }
     d.id = String(++seq);          // duplicate or missing → re-issue
@@ -359,9 +310,8 @@ function explodeZipForLead(num, opts) {
   try { entries = readZipEntries(fs.readFileSync(num.docZipPath)); }
   catch (e) { entries = null; parseErr = e; }
 
-  // Parse the archive into { groupKey, label, filename, data, custom } records
-  // (skip the info text). groupKey = filename with the extension removed, and the
-  // trailing _N multi-file sequence removed for standard slots only.
+  // Parse the archive into { groupKey, label, filename, data } records (skip the info text).
+  // groupKey = filename with extension and trailing _N (multi-file seq) removed.
   let infoText = '';
   const parsed = [];
   if (entries) {
@@ -369,12 +319,6 @@ function explodeZipForLead(num, opts) {
       if (!e.data) continue;
       const base = e.name.split('/').pop();
       if (base === 'Applicant_Info.txt') { infoText = e.data.toString('utf8'); continue; }
-      // The forms put agent-named documents in Other_Documents/ and the fixed
-      // slots in Documents/. Only the folder distinguishes a hand-typed name from
-      // an auto-numbered one, and the name alone is flattened below, so capture it
-      // here — otherwise "Bahi Kitab 1" and "Bahi Kitab 2" collapse into one group
-      // and saving the second deletes the first.
-      const custom = /(^|\/)Other_Documents\//i.test(e.name);
       const safe = sanitizeFileName(base);
       // A custom document can carry the section it was filed under as a
       // "Cat-<slug>_" prefix. That stays in the stored filename because the share
@@ -382,8 +326,9 @@ function explodeZipForLead(num, opts) {
       // label so the document reads as its own name under that section's heading.
       const labelSrc = safe.replace(/^Cat-[a-zA-Z]+_/, '');
       const label = labelSrc.replace(/\.[^.]+$/, '').replace(/_/g, ' ').trim() || safe;
-      let groupKey = deriveGroupKey(safe, { custom });
-      parsed.push({ groupKey, label, filename: safe, data: e.data, custom });
+      // Compute groupKey: strip extension and trailing _N (so Aadhaar_Card_1 and _2 share a group).
+      let groupKey = deriveGroupKey(safe);
+      parsed.push({ groupKey, label, filename: safe, data: e.data });
     }
   } else if (opts.merge && existing.length > 0) {
     // Merge requested but new ZIP unparseable and we have old docs — fail loudly.
@@ -419,7 +364,7 @@ function explodeZipForLead(num, opts) {
     if (!byGroup.has(nd.groupKey)) byGroup.set(nd.groupKey, []);
     byGroup.get(nd.groupKey).push({ 
       id, groupKey: nd.groupKey, label: nd.label, filename: nd.filename, 
-      origFilename: nd.filename, path: outPath, size: nd.data.length, custom: !!nd.custom 
+      path: outPath, size: nd.data.length 
     });
   }
 
@@ -1771,11 +1716,7 @@ app.get('/api/lead-form/:numberId', (req, res) => {
     data: Object.keys(formData).length > 0 ? formData : null,
     // infoFields lets the client fuzzy-match any labels our explicit map missed
     infoFields: parseInfoFields(num.shareInfoText || ''),
-    // origFilename lets the form match a renamed document back to its upload slot.
-    docs: (num.shareDocs || []).map(d => ({
-      id: d.id, label: d.label, filename: d.filename,
-      origFilename: docIdentityName(d), size: d.size
-    })),
+    docs: (num.shareDocs || []).map(d => ({ id: d.id, label: d.label, filename: d.filename })),
     shareToken: num.shareToken || null,
     leadName: num.leadName || num.name || '',
     loanType: num.loanType || '',
@@ -1998,9 +1939,7 @@ app.get('/share/:token', (req, res) => {
         return;
       }
 
-      // Match on what the document IS (its original slot name) as well as what it is
-      // currently called, so renaming it does not drop it into "Other Documents".
-      const searchText = docMatchText(doc);
+      const searchText = (doc.label + ' ' + doc.filename).toLowerCase();
       let categorized = false;
 
       for (const [category, patterns] of Object.entries(rules)) {
@@ -2045,17 +1984,12 @@ app.get('/share/:token', (req, res) => {
     other: 'otherDocuments'
   };
   function explicitSectionFor(doc) {
-    // Read the prefix off the identity name: a rename strips the "Cat-<slug>_" prefix
-    // from the current filename, which used to lose the section the agent chose.
-    // Case-insensitive because a backfilled identity comes from the lowercased groupKey.
-    const m = docIdentityName(doc).match(/^Cat-([a-zA-Z]+)_/i);
+    const m = String((doc && doc.filename) || '').match(/^Cat-([a-zA-Z]+)_/);
     return m ? (CAT_SLUG_TO_KEY[m[1].toLowerCase()] || null) : null;
   }
 
   function partyRefFromDoc(doc) {
-    // Identity name first: renaming a party's document strips the owner prefix, which
-    // used to move it into the applicant's own section.
-    const m = (docIdentityName(doc) + ' ' + ((doc && doc.label) || ''))
+    const m = String((doc && (doc.filename || doc.label)) || '')
       .match(/^(coapplicant|guarantor)[ _]*(\d+)[ _]/i);
     if (!m) return null;
     const role = m[1].toLowerCase() === 'guarantor' ? 'Guarantor' : 'Co-Applicant';
@@ -2958,12 +2892,6 @@ app.post('/api/agent/doc-label/:numberId/:docId', (req, res) => {
   const doc = num.shareDocs.find(d => d.id === docId);
   if (!doc) return res.status(404).json({ error: 'Document not found' });
 
-  // Record what this document is BEFORE the rename overwrites the only copy of that
-  // information. Without this, a renamed Registry stops being recognised as the
-  // Registry: it falls into "Other Documents" on the share page and can no longer be
-  // matched back to its upload slot when the lead is re-opened for editing.
-  backfillDocIdentity(doc);
-
   // Keep the original extension — only the descriptive part of the name changes.
   const ext = path.extname(doc.filename || '') || '';
   const newBase = sanitizeFileName(String(label).trim().replace(/\.[a-zA-Z0-9]{2,5}$/, ''));
@@ -2989,7 +2917,7 @@ app.post('/api/agent/doc-label/:numberId/:docId', (req, res) => {
   // be whatever the OLD filename derived, and the next upload — which computes its
   // group from the new-style name — would either miss this document (leaving a
   // duplicate of the same slot on file) or match a different one and delete it.
-  doc.groupKey = deriveGroupKey(newFilename, { custom: !!doc.custom });
+  doc.groupKey = deriveGroupKey(newFilename);
   num.shareUpdatedAt = new Date().toISOString();
   saveState(appState);
   res.json({ success: true, id: doc.id, label: doc.label, filename: doc.filename });
