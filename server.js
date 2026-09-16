@@ -190,6 +190,82 @@ function sanitizeFileName(s) {
   return String(s || '').replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 120) || 'file';
 }
 
+// The group a document belongs to — one "slot" (Aadhaar, PAN, a given salary
+// slip…). Re-uploading a document replaces everything in its group. Derived from
+// the stored filename only as a fallback: once a document exists, its groupKey is
+// persisted and must travel with it, because the filename can be renamed later
+// (see the doc-label endpoint) and re-deriving it from the new name would silently
+// move the document into a different group.
+function deriveGroupKey(filename) {
+  return String(filename || '').replace(/\.[^.]+$/, '').replace(/_\d+$/, '').toLowerCase();
+}
+function groupKeyOf(doc) {
+  if (!doc) return '';
+  return String(doc.groupKey || deriveGroupKey(doc.filename)).toLowerCase();
+}
+
+// Highest document ID this lead has ever handed out.
+//
+// Document IDs must be unique and never reused: every lookup (view, download,
+// delete, re-label) resolves a document by matching this ID, and those lookups
+// take the FIRST match. Two documents sharing an ID means the older one shadows
+// the newer one, so opening a freshly uploaded document serves the wrong file.
+//
+// Leads whose documents were saved before shareDocSeq existed have IDs ("0","1",
+// "2"…) but no counter, so the counter has to be recovered from the IDs in use
+// rather than assumed to be absent.
+function highestShareDocId(num) {
+  let max = (num && typeof num.shareDocSeq === 'number' && isFinite(num.shareDocSeq))
+    ? num.shareDocSeq : 0;
+  const docs = (num && Array.isArray(num.shareDocs)) ? num.shareDocs : [];
+  for (const d of docs) {
+    const n = parseInt(d && d.id, 10);
+    if (!isNaN(n) && n > max) max = n;
+  }
+  return max;
+}
+
+// Heal a lead whose shareDocs already contain duplicate/missing IDs from the
+// counter having been reset in an earlier version. The first holder of an ID
+// keeps it (its share links are already in circulation); later collisions are
+// re-issued fresh IDs above the high-water mark. Only the lookup key changes —
+// doc.path is stored explicitly, so the file on disk is never touched or moved.
+// Returns the number of documents that were re-issued an ID.
+function repairShareDocIds(num) {
+  if (!num || !Array.isArray(num.shareDocs) || num.shareDocs.length === 0) return 0;
+  let seq = highestShareDocId(num);
+  const seen = new Set();
+  let repaired = 0;
+  for (const d of num.shareDocs) {
+    if (!d) continue;
+    const id = (d.id === 0 || d.id) ? String(d.id) : '';
+    if (id && !seen.has(id)) { seen.add(id); continue; }
+    d.id = String(++seq);          // duplicate or missing → re-issue
+    seen.add(d.id);
+    repaired++;
+  }
+  // Pin the counter so the next upload starts above everything in use.
+  num.shareDocSeq = Math.max(seq, highestShareDocId(num));
+  return repaired;
+}
+
+// Run the ID repair across the whole state once at startup, so leads already
+// corrupted by the earlier counter reset stop serving the wrong document without
+// anyone having to re-upload anything.
+function repairAllShareDocIds(state) {
+  if (!state || !Array.isArray(state.numbers)) return 0;
+  let leads = 0, docs = 0;
+  for (const num of state.numbers) {
+    const n = repairShareDocIds(num);
+    if (n > 0) { leads++; docs += n; }
+  }
+  if (docs > 0) {
+    console.log('\u2713 Repaired ' + docs + ' document ID collision(s) across ' + leads +
+      ' lead(s) — these were serving the wrong file when viewed.');
+  }
+  return docs;
+}
+
 // Turn a lead's uploaded ZIP into a shareable page: pull out Applicant_Info.txt as
 // readable text and each Documents/* file as an individually downloadable file.
 // Idempotent unless {force:true}.
@@ -210,8 +286,14 @@ function explodeZipForLead(num, opts) {
   const token = num.shareToken || uuidv4();
   const destDir = path.join(SHARES_DIR, token);
 
-  // Initialize stable ID counter on first explosion (never reuse IDs after deletion).
-  if (typeof num.shareDocSeq !== 'number') num.shareDocSeq = 0;
+  // Stable, never-reused document IDs. Recover the counter from the IDs already in
+  // use instead of assuming a missing counter means "no documents yet" — a lead
+  // saved before this counter existed has IDs but no counter, and restarting from 0
+  // hands a new upload an ID an older document already owns. Lookups resolve by
+  // first match, so the collision makes the new document open as the old one.
+  // Repair any collisions inherited from that earlier behaviour first.
+  repairShareDocIds(num);
+  num.shareDocSeq = highestShareDocId(num);
 
   const existing = (opts.merge && Array.isArray(num.shareDocs))
     ? num.shareDocs.filter(d => d && d.path && fs.existsSync(d.path))
@@ -245,7 +327,7 @@ function explodeZipForLead(num, opts) {
       const labelSrc = safe.replace(/^Cat-[a-zA-Z]+_/, '');
       const label = labelSrc.replace(/\.[^.]+$/, '').replace(/_/g, ' ').trim() || safe;
       // Compute groupKey: strip extension and trailing _N (so Aadhaar_Card_1 and _2 share a group).
-      let groupKey = safe.replace(/\.[^.]+$/, '').replace(/_\d+$/, '').toLowerCase();
+      let groupKey = deriveGroupKey(safe);
       parsed.push({ groupKey, label, filename: safe, data: e.data });
     }
   } else if (opts.merge && existing.length > 0) {
@@ -256,8 +338,8 @@ function explodeZipForLead(num, opts) {
   // Build document map keyed by groupKey.
   const byGroup = new Map();
   for (const d of existing) {
-    // Recompute groupKey for legacy docs (they don't have d.groupKey stored).
-    const gk = (d.groupKey || (d.filename || '').replace(/\.[^.]+$/, '').replace(/_\d+$/, '')).toLowerCase();
+    // Prefer the stored groupKey; only legacy docs need it derived from the filename.
+    const gk = groupKeyOf(d);
     if (!byGroup.has(gk)) byGroup.set(gk, []);
     byGroup.get(gk).push(d);
   }
@@ -461,7 +543,14 @@ function loadStateWithFallback() {
   // Try main file first, then .tmp backup if main is corrupt/missing
   for (const f of [DATA_FILE, DATA_FILE + '.tmp']) {
     if (fs.existsSync(f)) {
-      try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+      try {
+        const state = JSON.parse(fs.readFileSync(f, 'utf8'));
+        // Heal document ID collisions left behind by the earlier counter reset, so
+        // existing leads stop opening the wrong document. Read-time only: no files
+        // move, and the state is rewritten on the next ordinary save.
+        repairAllShareDocIds(state);
+        return state;
+      } catch {}
     }
   }
   return createFreshState();
@@ -2824,6 +2913,11 @@ app.post('/api/agent/doc-label/:numberId/:docId', (req, res) => {
 
   doc.filename = newFilename;
   doc.label = newBase.replace(/_+/g, ' ').trim();
+  // Pin the group this document belongs to. Without this the groupKey would still
+  // be whatever the OLD filename derived, and the next upload — which computes its
+  // group from the new-style name — would either miss this document (leaving a
+  // duplicate of the same slot on file) or match a different one and delete it.
+  doc.groupKey = deriveGroupKey(newFilename);
   num.shareUpdatedAt = new Date().toISOString();
   saveState(appState);
   res.json({ success: true, id: doc.id, label: doc.label, filename: doc.filename });
