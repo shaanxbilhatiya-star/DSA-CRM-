@@ -905,6 +905,10 @@ window.loadExistingOtherDocs = function(docs, shareToken) {
     otherDocsData.push({id, name: doc.label || doc.filename, files: null, confirmed: true, existing: true, serverId: doc.id});
   });
 };
+// Tells lead-shared.js this handler takes a list of existing documents. Handlers
+// without the flag get the shared renderer instead of being called with an argument
+// they do not understand and silently ignoring it.
+window.loadExistingOtherDocs.acceptsDocsArray = true;
 
 function setSalaryType(type) {
   // Mirror onto window so collectFormSnapshot() can persist the choice; a
