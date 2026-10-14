@@ -3806,6 +3806,59 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ── Mobile autodialer ⇄ PC sync ─────────────────────────────────────────────
+  // An agent can be logged in on the PC panel and on /mobile at the same time. Every
+  // socket that runs agent-start joins a per-agent room, and the two events that move
+  // the current lead (show-number / no-numbers) are mirrored to the agent's OTHER
+  // sockets. The existing handlers below are untouched — they still reply to the socket
+  // that asked; this only adds the mirror, so a lead dialed/dispositioned on the phone
+  // changes on the PC page too (and vice versa). Nothing here runs unless a second
+  // socket for the same agent exists.
+  let syncAgentId = null;
+  const syncRoom = (id) => 'agent-sync:' + id;
+  const _origEmit = socket.emit.bind(socket);
+  socket.emit = function (ev, ...args) {
+    const r = _origEmit(ev, ...args);
+    if (syncAgentId && (ev === 'show-number' || ev === 'no-numbers')) {
+      socket.to(syncRoom(syncAgentId)).emit(ev, ...args);
+    }
+    return r;
+  };
+
+  socket.on('agent-start', ({ agentId } = {}) => {
+    if (!agentId || !appState.agents[agentId]) return;
+    if (syncAgentId && syncAgentId !== agentId) socket.leave(syncRoom(syncAgentId));
+    syncAgentId = agentId;
+    socket.join(syncRoom(agentId));
+  });
+
+  // The phone tapped "Call": tell the agent's other screens which lead is being dialed.
+  // Call duration is deliberately NOT sent anywhere — it is shown on the phone only.
+  socket.on('mobile-dial-start', ({ agentId, numberId } = {}) => {
+    if (!syncAgentId || agentId !== syncAgentId) return;
+    const agent = appState.agents[agentId];
+    const num = appState.numbers.find(n => n.id === numberId);
+    if (!agent || !num || agent.currentNumberId !== numberId) return;
+    socket.to(syncRoom(agentId)).emit('mobile-dial', { numberId, phone: num.phone, name: num.name || '' });
+  });
+  socket.on('mobile-dial-end', ({ agentId, numberId } = {}) => {
+    if (!syncAgentId || agentId !== syncAgentId) return;
+    socket.to(syncRoom(agentId)).emit('mobile-dial-end', { numberId });
+  });
+
+  // The phone drops its connection whenever the native dialer takes over the screen.
+  // The base disconnect handler marks the agent inactive; if another device of the same
+  // agent is still connected, put that straight back so the admin view doesn't flicker.
+  socket.on('disconnect', () => {
+    if (!syncAgentId) return;
+    const room = io.sockets.adapter.rooms.get(syncRoom(syncAgentId));
+    if (!room || room.size === 0) return;
+    const agent = appState.agents[syncAgentId];
+    if (agent && !agent.active) { agent.active = true; saveState(appState); }
+    agentSocketMap.set(syncAgentId, [...room][0]);
+    broadcastAdminStats();
+  });
+
   socket.on('agent-start', ({ agentId }) => {
     socketAgentId = agentId;
     agentSocketMap.set(agentId, socket.id);
@@ -5523,6 +5576,7 @@ app.use((err, req, res, next) => {
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/admin/index.html')));
 app.get('/agent', (req, res) => res.sendFile(path.join(__dirname, 'public/agent/index.html')));
 app.get('/tl', (req, res) => res.sendFile(path.join(__dirname, 'public/tl/index.html')));
+app.get('/mobile', (req, res) => res.sendFile(path.join(__dirname, 'public/mobile/index.html')));
 
 // ─── Start ─────────────────────────────────────────────────────────────────────
 server.listen(PORT, '0.0.0.0', () => {

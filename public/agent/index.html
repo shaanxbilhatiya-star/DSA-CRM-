@@ -1984,6 +1984,15 @@ socket.on('show-number', ({ numberId, phone, name, totalDialedToday, resumed }) 
   refreshLeadSections();
 });
 
+// Lead is being dialed from this agent's phone (/mobile): flash the number so the PC page reflects it.
+socket.on('mobile-dial', () => {
+  try {
+    const el = document.getElementById('phoneDisplay');
+    if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+    showToast('📱 Dialing on your mobile…');
+  } catch (e) {}
+});
+
 socket.on('no-numbers', (data) => {
   if (data && data.totalDialedToday !== undefined)
     document.getElementById('countToday').textContent = data.totalDialedToday;
