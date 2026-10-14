@@ -1209,6 +1209,16 @@ function adminLogout(){
       <span style="font-size:12px;color:var(--muted)">Upload .txt file shown to agents on each new call</span>
     </div>
     <div class="panel-body">
+      <div id="scriptToggleRow" style="display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin-bottom:14px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;">
+        <span style="font-size:13px;font-weight:600">Show script to:</span>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="scriptToggleAgent" checked onchange="saveScriptToggle('agent', this)"> Agents
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="scriptToggleTl" checked onchange="saveScriptToggle('tl', this)"> Team Leaders
+        </label>
+        <span style="font-size:11px;color:var(--muted)">OFF = popup nahi dikhega, disposition panel seedha khulega</span>
+      </div>
       <div class="upload-zone" id="scriptDropZone" style="padding:20px">
         <input type="file" id="scriptFileInput" accept=".txt,text/plain">
         <div class="upload-icon" style="font-size:24px">&#128196;</div>
@@ -2929,6 +2939,34 @@ async function loadCurrentScript() {
   } catch(e) { /* silent */ }
 }
 loadCurrentScript();
+
+async function loadScriptToggles() {
+  try {
+    const r = await fetch('/api/admin/script-settings');
+    const d = await r.json();
+    const a = document.getElementById('scriptToggleAgent');
+    const l = document.getElementById('scriptToggleTl');
+    if (a) a.checked = d.agent !== false;
+    if (l) l.checked = d.tl !== false;
+  } catch(e) { /* silent */ }
+}
+async function saveScriptToggle(role, el) {
+  const want = el.checked;
+  try {
+    const r = await fetch('/api/admin/script-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [role]: want })
+    });
+    const d = await r.json();
+    if (!d.success) throw new Error(d.error || 'Failed');
+    showToast('Script ' + (want ? 'ON' : 'OFF') + ' for ' + (role === 'tl' ? 'Team Leaders' : 'Agents'), 'success');
+  } catch(e) {
+    el.checked = !want;
+    showToast('Could not save script setting','error');
+  }
+}
+loadScriptToggles();
 
 // ── Daily Dialed Numbers Copy + WhatsApp (Feature 6) ──────────────────────────
 const WA_MESSAGES = {

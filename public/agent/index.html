@@ -3059,7 +3059,7 @@ let scriptPopupShown = false;
 
 async function loadScript() {
   try {
-    const r = await fetch('/api/script');
+    const r = await fetch('/api/script?role=agent&_=' + Date.now());
     const d = await r.json();
     scriptContent = d.script;
     scriptLoaded = true;
