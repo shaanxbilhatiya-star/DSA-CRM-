@@ -4642,16 +4642,57 @@ app.post('/api/admin/upload-script', scriptUpload.single('script'), (req, res) =
   }
 });
 
+// Script visibility toggles (per role). Kept in its own file next to the script so a
+// daily reset / hard reset of state.json never flips it. Default = enabled for everyone,
+// so behaviour is unchanged until admin turns something off.
+const SCRIPT_SETTINGS_FILE = path.join(SCRIPTS_DIR, 'script_settings.json');
+function getScriptSettings() {
+  const defaults = { agent: true, tl: true };
+  try {
+    if (fs.existsSync(SCRIPT_SETTINGS_FILE)) {
+      const saved = JSON.parse(fs.readFileSync(SCRIPT_SETTINGS_FILE, 'utf8'));
+      return { agent: saved.agent !== false, tl: saved.tl !== false };
+    }
+  } catch (e) { /* fall back to defaults */ }
+  return defaults;
+}
+
+app.get('/api/admin/script-settings', (req, res) => {
+  res.json(getScriptSettings());
+});
+
+app.post('/api/admin/script-settings', (req, res) => {
+  try {
+    const cur = getScriptSettings();
+    const body = req.body || {};
+    if (typeof body.agent === 'boolean') cur.agent = body.agent;
+    if (typeof body.tl === 'boolean') cur.tl = body.tl;
+    const tmp = SCRIPT_SETTINGS_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(cur, null, 2));
+    fs.renameSync(tmp, SCRIPT_SETTINGS_FILE);
+    res.json({ success: true, ...cur });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/script', (req, res) => {
   const scriptPath = path.join(SCRIPTS_DIR, 'call_script.txt');
+  // ?role=agent|tl honours the admin toggle; no role (admin preview / older cached
+  // pages) always gets the script, exactly as before.
+  const role = req.query.role;
+  const settings = getScriptSettings();
+  if ((role === 'agent' || role === 'tl') && settings[role] === false) {
+    return res.json({ script: null, enabled: false });
+  }
   if (!fs.existsSync(scriptPath)) {
-    return res.json({ script: null });
+    return res.json({ script: null, enabled: true });
   }
   try {
     const content = fs.readFileSync(scriptPath, 'utf8');
-    res.json({ script: content });
+    res.json({ script: content, enabled: true });
   } catch (e) {
-    res.json({ script: null });
+    res.json({ script: null, enabled: true });
   }
 });
 
