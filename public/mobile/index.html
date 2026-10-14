@@ -11,127 +11,107 @@
   :root{
     --brand:#6d28d9; --brand-deep:#4c1d95; --brand-soft:#ede9fe; --navy:#1e1b4b;
     --bg:#f4f3fa; --surface:#fff; --line:#e4e1f0; --text:#1a1735; --muted:#6b6890;
-    --green:#059669; --green-deep:#047857; --green-soft:#d1fae5;
-    --red:#dc2626; --amber:#d97706; --blue:#2563eb;
+    --green:#059669; --green-deep:#047857; --green-soft:#d1fae5; --red:#dc2626;
     --sans:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Noto Sans',sans-serif;
     --tabular:ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16px;line-height:1.4}
-  body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16px;line-height:1.35;overflow:hidden}
   button{font:inherit;color:inherit;border:0;cursor:pointer}
-  button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid #a78bfa;outline-offset:2px}
+  button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #a78bfa;outline-offset:2px}
   [hidden]{display:none!important}
 
-  /* ── top bar ── */
-  .bar{position:sticky;top:0;z-index:20;background:linear-gradient(135deg,var(--brand-deep),var(--brand));color:#fff;padding:10px 16px 12px;padding-top:calc(10px + env(safe-area-inset-top));margin-top:calc(-1 * env(safe-area-inset-top))}
-  .bar-row{display:flex;align-items:center;gap:10px}
+  /* whole app = exactly one screen */
+  #appView{height:100vh;height:100dvh;display:flex;flex-direction:column}
+  .bar{flex:none;background:linear-gradient(135deg,var(--brand-deep),var(--brand));color:#fff;padding:8px 14px;padding-top:calc(8px + env(safe-area-inset-top));display:flex;align-items:center;gap:10px}
   .bar .who{flex:1;min-width:0}
   .bar .who b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .bar .who span{font-size:12px;opacity:.8}
-  .dot{width:10px;height:10px;border-radius:50%;background:#fbbf24;box-shadow:0 0 0 3px rgba(255,255,255,.18)}
+  .dot{width:10px;height:10px;border-radius:50%;background:#fbbf24;box-shadow:0 0 0 3px rgba(255,255,255,.18);flex:none}
   .dot.on{background:#34d399}.dot.off{background:#f87171}
-  .logout{background:rgba(255,255,255,.16);color:#fff;border-radius:10px;padding:8px 12px;font-size:13px;font-weight:600}
-  .stats{display:flex;gap:8px;margin-top:10px}
-  .stat{flex:1;background:rgba(255,255,255,.13);border-radius:10px;padding:7px 10px}
-  .stat small{display:block;font-size:11px;opacity:.78}
-  .stat b{font-size:17px;font-variant-numeric:tabular-nums}
+  .count{background:rgba(255,255,255,.15);border-radius:10px;padding:4px 10px;text-align:center;line-height:1.1}
+  .count small{display:block;font-size:10px;opacity:.8}.count b{font-size:17px;font-variant-numeric:tabular-nums}
+  .logout{background:rgba(255,255,255,.16);color:#fff;border-radius:10px;padding:8px 11px;font-size:13px;font-weight:600}
 
-  main{padding:14px 14px 40px;max-width:520px;margin:0 auto}
-  .card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px}
-  .gap{margin-top:12px}
+  main{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));max-width:520px;width:100%;margin:0 auto}
+  #leadView{flex:1;min-height:0;display:flex;flex-direction:column;gap:10px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px}
 
-  /* ── login ── */
-  .login{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:24px;max-width:420px;margin:0 auto}
-  .login img{width:64px;height:64px;border-radius:16px;object-fit:cover;margin-bottom:18px}
-  .login h1{font-size:26px;margin:0 0 4px;letter-spacing:-.02em}
-  .login p{margin:0 0 22px;color:var(--muted)}
-  .field{display:block;margin-bottom:14px}
-  .field span{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
-  .field input,.field select,.field textarea{width:100%;font:inherit;font-size:17px;padding:14px;border:1.5px solid var(--line);border-radius:12px;background:#fff;color:var(--text)}
-  .field textarea{min-height:84px;resize:vertical}
-  .btn{display:block;width:100%;padding:15px;border-radius:14px;font-weight:700;font-size:16px;background:var(--brand);color:#fff}
-  .btn.ghost{background:var(--brand-soft);color:var(--brand-deep)}
-  .btn:disabled{opacity:.55}
-  .err{color:var(--red);font-size:14px;min-height:20px;margin:0 0 10px}
-
-  /* ── lead / call ── */
-  .lead-name{font-size:15px;color:var(--muted);margin:0 0 4px;word-break:break-word}
-  .lead-phone{font-family:var(--tabular);font-size:34px;font-weight:700;letter-spacing:.02em;margin:0;word-break:break-all}
-  .callwrap{display:flex;flex-direction:column;align-items:center;margin:20px 0 4px}
-  .call{width:128px;height:128px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;box-shadow:0 10px 26px rgba(5,150,105,.38);transition:transform .12s}
-  .call:active{transform:scale(.94)}
-  .call svg{width:54px;height:54px}
-  .call-label{margin-top:10px;font-weight:700;color:var(--green-deep)}
-
-  .timer{display:none;text-align:center;margin:18px 0 4px}
-  .timer .t{font-family:var(--tabular);font-size:56px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
-  .timer .s{margin-top:6px;font-size:14px;color:var(--muted)}
-  .state-calling .timer,.state-ended .timer{display:block}
-  .state-calling .callwrap{display:none}
-  .state-ended .callwrap{margin-top:8px}
-  .state-ended .call{width:72px;height:72px}.state-ended .call svg{width:30px;height:30px}
-  .state-ended .call-label{font-size:13px}
-  .state-calling .timer .t{color:var(--green-deep)}
-  .state-calling .timer .s::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-right:8px;animation:blink 1.2s infinite}
-  @keyframes blink{50%{opacity:.2}}
-  .endcall{display:none;margin-top:14px;background:var(--red);color:#fff}
-  .state-calling .endcall{display:block}
-
-  .auto{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);font-size:14px}
-  .auto small{display:block;color:var(--muted);font-size:12px}
-  .sw{position:relative;width:52px;height:30px;flex:none}
+  /* lead + call */
+  .lead{flex:none}
+  .lead-top{display:flex;align-items:center;gap:8px}
+  .lead-name{flex:1;min-width:0;font-size:15px;color:var(--muted);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .scriptbtn{flex:none;background:var(--brand-soft);color:var(--brand-deep);border-radius:9px;padding:5px 10px;font-size:13px;font-weight:700}
+  .lead-row{display:flex;align-items:center;gap:12px;margin-top:6px}
+  .lead-phone{flex:1;min-width:0;font-family:var(--tabular);font-size:clamp(26px,8.4vw,34px);font-weight:700;letter-spacing:.01em;margin:0;white-space:nowrap}
+  .call{flex:none;width:76px;height:76px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;box-shadow:0 8px 20px rgba(5,150,105,.35);transition:transform .12s}
+  .call:active{transform:scale(.93)}
+  .call svg{width:36px;height:36px}
+  .auto{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:14px}
+  .auto small{color:var(--muted);font-size:12px;margin-left:4px}
+  .sw{position:relative;width:48px;height:28px;flex:none}
   .sw input{position:absolute;inset:0;opacity:0;width:100%;height:100%;margin:0}
   .sw i{position:absolute;inset:0;border-radius:99px;background:#cbd5e1;transition:.15s}
-  .sw i::after{content:"";position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:.15s}
+  .sw i::after{content:"";position:absolute;left:3px;top:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:.15s}
   .sw input:checked+i{background:var(--green)}
-  .sw input:checked+i::after{transform:translateX(22px)}
+  .sw input:checked+i::after{transform:translateX(20px)}
   .sw input:focus-visible+i{outline:3px solid #a78bfa;outline-offset:2px}
 
-  /* ── dispositions ── */
-  .dispo h2{font-size:15px;margin:0 0 10px}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .d{min-height:56px;border-radius:14px;padding:10px;font-weight:700;font-size:15px;background:#f1f0f9;color:var(--text);text-align:center}
+  /* dispositions fill all remaining height */
+  .dispo{flex:1;min-height:0;display:flex;flex-direction:column;padding:12px}
+  .dispo h2{flex:none;font-size:14px;margin:0 0 8px;color:var(--muted);font-weight:600}
+  .grid{flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(4,1fr);gap:8px}
+  .d{border-radius:13px;padding:6px;font-weight:700;font-size:15px;background:#f1f0f9;color:var(--text);text-align:center;min-height:0}
   .d.int{background:var(--green-soft);color:var(--green-deep)}
   .d.fu{background:#dbeafe;color:#1d4ed8}
   .d.neg{background:#fee2e2;color:#b91c1c}
-  .d.wide{grid-column:1/-1}
   .d:disabled{opacity:.5}
-
-  details.script{margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:0 16px}
-  details.script summary{padding:14px 0;font-weight:700;cursor:pointer}
-  details.script pre{white-space:pre-wrap;word-break:break-word;font-family:var(--sans);font-size:15px;line-height:1.55;margin:0 0 16px;max-height:46vh;overflow:auto}
 
   .empty{text-align:center;padding:34px 10px}
   .empty h2{margin:0 0 6px}.empty p{margin:0 0 18px;color:var(--muted)}
 
-  /* ── sheets & overlays ── */
+  /* login */
+  .login{height:100vh;height:100dvh;display:flex;flex-direction:column;justify-content:center;padding:24px;max-width:420px;margin:0 auto}
+  .login img{width:64px;height:64px;border-radius:16px;object-fit:cover;margin-bottom:18px}
+  .login h1{font-size:26px;margin:0 0 4px;letter-spacing:-.02em}
+  .login p{margin:0 0 22px;color:var(--muted)}
+  .field{display:block;margin-bottom:12px}
+  .field span{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
+  .field input,.field select,.field textarea{width:100%;font:inherit;font-size:17px;padding:13px;border:1.5px solid var(--line);border-radius:12px;background:#fff;color:var(--text)}
+  .field textarea{min-height:76px;resize:vertical}
+  .btn{display:block;width:100%;padding:15px;border-radius:14px;font-weight:700;font-size:16px;background:var(--brand);color:#fff}
+  .btn.ghost{background:var(--brand-soft);color:var(--brand-deep)}
+  .btn:disabled{opacity:.55}
+  .err{color:var(--red);font-size:14px;min-height:20px;margin:0 0 10px}
+  .gap{margin-top:10px}
+
+  /* sheets */
   .scrim{position:fixed;inset:0;z-index:50;background:rgba(20,16,50,.55);display:none;align-items:flex-end;justify-content:center}
   .scrim.open{display:flex}
-  .sheet{width:100%;max-width:520px;background:#fff;border-radius:22px 22px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));max-height:92vh;overflow:auto}
-  .sheet h3{margin:0 0 4px;font-size:19px}.sheet .sub{margin:0 0 16px;color:var(--muted);font-size:14px}
+  .sheet{width:100%;max-width:520px;background:#fff;border-radius:22px 22px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));max-height:92vh;overflow:auto}
+  .sheet h3{margin:0 0 4px;font-size:19px}.sheet .sub{margin:0 0 14px;color:var(--muted);font-size:14px}
   .sheet .row{display:flex;gap:10px}.sheet .row>*{flex:1}
-  .auto-overlay{position:fixed;left:14px;right:14px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:40;max-width:492px;margin:0 auto;background:var(--navy);color:#fff;border-radius:18px;padding:16px;display:flex;align-items:center;gap:14px;box-shadow:0 12px 34px rgba(0,0,0,.3)}
-  .auto-overlay .n{font-size:34px;font-weight:700;width:46px;text-align:center;font-variant-numeric:tabular-nums}
+  .sheet pre{white-space:pre-wrap;word-break:break-word;font-family:var(--sans);font-size:15px;line-height:1.55;margin:0 0 14px;max-height:62vh;overflow:auto}
+  .auto-overlay{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:40;max-width:496px;margin:0 auto;background:var(--navy);color:#fff;border-radius:18px;padding:14px;display:flex;align-items:center;gap:14px;box-shadow:0 12px 34px rgba(0,0,0,.3)}
+  .auto-overlay .n{font-size:32px;font-weight:700;width:44px;text-align:center;font-variant-numeric:tabular-nums}
   .auto-overlay div{flex:1;min-width:0;font-size:14px}
   .auto-overlay b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .auto-overlay button{background:#fff;color:var(--navy);border-radius:12px;padding:12px 16px;font-weight:700}
-  .toast{position:fixed;left:50%;top:calc(76px + env(safe-area-inset-top));transform:translateX(-50%);z-index:60;background:var(--navy);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;max-width:90vw}
+  .toast{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top));transform:translateX(-50%);z-index:60;background:var(--navy);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;max-width:90vw}
   .gate{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px}
   .gate h1{margin:0 0 8px}.gate p{max-width:340px;color:var(--muted)}.gate a{color:var(--brand);font-weight:600}
+  @media (max-height:640px){.call{width:62px;height:62px}.call svg{width:30px;height:30px}.d{font-size:14px}.auto{margin-top:6px;padding-top:6px}}
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 
-<!-- Desktop gate: this page is for phones. -->
 <div class="gate" id="gate" hidden>
   <h1>Open this on your phone</h1>
   <p>The mobile dialer uses your phone's own calling app. On a computer, use the regular agent panel.</p>
   <p><a href="/agent">Go to agent panel</a> &nbsp;·&nbsp; <a href="#" id="gateForce">Continue anyway</a></p>
 </div>
 
-<!-- ── Login (EID) ── -->
 <section class="login" id="loginView" hidden>
   <img src="/logo.png" alt="" onerror="this.style.display='none'">
   <h1>DSA Dialer</h1>
@@ -143,63 +123,43 @@
   <button class="btn" id="loginBtn">Log in</button>
 </section>
 
-<!-- ── App ── -->
 <div id="appView" hidden>
   <header class="bar">
-    <div class="bar-row">
-      <span class="dot" id="conn" title="Connection"></span>
-      <div class="who"><b id="whoName">Agent</b><span id="whoEid"></span></div>
-      <button class="logout" id="logoutBtn">Log out</button>
-    </div>
-    <div class="stats">
-      <div class="stat"><small>Leads dialed today</small><b id="sDialed">0</b></div>
-      <div class="stat"><small>Calls timed here</small><b id="sCalls">0</b></div>
-      <div class="stat"><small>Talk time here</small><b id="sTalk">0:00</b></div>
-    </div>
+    <span class="dot" id="conn" title="Connection"></span>
+    <div class="who"><b id="whoName">Agent</b><span id="whoEid"></span></div>
+    <div class="count"><small>Dialed today</small><b id="sDialed">0</b></div>
+    <button class="logout" id="logoutBtn">Log out</button>
   </header>
 
   <main>
-    <!-- empty / waiting -->
     <div class="card empty" id="emptyCard" hidden>
       <h2 id="emptyTitle">No leads right now</h2>
       <p id="emptyMsg">New leads will appear when more numbers are uploaded.</p>
       <button class="btn" id="emptyBtn">Check for leads</button>
     </div>
 
-    <!-- current lead -->
     <div id="leadView" hidden>
-      <div class="card" id="leadCard">
-        <p class="lead-name" id="leadName"></p>
-        <p class="lead-phone" id="leadPhone"></p>
-
-        <div class="timer" aria-live="off">
-          <div class="t" id="timerT">0:00</div>
-          <div class="s" id="timerS">Call in progress</div>
+      <div class="card lead">
+        <div class="lead-top">
+          <p class="lead-name" id="leadName"></p>
+          <button class="scriptbtn" id="scriptBtn" hidden>Script</button>
         </div>
-
-        <div class="callwrap">
+        <div class="lead-row">
+          <p class="lead-phone" id="leadPhone"></p>
           <button class="call" id="callBtn" aria-label="Call this lead">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25c1.1.37 2.3.57 3.6.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.3.2 2.5.57 3.6a1 1 0 0 1-.25 1z"/></svg>
           </button>
-          <div class="call-label" id="callLabel">Call</div>
         </div>
-        <button class="btn endcall" id="endBtn">End call</button>
-
         <label class="auto">
-          <span>Auto-dial next lead<small>Counts down 3 seconds, then calls</small></span>
+          <span>Auto-dial next lead<small>3-second countdown</small></span>
           <span class="sw"><input type="checkbox" id="autoSw"><i></i></span>
         </label>
       </div>
 
-      <details class="script" id="scriptBox" hidden>
-        <summary>Call script</summary>
-        <pre id="scriptText"></pre>
-      </details>
-
-      <div class="card dispo gap">
+      <div class="card dispo">
         <h2>How did the call go?</h2>
         <div class="grid">
-          <button class="d int wide" data-d="interested">Interested</button>
+          <button class="d int" data-d="interested">Interested</button>
           <button class="d fu" data-d="followup">Follow-up</button>
           <button class="d" data-d="not_received">Not received</button>
           <button class="d" data-d="switch_off">Switched off</button>
@@ -213,14 +173,18 @@
   </main>
 </div>
 
-<!-- auto-dial countdown -->
 <div class="auto-overlay" id="autoOverlay" hidden>
   <span class="n" id="autoN">3</span>
   <div><b id="autoWho">Calling…</b>Auto-dialing next lead</div>
   <button id="autoCancel">Cancel</button>
 </div>
 
-<!-- follow-up sheet -->
+<div class="scrim" id="scSheet"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="scTitle">
+  <h3 id="scTitle">Call script</h3><p class="sub">Read this to the lead.</p>
+  <pre id="scriptText"></pre>
+  <button class="btn ghost" data-close>Close</button>
+</div></div>
+
 <div class="scrim" id="fuSheet"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="fuTitle">
   <h3 id="fuTitle">Schedule follow-up</h3><p class="sub">The lead returns to you at this time.</p>
   <div class="row">
@@ -233,7 +197,6 @@
   <button class="btn ghost gap" data-close>Cancel</button>
 </div></div>
 
-<!-- interested sheet -->
 <div class="scrim" id="inSheet"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="inTitle">
   <h3 id="inTitle">Mark interested</h3><p class="sub">All fields are required.</p>
   <label class="field"><span>Lead name</span><input type="text" id="inName" autocomplete="off"></label>
@@ -248,7 +211,6 @@
   <button class="btn ghost gap" data-close>Cancel</button>
 </div></div>
 
-<!-- confirm sheet -->
 <div class="scrim" id="cfSheet"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="cfTitle">
   <h3 id="cfTitle"></h3><p class="sub" id="cfMsg"></p>
   <button class="btn" id="cfOk" style="background:var(--red)"></button>
@@ -264,7 +226,7 @@
                set(k,v){ try { localStorage.setItem(k,v); } catch(e){} },
                del(k){ try { localStorage.removeItem(k); } catch(e){} } };
 
-  // ── Phone-only gate ────────────────────────────────────────────────────────
+  // Phone-only gate
   const looksMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
                       (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 900);
   const forced = LS.get('dsa_mob_force') === '1' || /[?&]force=1/.test(location.search);
@@ -274,20 +236,10 @@
     return;
   }
 
-  // ── State ──────────────────────────────────────────────────────────────────
   let agentId = null, agentRole = 'agent', agentName = '', eid = '';
-  let current = null;            // { numberId, phone, name }
-  let call = null;               // { numberId, startedAt, endedAt|null }
-  let tick = null, autoTimer = null, toastTimer = null;
-  let firstShowDone = false;
+  let current = null;                 // { numberId, phone, name }
+  let autoTimer = null, toastTimer = null, firstShowDone = false;
 
-  const today = () => new Date().toLocaleDateString('en-CA');          // YYYY-MM-DD, local
-  const talkKey = () => 'dsa_mob_talk_' + eid + '_' + today();
-  const callKey = () => 'dsa_mob_call_' + eid;
-  const readTalk = () => { try { return JSON.parse(LS.get(talkKey())) || { calls: 0, secs: 0 }; } catch(e){ return { calls: 0, secs: 0 }; } };
-
-  const fmt = (s) => { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
-    return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
   const fmtPhone = (p) => { const d = String(p || '').replace(/[^\d+]/g, ''); return /^\d{10}$/.test(d) ? d.slice(0, 5) + ' ' + d.slice(5) : (p || ''); };
   const isPhone = (v) => /^\+?\d{7,15}$/.test(String(v == null ? '' : v).replace(/[\s\-().]/g, ''));
   function normalize(phone, name) {   // older uploads sometimes had name/phone swapped
@@ -302,64 +254,22 @@
     const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t);
     toastTimer = setTimeout(() => t.remove(), 2600);
   }
-
-  // ── Views ──────────────────────────────────────────────────────────────────
   function show(view) {
     $('loginView').hidden = view !== 'login';
     $('appView').hidden   = view === 'login';
     $('leadView').hidden  = view !== 'lead';
     $('emptyCard').hidden = view !== 'empty';
   }
-  function renderStats(dialed) {
-    if (dialed !== undefined) $('sDialed').textContent = dialed;
-    const t = readTalk();
-    $('sCalls').textContent = t.calls;
-    $('sTalk').textContent = fmt(t.secs);
-  }
 
-  // ── Call timer (shown on this screen only) ─────────────────────────────────
-  function paintTimer() {
-    const card = $('leadCard');
-    card.classList.remove('state-calling', 'state-ended');
-    if (!call) { return; }
-    const end = call.endedAt || Date.now();
-    $('timerT').textContent = fmt((end - call.startedAt) / 1000);
-    if (call.endedAt) {
-      card.classList.add('state-ended');
-      $('timerS').textContent = 'Call length';
-      $('callLabel').textContent = 'Call again';
-    } else {
-      card.classList.add('state-calling');
-      $('timerS').textContent = 'Call in progress';
-    }
-  }
-  function startTick() { stopTick(); tick = setInterval(paintTimer, 500); }
-  function stopTick() { clearInterval(tick); tick = null; }
-
-  function persistCall() { call ? LS.set(callKey(), JSON.stringify(call)) : LS.del(callKey()); }
-
-  function finishCall() {          // stop the clock and add it to today's talk time
-    if (!call || call.endedAt) return;
-    call.endedAt = Date.now();
-    const secs = Math.floor((call.endedAt - call.startedAt) / 1000);
-    const t = readTalk(); t.calls += 1; t.secs += secs; LS.set(talkKey(), JSON.stringify(t));
-    persistCall(); stopTick(); paintTimer(); renderStats();
-    if (socket.connected && agentId) socket.emit('mobile-dial-end', { agentId, numberId: call.numberId });
-  }
-  function clearCall() { stopTick(); call = null; persistCall(); $('callLabel').textContent = 'Call'; paintTimer(); }
-
+  // Dial: tell the PC which lead is being called, then hand over to the phone's dialer.
   function dialNow() {
     if (!current) return;
     cancelAuto();
-    if (call && !call.endedAt) finishCall();          // re-dial: close the previous attempt first
-    call = { numberId: current.numberId, startedAt: Date.now(), endedAt: null };
-    persistCall(); paintTimer(); startTick();
     if (socket.connected) socket.emit('mobile-dial-start', { agentId, numberId: current.numberId });
-    // Hand over to the phone's native dialer.
     window.location.href = 'tel:' + String(current.phone).replace(/[^\d+]/g, '');
   }
 
-  // ── Auto-dial ──────────────────────────────────────────────────────────────
+  // Auto-dial
   function cancelAuto() { clearInterval(autoTimer); autoTimer = null; $('autoOverlay').hidden = true; }
   function startAuto() {
     cancelAuto();
@@ -372,39 +282,33 @@
     }, 1000);
   }
 
-  // ── Socket ─────────────────────────────────────────────────────────────────
+  // Socket
   const socket = io({ reconnection: true, reconnectionDelay: 500, reconnectionDelayMax: 3000, reconnectionAttempts: Infinity });
   const setConn = (on) => { $('conn').className = 'dot ' + (on ? 'on' : 'off'); };
-
   socket.on('connect', () => { setConn(true); if (agentId) socket.emit('agent-start', { agentId }); });
-  socket.on('disconnect', () => setConn(false));   // normal while the native dialer is in front
+  socket.on('disconnect', () => setConn(false));     // normal while the native dialer is in front
   socket.on('reconnect_attempt', () => $('conn').className = 'dot');
   setInterval(() => { if (agentId && socket.connected) socket.emit('ping-alive', { agentId }); }, 30000);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return;
-    if (agentId && !socket.connected) socket.connect();
-    if (call) paintTimer();
+    if (document.visibilityState === 'visible' && agentId && !socket.connected) socket.connect();
   });
 
   socket.on('show-number', (d) => {
     const n = normalize(d.phone, d.name);
     const sameLead = current && current.numberId === d.numberId;
-    if (call && call.numberId !== d.numberId) { finishCall(); clearCall(); }   // lead was changed elsewhere (e.g. PC)
     current = { numberId: d.numberId, phone: n.phone, name: n.name || '' };
     $('leadName').textContent = current.name.trim() ? current.name.trim() : 'Name not available';
     $('leadPhone').textContent = fmtPhone(current.phone);
-    renderStats(d.totalDialedToday);
+    if (d.totalDialedToday !== undefined) $('sDialed').textContent = d.totalDialedToday;
     show('lead');
     document.querySelectorAll('.d').forEach(b => b.disabled = false);
-    if (call) { paintTimer(); if (!call.endedAt) startTick(); }   // resume a timer after reload / return from dialer
-    if (!sameLead) window.scrollTo(0, 0);
     // Auto-dial only for a genuinely new lead (not on resume / reconnect).
     if (!sameLead && !d.resumed && firstShowDone && $('autoSw').checked) startAuto();
     firstShowDone = true;
   });
   socket.on('no-numbers', (d) => {
-    cancelAuto(); if (call) { finishCall(); clearCall(); }
-    current = null; renderStats(d && d.totalDialedToday);
+    cancelAuto(); current = null;
+    if (d && d.totalDialedToday !== undefined) $('sDialed').textContent = d.totalDialedToday;
     $('emptyTitle').textContent = 'No leads right now';
     $('emptyMsg').textContent = 'New leads will appear when more numbers are uploaded.';
     $('emptyBtn').textContent = 'Check for leads';
@@ -420,7 +324,7 @@
   socket.on('force-page-reload', (d) => { if (d && d.agentId === agentId) location.reload(); });
   socket.on('error', (msg) => { if (msg === 'Agent not found') logout(); else toast(String(msg)); });
 
-  // ── Login / session ────────────────────────────────────────────────────────
+  // Login / session
   async function login(id, silent) {
     $('loginErr').textContent = ''; $('loginBtn').disabled = true;
     try {
@@ -431,8 +335,7 @@
       agentId = d.agentId; agentRole = d.role || 'agent'; agentName = d.name || ''; eid = d.employeeId;
       LS.set('dsa_mob_eid', eid);
       $('whoName').textContent = agentName || 'Agent'; $('whoEid').textContent = 'EID ' + eid;
-      renderStats(d.totalDialedToday || 0);
-      try { const c = JSON.parse(LS.get(callKey())); if (c && c.startedAt) call = c; } catch (e) {}
+      $('sDialed').textContent = d.totalDialedToday || 0;
       show('empty'); $('emptyTitle').textContent = 'Getting your lead…'; $('emptyMsg').textContent = ''; $('emptyBtn').textContent = 'Start dialing';
       loadScript();
       if (socket.connected) socket.emit('agent-start', { agentId }); else socket.connect();
@@ -442,25 +345,24 @@
     } finally { $('loginBtn').disabled = false; }
   }
   function logout() {
-    cancelAuto(); if (call && !call.endedAt) finishCall();
-    LS.del('dsa_mob_eid'); LS.del(callKey());
-    agentId = null; current = null; call = null; firstShowDone = false;
+    cancelAuto(); LS.del('dsa_mob_eid');
+    agentId = null; current = null; firstShowDone = false;
     socket.disconnect(); setTimeout(() => socket.connect(), 50);
     $('eid').value = ''; show('login');
   }
 
-  // ── Script (honours the admin toggle) ──────────────────────────────────────
+  // Script (honours the admin toggle)
   async function loadScript() {
     try {
       const r = await fetch('/api/script?role=' + (agentRole === 'tl' ? 'tl' : 'agent') + '&_=' + Date.now());
       const d = await r.json();
       const on = d && d.enabled !== false && d.script && String(d.script).trim();
-      $('scriptBox').hidden = !on;
+      $('scriptBtn').hidden = !on;
       if (on) $('scriptText').textContent = d.script;
-    } catch (e) { $('scriptBox').hidden = true; }
+    } catch (e) { $('scriptBtn').hidden = true; }
   }
 
-  // ── Dispositions ───────────────────────────────────────────────────────────
+  // Dispositions
   const CONFIRM = {
     not_interested: ['Mark not interested?', 'This number is removed from the dialer for good.', 'Yes, not interested'],
     dnd:            ['Add to Do Not Disturb?', 'This number will never be contacted again.', 'Yes, add to DND'],
@@ -468,20 +370,21 @@
   };
   function sendDisposition(disposition, extra) {
     if (!current) return;
-    cancelAuto(); finishCall();
+    cancelAuto();
     const payload = Object.assign({ agentId, numberId: current.numberId, disposition }, extra || {});
     document.querySelectorAll('.d').forEach(b => b.disabled = true);
     socket.emit('agent-disposition', payload);
-    clearCall(); current = null;
+    current = null;
   }
   const openSheet = (id) => $(id).classList.add('open');
   const closeSheets = () => document.querySelectorAll('.scrim').forEach(s => s.classList.remove('open'));
   let pendingConfirm = null;
+  const todayStr = () => new Date().toLocaleDateString('en-CA');
 
   document.querySelectorAll('.d').forEach(b => b.addEventListener('click', () => {
     const d = b.dataset.d;
     if (d === 'followup') {
-      $('fuDate').min = today(); $('fuDate').value = today(); $('fuTime').value = ''; $('fuName').value = ''; $('fuErr').textContent = '';
+      $('fuDate').min = todayStr(); $('fuDate').value = todayStr(); $('fuTime').value = ''; $('fuName').value = ''; $('fuErr').textContent = '';
       openSheet('fuSheet');
     } else if (d === 'interested') {
       ['inName', 'inAmt', 'inType', 'inRem'].forEach(i => $(i).value = ''); $('inErr').textContent = '';
@@ -511,22 +414,20 @@
     closeSheets(); sendDisposition('interested', { leadName, loanAmount, loanType, remarks });
   };
 
-  // ── Wiring ─────────────────────────────────────────────────────────────────
+  // Wiring
   $('callBtn').onclick = dialNow;
-  $('endBtn').onclick = finishCall;
+  $('scriptBtn').onclick = () => openSheet('scSheet');
   $('autoCancel').onclick = cancelAuto;
-  $('emptyBtn').onclick = () => { if (!agentId) return; socket.emit('agent-start', { agentId }); };
+  $('emptyBtn').onclick = () => { if (agentId) socket.emit('agent-start', { agentId }); };
   $('logoutBtn').onclick = logout;
   $('loginBtn').onclick = () => { const v = $('eid').value.trim(); if (!/^\d+$/.test(v)) { $('loginErr').textContent = 'Enter your numeric Employee ID.'; return; } login(v); };
   $('eid').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('loginBtn').click(); });
   $('autoSw').checked = LS.get('dsa_mob_auto') === '1';
   $('autoSw').onchange = () => { LS.set('dsa_mob_auto', $('autoSw').checked ? '1' : '0'); if (!$('autoSw').checked) cancelAuto(); };
 
-  // Resume the timer if the page was reloaded mid-call.
   (function boot() {
     const saved = LS.get('dsa_mob_eid');
     if (saved) { show('empty'); $('emptyTitle').textContent = 'Signing in…'; $('emptyMsg').textContent = ''; login(saved, true); } else show('login');
-    setInterval(() => { if (call && !call.endedAt && !tick) startTick(); }, 1000);
   })();
 })();
 </script>
