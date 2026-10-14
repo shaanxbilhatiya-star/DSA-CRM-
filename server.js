@@ -1263,13 +1263,25 @@ app.post('/api/admin/upload', numberUpload.single('file'), (req, res) => {
     const phones = [];
     const existingPhones = new Set(appState.numbers.map(n => n.phone));
     let skipped = 0;
+    // Sheets come in either order: [Phone, Name] or [Name, Phone]. Work out which cell is the
+    // phone per row so a name in column A is never run through the phone cleaner (that is what
+    // used to glue "Uttiya Ganguly" into "UttiyaGanguly"). Names keep their spaces.
+    const looksLikePhone = v => /^\+?\d{7,15}$/.test(String(v == null ? '' : v).replace(/[\s\-().]/g, ''));
     rows.forEach((row, i) => {
-      if (i === 0 && isNaN(row[0])) return;
-      const phone = String(row[0] || '').trim().replace(/\s+/g, '');
+      const c0 = row[0], c1 = row[1];
+      let phoneRaw, nameRaw;
+      if (looksLikePhone(c0))      { phoneRaw = c0; nameRaw = c1; }
+      else if (looksLikePhone(c1)) { phoneRaw = c1; nameRaw = c0; }
+      else {
+        // Neither cell is a phone: header row, or junk. Keep the old behaviour for the rest.
+        if (i === 0 && isNaN(c0)) return;
+        phoneRaw = c0; nameRaw = c1;
+      }
+      const phone = String(phoneRaw || '').trim().replace(/\s+/g, '');
       if (!phone || phone.length < 7) return;
       if (existingPhones.has(phone)) { skipped++; return; }
       existingPhones.add(phone);
-      const name = row[1] ? String(row[1]).trim() : '';
+      const name = nameRaw ? String(nameRaw).replace(/\s+/g, ' ').trim() : '';
       phones.push({ id: uuidv4(), phone, name, file: fileId, assignedTo: null, dialedBy: null, dialedAt: null });
     });
     appState.numbers.push(...phones);

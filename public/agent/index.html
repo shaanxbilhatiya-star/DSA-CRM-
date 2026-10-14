@@ -116,6 +116,9 @@
   .lead-name.no-name { color: var(--muted); font-size: 13px; font-weight: 400; font-style: italic; }
   .phone-number { font-family: var(--mono); font-size: 38px; font-weight: 700; color: var(--accent); letter-spacing: 3px; }
   .phone-number.flash { animation: numFlash .35s ease; }
+  /* Long / multi-word lead names must wrap and fit the card instead of running off-screen */
+  .lead-name, .phone-number { max-width: 100%; overflow-wrap: anywhere; word-break: break-word; white-space: normal; line-height: 1.25; }
+  .lead-name { padding: 0 4px; }
   @keyframes numFlash { 0%{transform:scale(1);opacity:1} 35%{transform:scale(0.88);opacity:0} 65%{transform:scale(1.06);opacity:1} 100%{transform:scale(1)} }
   .number-hint { margin-top: 8px; font-size: 12px; color: var(--muted); }
   .resume-badge { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); border-radius: 6px; padding: 3px 10px; font-size: 11px; font-weight: 700; margin-bottom: 8px; display: inline-block; }
@@ -1915,7 +1918,21 @@ function nextNumber() {
   socket.emit('agent-next', { agentId, prevNumberId: prev });
 }
 
+// Keeps the name/phone the right way round and readable. Older uploads stored the name in the
+// phone field (spaces stripped), so rescue those for display: swap back and re-split
+// "UttiyaGangulyReddy" into "Uttiya Ganguly Reddy".
+function normalizeLeadDisplay(phone, name) {
+  const isPhone = v => /^\+?\d{7,15}$/.test(String(v == null ? '' : v).replace(/[\s\-().]/g, ''));
+  let p = phone, n = name;
+  if (!isPhone(p) && isPhone(n)) {
+    const spaced = String(p || '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\s+/g, ' ').trim();
+    p = n; n = spaced;
+  }
+  return { phone: p, name: n };
+}
+
 function showNumber(numberId, phone, name, totalDialedToday, resumed) {
+  ({ phone, name } = normalizeLeadDisplay(phone, name));
   // Don't allow showing numbers during restriction time
   /* [DISABLED FEATURE: CALL_RECORDING] - dialer restriction check disabled
   if (dialingRestricted) {
